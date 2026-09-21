@@ -1,0 +1,63 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Melodify API",
+    "description": "API documentation for the Melodify music streaming platform.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    { "url": "http://127.0.0.1:8000", "description": "Local development" }
+  ],
+  "tags": [
+    { "name": "System", "description": "System and service status" },
+    { "name": "Auth", "description": "Authentication endpoints (coming soon)" },
+    { "name": "Music", "description": "Music, albums and playlists (coming soon)" }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Check API and database health",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "API is reachable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" },
+                "example": {
+                  "status": "ok",
+                  "service": "melodify-api",
+                  "database": "connected",
+                  "timestamp": "2026-09-19T14:20:42.657662Z"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Nhập access token theo dạng: Bearer {token}"
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "required": ["status", "service", "database", "timestamp"],
+        "properties": {
+          "status": { "type": "string", "example": "ok" },
+          "service": { "type": "string", "example": "melodify-api" },
+          "database": { "type": "string", "example": "connected" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

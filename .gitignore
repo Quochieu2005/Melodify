@@ -1,0 +1,33 @@
+# Dependencies
+**/node_modules/
+**/vendor/
+
+# Environment and secrets
+**/.env
+**/.env.*
+!**/.env.example
+
+# Framework/build output
+**/.next/
+**/.expo/
+**/.vercel/
+**/dist/
+**/build/
+**/public/build/
+**/storage/framework/
+**/storage/logs/
+**/storage/*.key
+**/ios/
+**/android/
+
+# Local tooling and generated files
+**/.phpunit.cache/
+**/.phpunit.result.cache
+**/.idea/
+**/.vscode/
+**/.codex/
+**/*.tsbuildinfo
+**/expo-env.d.ts
+*.log
+.DS_Store
+Thumbs.db
