@@ -45,24 +45,33 @@
                     <p class="text-sm leading-6 text-slate-500">Dùng tài khoản quản trị đã được cấp để tiếp tục.</p>
                 </div>
 
-                <div class="flex flex-col gap-4">
+                <form class="flex flex-col gap-4" method="POST" action="{{ route('admin.login.store') }}">
+                    @csrf
                     <div>
                         <label class="mb-2 block text-sm font-medium text-slate-700" for="email">Email</label>
-                        <input class="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10" id="email" name="email" placeholder="admin@melodify.com" type="email" autocomplete="email">
+                        <input class="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10" id="email" name="email" placeholder="admin@melodify.com" type="email" value="{{ old('email') }}" autocomplete="email" required autofocus>
+                        @error('email')
+                            <p class="mt-2 text-xs font-medium text-rose-600">{{ $message }}</p>
+                        @enderror
                     </div>
 
                     <div>
                         <div class="mb-2 flex items-center justify-between">
                             <label class="block text-sm font-medium text-slate-700" for="password">Mật khẩu</label>
-                            <a class="text-xs font-medium text-slate-950 hover:text-slate-600" href="#forgot-password">Quên mật khẩu?</a>
+                            <span class="text-xs font-medium text-slate-950">Quên mật khẩu? Liên hệ IT</span>
                         </div>
-                        <input class="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10" id="password" name="password" placeholder="Nhập mật khẩu" type="password" autocomplete="current-password">
+                        <input class="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10" id="password" name="password" placeholder="Nhập mật khẩu" type="password" autocomplete="current-password" required>
                     </div>
 
-                    <button class="h-11 w-full rounded-lg bg-slate-950 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-950/15" type="button">
+                    <label class="flex items-center gap-2 text-sm text-slate-600">
+                        <input class="size-4 rounded border-slate-300 text-slate-950 focus:ring-slate-950" name="remember" type="checkbox" value="1">
+                        Ghi nhớ đăng nhập
+                    </label>
+
+                    <button class="h-11 w-full rounded-lg bg-slate-950 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-950/15" type="submit">
                         Đăng nhập
                     </button>
-                </div>
+                </form>
 
                 <p class="mt-7 text-center text-sm text-slate-500">Cần quyền truy cập? Liên hệ quản trị viên hệ thống.</p>
                 <p class="mt-7 text-center text-xs leading-5 text-slate-400">
