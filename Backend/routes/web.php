@@ -9,6 +9,8 @@ Route::get('/', function () {
 });
 
 Route::prefix('admin')->name('admin.')->group(function (): void {
+    Route::get('/preview/users', [UserManagementController::class, 'preview'])->name('users.preview');
+
     Route::middleware('guest:admin')->group(function (): void {
         Route::get('/login', [AdminLoginController::class, 'create'])->name('login');
         Route::post('/login', [AdminLoginController::class, 'store'])

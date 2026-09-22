@@ -1,4 +1,4 @@
-@props(['users', 'search', 'status'])
+@props(['users', 'search', 'status', 'preview' => false])
 
 <section class="mx-auto flex w-full max-w-6xl flex-col gap-6">
     <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -10,7 +10,7 @@
         <p class="text-sm text-slate-500"><span class="font-semibold text-slate-950">{{ $users->total() }}</span> tài khoản</p>
     </div>
 
-    <form class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row" method="GET" action="{{ route('admin.users.index') }}">
+    <form class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row" method="GET" action="{{ route($preview ? 'admin.users.preview' : 'admin.users.index') }}">
         <div class="relative flex-1">
             <svg aria-hidden="true" class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
