@@ -1,0 +1,162 @@
+aside:has(> nav[aria-label='Điều hướng chính']) {
+  width: 248px !important;
+  border-right-color: rgba(255, 255, 255, 0.04) !important;
+  background: linear-gradient(180deg, #213d39 0%, #202a28 28%, #171817 68%, #111 100%) !important;
+  color: #f3f0ec !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > a:first-child {
+  display: grid !important;
+  grid-template-columns: 30px 1fr;
+  gap: 0 3px !important;
+  padding: 26px 34px 24px !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > a:first-child::after {
+  content: 'Mạng xã hội âm nhạc Melodify';
+  grid-column: 1 / -1;
+  margin-top: 3px;
+  color: #f0edeb;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > a:first-child > span:first-child {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 999px !important;
+  background: #f3f4f1 !important;
+  color: #253e3b !important;
+  font-size: 17px !important;
+  box-shadow: none !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > a:first-child > span:last-child {
+  align-self: center;
+  color: white;
+  font-size: 20px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.04em !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > nav {
+  padding: 0 14px !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) nav a {
+  min-height: 49px;
+  gap: 4px !important;
+  border-radius: 999px !important;
+  padding: 10px 20px !important;
+  color: #d5d1cc !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) nav a[aria-current='page'] {
+  background: rgba(157, 167, 163, 0.38) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) nav a:hover {
+  background: transparent !important;
+  color: white !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) nav a > span:first-child {
+  width: 24px !important;
+  height: 24px !important;
+  color: inherit;
+  font-size: 25px !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) nav a[aria-current='page'] > span:first-child {
+  color: #78d7df;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > section {
+  margin-top: 34px !important;
+  padding: 0 14px !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > section h2 {
+  padding: 0 20px !important;
+  color: #9c9d99 !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  text-transform: uppercase;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > section > div {
+  margin-top: 11px !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > section a {
+  min-height: 49px;
+  gap: 8px !important;
+  border-radius: 999px !important;
+  padding: 7px 20px !important;
+  color: #d5d1cc !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > section a:hover {
+  background: transparent !important;
+  color: white !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > section a > span:first-child {
+  width: 32px !important;
+  height: 32px !important;
+  flex: 0 0 32px;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > section li:first-child a > span:first-child {
+  border-radius: 5px;
+  background: linear-gradient(135deg, #ff758f, #ff5c91);
+  color: white;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > section li:last-child a > span:first-child {
+  border-radius: 5px;
+  background: linear-gradient(135deg, #3ca7c3, #06407d);
+  color: #8ce8f1;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > div:last-child {
+  margin-top: 25px !important;
+  padding: 0 34px !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > div:last-child > div {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > div:last-child p {
+  color: #9f9c98 !important;
+  font-size: 14px !important;
+  font-weight: 700;
+  line-height: 1.45 !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > div:last-child button {
+  margin-top: 16px !important;
+  min-height: 48px;
+  border-radius: 999px !important;
+  background: #3a3a3a !important;
+  color: white !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+}
+
+aside:has(> nav[aria-label='Điều hướng chính']) > div:last-child button:hover {
+  background: #474747 !important;
+}
