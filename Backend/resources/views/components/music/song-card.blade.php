@@ -1,6 +1,6 @@
 @props(['title', 'artist'])
 
-<article class="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-    <h3 class="font-semibold text-white">{{ $title }}</h3>
-    <p class="mt-1 text-sm text-zinc-400">{{ $artist }}</p>
+<article class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+    <h3 class="font-semibold text-zinc-900">{{ $title }}</h3>
+    <p class="mt-1 text-sm text-zinc-500">{{ $artist }}</p>
 </article>
