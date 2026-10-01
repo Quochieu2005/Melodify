@@ -1,13 +1,13 @@
-import { FeaturedSongsSection, HeroSection } from '@/components/home';
-import { AppLayout } from '@/components/layout';
+import { MorningCarousel, RankingSection, TopicsSection } from '@/components/home';
 
 export default function HomePage() {
   return (
-    <AppLayout>
-      <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-8 px-6 py-12">
-        <HeroSection />
-        <FeaturedSongsSection />
-      </main>
-    </AppLayout>
+    <main className="min-h-[calc(100vh-80px)] overflow-x-hidden bg-[#202a28] px-5 py-6 pb-10 text-white sm:px-8 lg:px-7">
+      <div className="w-full max-w-[1582px]">
+        <MorningCarousel />
+        <TopicsSection />
+        <RankingSection />
+      </div>
+    </main>
   );
 }

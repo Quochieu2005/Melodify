@@ -1,0 +1,312 @@
+/* ==========================================================================
+   Header (Ant Design Layout Header)
+   ========================================================================== */
+.admin-header,
+.ant-layout-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    height: 64px;
+    min-height: 64px;
+    padding: 0 24px;
+    line-height: normal;
+    background: #fff;
+    border-bottom: 1px solid #f0f0f0;
+    position: sticky;
+    top: 0;
+    z-index: 99;
+}
+
+.admin-header-left,
+.admin-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.admin-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    color: #595959;
+    font-size: 16px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.admin-icon-btn:hover {
+    background: #f5f5f5;
+    color: #1677ff;
+}
+
+/* Search bar */
+.admin-header-search {
+    position: relative;
+    width: min(380px, 35vw);
+}
+
+.admin-search-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 12px;
+    background: #f5f5f5;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.admin-search-wrapper:focus-within {
+    background: #fff;
+    border-color: #1677ff;
+    box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+}
+
+.admin-search-icon {
+    color: #8c8c8c;
+    font-size: 14px;
+}
+
+.admin-search-input {
+    flex: 1;
+    border: 0;
+    background: transparent;
+    outline: none;
+    font-size: 13px;
+    color: #262626;
+    padding: 0;
+}
+
+.admin-search-input::placeholder {
+    color: #bfbfbf;
+}
+
+.admin-search-shortcut kbd {
+    padding: 2px 6px;
+    font-size: 11px;
+    background: #e8e8e8;
+    border-radius: 4px;
+    color: #8c8c8c;
+    font-family: inherit;
+}
+
+/* Header Right Buttons */
+.admin-create-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 14px;
+    background: #1677ff;
+    color: #fff;
+    border: 0;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+/* Notification badge */
+.admin-badge-container {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.admin-notification-dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 7px;
+    height: 7px;
+    background: #ff4d4f;
+    border-radius: 50%;
+    border: 1px solid #fff;
+}
+
+/* User Account Trigger */
+.admin-account-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.15s;
+}
+
+.admin-account-btn:hover {
+    background: #f5f5f5;
+}
+
+.admin-account-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #d9d9d9;
+    font-size: 16px;
+    color: #595959;
+}
+
+.admin-account-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.2;
+    text-align: left;
+}
+
+.admin-account-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #262626;
+}
+
+.admin-account-role {
+    font-size: 11px;
+    color: #8c8c8c;
+}
+
+/* Dropdowns */
+.admin-dropdown-container {
+    position: relative;
+}
+
+.admin-dropdown-menu-wrapper {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 1000;
+    min-width: 180px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 6px 16px 0 rgb(0 0 0 / 8%), 0 3px 6px -4px rgb(0 0 0 / 12%);
+    border: 1px solid #f0f0f0;
+    overflow: hidden;
+}
+
+.admin-dropdown-menu-wrapper[hidden] {
+    display: none !important;
+}
+
+.ant-dropdown-menu {
+    list-style: none;
+    margin: 0;
+    padding: 4px;
+}
+
+.ant-dropdown-menu-item {
+    margin: 0;
+    border-radius: 6px;
+    list-style: none;
+}
+
+.admin-dropdown-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #262626;
+    text-decoration: none;
+    border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.ant-dropdown-menu-item:hover .admin-dropdown-link {
+    background: #f5f5f5;
+    color: #1677ff;
+}
+
+.admin-dropdown-item-icon {
+    font-size: 15px;
+    color: #8c8c8c;
+}
+
+.ant-dropdown-menu-item-divider {
+    height: 1px;
+    margin: 4px 0;
+    background: #f0f0f0;
+    list-style: none;
+}
+
+.admin-logout-link:hover {
+    color: #ff4d4f !important;
+    background: #fff1f0 !important;
+}
+
+/* User Account Heading */
+.account-menu-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+}
+
+.admin-account-avatar-large {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #1677ff;
+    color: #fff;
+    font-size: 18px;
+}
+
+.account-menu-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.account-menu-text strong {
+    font-size: 13px;
+    color: #262626;
+}
+
+.account-menu-text small {
+    font-size: 11px;
+    color: #8c8c8c;
+}
+
+
+.admin-create-btn:hover {
+    background: #4096ff;
+}
+
+.admin-btn-arrow {
+    font-size: 11px;
+}
+
+.admin-header-link {
+    display: inline-flex;
+    align-items: center;
+    height: 36px;
+    padding: 0 10px;
+    color: #595959;
+    font-size: 13px;
+    text-decoration: none;
+    border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+}
+
+.admin-header-link:hover {
+    color: #1677ff;
+    background: #f5f5f5;
+}
