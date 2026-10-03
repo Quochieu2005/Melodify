@@ -10,7 +10,7 @@
             <x-anticon name="user" />
         </span>
         <span class="admin-account-info">
-            <strong class="admin-account-name">Admin</strong>
+        <strong class="admin-account-name">{{ auth('admin')->user()?->name ?? 'Admin' }}</strong>
             <small class="admin-account-role">Quản trị viên</small>
         </span>
     </button>
@@ -23,29 +23,29 @@
                         <x-anticon name="user" />
                     </span>
                     <span class="account-menu-text">
-                        <strong>Admin</strong>
+                    <strong>{{ auth('admin')->user()?->name ?? 'Admin' }}</strong>
                         <small>admin@melodify.local</small>
                     </span>
                 </div>
             </li>
             <li class="ant-dropdown-menu-item-divider"></li>
             <li class="ant-dropdown-menu-item" role="menuitem">
-                <a href="#" class="admin-dropdown-link">
+                <a href="{{ route('admin.profile.edit') }}" class="admin-dropdown-link">
                     <x-anticon name="user" class="admin-dropdown-item-icon" />
-                    <span>Hồ sơ cá nhân</span>
+                    <span>Thông tin quản trị</span>
                 </a>
             </li>
             <li class="ant-dropdown-menu-item" role="menuitem">
-                <a href="#" class="admin-dropdown-link">
+                <a href="{{ route('admin.profile.settings') }}" class="admin-dropdown-link">
                     <x-anticon name="setting" class="admin-dropdown-item-icon" />
                     <span>Cài đặt tài khoản</span>
                 </a>
             </li>
             <li class="ant-dropdown-menu-item-divider"></li>
             <li class="ant-dropdown-menu-item ant-dropdown-menu-item-danger" role="menuitem">
-                <a href="#" class="admin-dropdown-link admin-logout-link">
+                <a href="{{ route('admin.login') }}" class="admin-dropdown-link admin-logout-link">
                     <x-anticon name="logout" class="admin-dropdown-item-icon" />
-                    <span>Đăng xuất</span>
+                    <span>Về trang đăng nhập</span>
                 </a>
             </li>
         </ul>

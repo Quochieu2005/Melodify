@@ -2,6 +2,20 @@
  * Melodify Admin Interface - Ant Design Vanilla JS Controllers
  */
 document.addEventListener('DOMContentLoaded', () => {
+    const toast = document.querySelector('[data-toast]');
+    const closeToast = () => {
+        if (!toast) return;
+        toast.classList.add('is-hiding');
+        window.setTimeout(() => toast.remove(), 220);
+    };
+    document.querySelector('[data-toast-close]')?.addEventListener('click', closeToast);
+    if (toast) window.setTimeout(closeToast, 4200);
+
+    document.querySelectorAll('[data-confirm-delete]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            if (!window.confirm('Bạn chắc chắn muốn xóa mục này? Hành động này không thể hoàn tác.')) event.preventDefault();
+        });
+    });
     const rootHtml = document.documentElement;
     const adminShell = document.querySelector('[data-admin-shell]');
     const sidebarToggleBtn = document.querySelector('[data-sidebar-toggle]');

@@ -3,8 +3,10 @@
 @section('content')
 <div class="admin-page">
     <div class="admin-page-header">
-        <h2 class="admin-page-title">Tổng quan</h2>
-        <p class="admin-page-desc">Chào mừng trở lại! Đây là tổng quan hệ thống Melodify.</p>
+        <div class="admin-page-header-main">
+            <h2 class="admin-page-title">Tổng quan</h2>
+            <p class="admin-page-desc">Chào mừng trở lại! Đây là tổng quan hệ thống Melodify.</p>
+        </div>
     </div>
 
     <div class="admin-stats-row">

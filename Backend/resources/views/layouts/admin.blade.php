@@ -19,6 +19,7 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="admin-body">
+    @include('layouts.partials.toast')
     <div class="ant-layout ant-layout-has-sider admin-layout-root" id="admin-shell" data-admin-shell>
         <div class="admin-sidebar-overlay" data-sidebar-overlay></div>
         @include('layouts.partials.sidebar')

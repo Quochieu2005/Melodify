@@ -9,10 +9,11 @@
     gap: 16px;
     height: 64px;
     min-height: 64px;
-    padding: 0 24px;
+    padding: 0 28px;
     line-height: normal;
-    background: #fff;
-    border-bottom: 1px solid #f0f0f0;
+    background: rgb(255 255 255 / 94%);
+    border-bottom: 1px solid var(--admin-border);
+    backdrop-filter: blur(12px);
     position: sticky;
     top: 0;
     z-index: 99;
@@ -35,14 +36,14 @@
     border: 0;
     background: transparent;
     cursor: pointer;
-    color: #595959;
+    color: var(--admin-muted);
     font-size: 16px;
     transition: background 0.15s, color 0.15s;
 }
 
 .admin-icon-btn:hover {
-    background: #f5f5f5;
-    color: #1677ff;
+    background: #f3f4f6;
+    color: var(--admin-text);
 }
 
 /* Search bar */
@@ -57,7 +58,7 @@
     gap: 8px;
     height: 36px;
     padding: 0 12px;
-    background: #f5f5f5;
+    background: #f3f4f6;
     border: 1px solid transparent;
     border-radius: 6px;
     transition: all 0.2s;
@@ -65,8 +66,8 @@
 
 .admin-search-wrapper:focus-within {
     background: #fff;
-    border-color: #1677ff;
-    box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+    border-color: var(--admin-accent);
+    box-shadow: 0 0 0 2px rgb(0 168 184 / 12%);
 }
 
 .admin-search-icon {
@@ -104,7 +105,7 @@
     gap: 6px;
     height: 36px;
     padding: 0 14px;
-    background: #1677ff;
+    background: var(--admin-accent);
     color: #fff;
     border: 0;
     border-radius: 6px;
@@ -128,7 +129,7 @@
     right: -2px;
     width: 7px;
     height: 7px;
-    background: #ff4d4f;
+    background: var(--admin-accent);
     border-radius: 50%;
     border: 1px solid #fff;
 }
@@ -157,9 +158,9 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: #d9d9d9;
+    background: var(--admin-accent-soft);
     font-size: 16px;
-    color: #595959;
+    color: #007f8a;
 }
 
 .admin-account-info {
@@ -228,8 +229,8 @@
 }
 
 .ant-dropdown-menu-item:hover .admin-dropdown-link {
-    background: #f5f5f5;
-    color: #1677ff;
+    background: #f3f4f6;
+    color: var(--admin-accent-hover);
 }
 
 .admin-dropdown-item-icon {
@@ -264,7 +265,7 @@
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: #1677ff;
+    background: var(--admin-accent);
     color: #fff;
     font-size: 18px;
 }
@@ -287,7 +288,7 @@
 
 
 .admin-create-btn:hover {
-    background: #4096ff;
+    background: var(--admin-accent-hover);
 }
 
 .admin-btn-arrow {
@@ -307,6 +308,6 @@
 }
 
 .admin-header-link:hover {
-    color: #1677ff;
-    background: #f5f5f5;
+    color: var(--admin-accent-hover);
+    background: #f3f4f6;
 }

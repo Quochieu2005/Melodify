@@ -27,10 +27,9 @@
     </div>
 
     <div class="admin-header-right">
-        @include('layouts.partials.header.quick-create')
-
-        <a class="ant-btn ant-btn-link admin-header-link" href="/api/docs" target="_blank">
-            API Docs
+        <a href="{{ url('/api/docs') }}" class="ant-btn admin-api-docs-btn" target="_blank" rel="noopener">
+            <x-anticon name="file-text" />
+            <span>API Docs</span>
         </a>
 
         @include('layouts.partials.header.theme-toggle')

@@ -1,0 +1,56 @@
+@extends('layouts.admin')
+
+@section('content')
+<section class="admin-page admin-form-page">
+    <div class="admin-page-header">
+        <div>
+            <a href="{{ route("admin.$resource.index") }}" class="admin-back-link">← Quay lại</a>
+            <h1 class="admin-page-title">{{ $item ? 'Chỉnh sửa' : 'Thêm' }} {{ $resourceTitle }}</h1>
+        </div>
+    </div>
+
+    <form method="POST" action="{{ $item ? route("admin.$resource.update", $item->getKey()) : route("admin.$resource.store") }}" class="ant-card admin-resource-form">
+        @csrf
+        @if($item) @method('PUT') @endif
+
+        <div class="admin-form-grid">
+            @foreach($fields as $name => $field)
+                @php
+                    $type = $field['type'] ?? 'text';
+                    $value = old($name, $item ? data_get($item, $name) : null);
+                    if ($value instanceof \DateTimeInterface) $value = $value->format('Y-m-d');
+                @endphp
+                <div class="admin-form-group {{ $type === 'textarea' ? 'admin-form-span' : '' }}">
+                    @if($type === 'checkbox')
+                        <label class="admin-checkbox-row">
+                            <input type="hidden" name="{{ $name }}" value="0">
+                            <input type="checkbox" name="{{ $name }}" value="1" @checked((bool) $value)>
+                            <span>{{ $field['label'] }}</span>
+                        </label>
+                    @else
+                        <label class="admin-form-label" for="{{ $name }}">{{ $field['label'] }} @if($field['required'] ?? false)<span aria-hidden="true">*</span>@endif</label>
+                        @if($type === 'textarea')
+                            <textarea id="{{ $name }}" name="{{ $name }}" rows="4" class="ant-input admin-form-input @error($name) is-invalid @enderror">{{ $value }}</textarea>
+                        @elseif($type === 'select')
+                            <select id="{{ $name }}" name="{{ $name }}" class="ant-input admin-form-input @error($name) is-invalid @enderror">
+                                @foreach($field['options'] as $optionValue => $optionLabel)
+                                    <option value="{{ $optionValue }}" @selected($value === $optionValue)>{{ $optionLabel }}</option>
+                                @endforeach
+                            </select>
+                        @else
+                            <input id="{{ $name }}" name="{{ $name }}" type="{{ $type }}" value="{{ $type === 'password' ? '' : $value }}" class="ant-input admin-form-input @error($name) is-invalid @enderror" @required($field['required'] ?? false)>
+                        @endif
+                    @endif
+                    @error($name)<p class="admin-field-error">{{ $message }}</p>@enderror
+                    @if($field['help'] ?? false)<p class="admin-field-help">{{ $field['help'] }}</p>@endif
+                </div>
+            @endforeach
+        </div>
+
+        <div class="admin-form-actions">
+            <a href="{{ route("admin.$resource.index") }}" class="ant-btn">Hủy</a>
+            <button type="submit" class="ant-btn ant-btn-primary">{{ $item ? 'Lưu thay đổi' : 'Tạo mới' }}</button>
+        </div>
+    </form>
+</section>
+@endsection

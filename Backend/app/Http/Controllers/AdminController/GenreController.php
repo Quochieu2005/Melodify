@@ -2,12 +2,22 @@
 
 namespace App\Http\Controllers\AdminController;
 
-use App\Http\Controllers\Controller;
+use App\Models\Genre;
 
-class GenreController extends Controller
+class GenreController extends CrudResourceController
 {
-    public function index()
-    {
-        return view('admin.genres.index');
-    }
+    protected string $model = Genre::class;
+
+    protected string $resource = 'genres';
+
+    protected string $title = 'thể loại';
+
+    protected array $columns = ['name' => 'Tên thể loại', 'slug' => 'Slug', 'status' => 'Trạng thái'];
+
+    protected array $fields = [
+        'name' => ['label' => 'Tên thể loại', 'required' => true],
+        'slug' => ['label' => 'Slug', 'required' => true],
+        'description' => ['label' => 'Mô tả', 'type' => 'textarea'],
+        'status' => ['label' => 'Trạng thái', 'type' => 'select', 'required' => true, 'options' => ['active' => 'Hoạt động', 'inactive' => 'Tạm ẩn']],
+    ];
 }
