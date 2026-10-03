@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminController\AdminManagementController;
 use App\Http\Controllers\AdminController\AlbumController;
 use App\Http\Controllers\AdminController\ArtistController;
 use App\Http\Controllers\AdminController\AuthController;
@@ -45,11 +46,15 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('playlists', PlaylistController::class)->except('show');
         Route::resource('artists', ArtistController::class)->except('show');
         Route::resource('users', UserController::class)->except('show');
+        Route::resource('admins', AdminManagementController::class)->except('show');
         Route::resource('subscriptions', SubscriptionController::class)->except('show');
 
         Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
         Route::get('/comments', [CommentController::class, 'index'])->name('comments.index');
+        Route::patch('/comments/{comment}', [CommentController::class, 'update'])->name('comments.update');
+        Route::delete('/comments/{comment}', [CommentController::class, 'destroy'])->name('comments.destroy');
         Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+        Route::patch('/reports/{report}', [ReportController::class, 'update'])->name('reports.update');
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
     });
 });

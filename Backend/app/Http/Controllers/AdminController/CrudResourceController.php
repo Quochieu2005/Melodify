@@ -28,7 +28,7 @@ abstract class CrudResourceController extends Controller
 
     public function create(): View
     {
-        return view('Admin.crud.form', $this->viewData(['item' => null]));
+        return view('Admin.crud.form', $this->viewData(['item' => null, 'fields' => $this->resolvedFields()]));
     }
 
     public function store(AdminResourceRequest $request): RedirectResponse
@@ -44,7 +44,7 @@ abstract class CrudResourceController extends Controller
     {
         $item = ($this->model)::query()->findOrFail($id);
 
-        return view('Admin.crud.form', $this->viewData(compact('item')));
+        return view('Admin.crud.form', $this->viewData(['item' => $item, 'fields' => $this->resolvedFields()]));
     }
 
     public function update(AdminResourceRequest $request, string $id): RedirectResponse
@@ -79,13 +79,30 @@ abstract class CrudResourceController extends Controller
         return $data;
     }
 
+    protected function resolvedFields(): array
+    {
+        return collect($this->fields)->map(function (array $field): array {
+            if (! isset($field['option_model'])) {
+                return $field;
+            }
+
+            $model = $field['option_model'];
+            $label = $field['option_label'] ?? 'name';
+            $field['options'] = $model::query()->orderBy($label)->get()->mapWithKeys(
+                fn ($item): array => [(string) $item->getKey() => (string) data_get($item, $label)]
+            )->all();
+
+            return $field;
+        })->all();
+    }
+
     protected function viewData(array $data): array
     {
-        return array_merge($data, [
+        return array_merge([
             'resource' => $this->resource,
             'resourceTitle' => $this->title,
             'fields' => $this->fields,
             'columns' => $this->columns,
-        ]);
+        ], $data);
     }
 }

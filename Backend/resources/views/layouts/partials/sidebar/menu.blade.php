@@ -60,6 +60,13 @@
         </a>
     </li>
 
+    <li class="ant-menu-item {{ request()->is('admin/admins*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+        <a href="{{ route('admin.admins.index') }}" class="ant-menu-title-content">
+            <x-anticon name="team" class="ant-menu-item-icon" />
+            <span class="ant-menu-title-text">Quản trị viên</span>
+        </a>
+    </li>
+
     {{-- Thanh toán --}}
     <li class="ant-menu-submenu ant-menu-submenu-inline {{ request()->is('admin/subscriptions*') || request()->is('admin/payments*') ? 'ant-menu-submenu-open ant-menu-submenu-selected' : '' }}" role="menuitem" data-menu-submenu>
         <div class="ant-menu-submenu-title" role="button" aria-expanded="{{ request()->is('admin/subscriptions*') || request()->is('admin/payments*') ? 'true' : 'false' }}" data-submenu-trigger>

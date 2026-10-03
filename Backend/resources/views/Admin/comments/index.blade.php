@@ -9,9 +9,9 @@
         </div>
     </div>
     <div class="admin-table-card ant-card">
-        <div class="ant-card-body" style="padding: 0;">
-            <div class="admin-table-wrapper">
-                <table class="ant-table admin-table">
+        <div class="admin-table-toolbar"><div><strong>Bình luận</strong><span>{{ $comments->total() }} mục</span></div></div>
+            <div class="admin-table-scroll">
+                <table class="ant-table admin-data-table">
                     <thead class="ant-table-thead">
                         <tr>
                             <th>#</th>
@@ -24,13 +24,15 @@
                         </tr>
                     </thead>
                     <tbody class="ant-table-tbody">
-                        <tr><td>1</td><td>Nguyễn Văn A</td><td>Chạy Ngay Đi</td><td>Bài hát hay quá!</td><td>28/09/2026</td><td><span class="ant-tag ant-tag-green">Hiển thị</span></td><td><a href="#" class="admin-action-link">Ẩn</a></td></tr>
-                        <tr><td>2</td><td>Trần Thị B</td><td>See Tình</td><td>Nghe hoài không chán ❤️</td><td>27/09/2026</td><td><span class="ant-tag ant-tag-green">Hiển thị</span></td><td><a href="#" class="admin-action-link">Ẩn</a></td></tr>
-                        <tr><td>3</td><td>Lê Văn C</td><td>Waiting For You</td><td>Spam comment...</td><td>26/09/2026</td><td><span class="ant-tag ant-tag-red">Đã ẩn</span></td><td><a href="#" class="admin-action-link">Hiện</a></td></tr>
+                        @forelse($comments as $comment)
+                            <tr><td>{{ $comments->firstItem() + $loop->index }}</td><td>{{ $comment->user?->name ?? $comment->user?->email ?? '—' }}</td><td>{{ $comment->song?->title ?? '—' }}</td><td title="{{ $comment->content }}">{{ $comment->content ?? '—' }}</td><td>{{ $comment->created_at?->format('d/m/Y H:i') ?? '—' }}</td><td><span class="ant-tag {{ $comment->status === 'hidden' ? 'ant-tag-red' : 'ant-tag-green' }}">{{ $comment->status === 'hidden' ? 'Đã ẩn' : 'Hiển thị' }}</span></td><td class="admin-table-actions"><form method="POST" action="{{ route('admin.comments.update', $comment) }}" class="admin-inline-form">@csrf @method('PATCH')<button class="admin-action-link admin-action-button" type="submit">{{ $comment->status === 'hidden' ? 'Hiện' : 'Ẩn' }}</button></form><form method="POST" action="{{ route('admin.comments.destroy', $comment) }}" class="admin-inline-form" data-confirm-delete>@csrf @method('DELETE')<button class="admin-action-link admin-action-danger" type="submit">Xóa</button></form></td></tr>
+                        @empty
+                            <tr><td colspan="7" class="admin-empty-state"><span class="admin-empty-icon">…</span><strong>Chưa có bình luận</strong><span>Bình luận của người dùng sẽ xuất hiện tại đây.</span></td></tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
-        </div>
+        @if($comments->hasPages())<div class="admin-pagination">{{ $comments->links() }}</div>@endif
     </div>
 </div>
 @endsection

@@ -17,6 +17,8 @@ class UserController extends CrudResourceController
     protected array $fields = [
         'name' => ['label' => 'Họ tên', 'required' => true],
         'email' => ['label' => 'Email', 'type' => 'email', 'required' => true],
+        'username' => ['label' => 'Tên đăng nhập'],
+        'slug' => ['label' => 'Slug', 'required' => true],
         'phone' => ['label' => 'Số điện thoại'],
         'password' => ['label' => 'Mật khẩu', 'type' => 'password', 'help' => 'Để trống khi sửa nếu không muốn đổi mật khẩu.'],
         'password_confirmation' => ['label' => 'Xác nhận mật khẩu', 'type' => 'password'],

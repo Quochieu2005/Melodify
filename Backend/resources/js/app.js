@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateThemeUI = (pref, effectiveTheme) => {
         rootHtml.setAttribute('data-admin-theme', effectiveTheme);
         rootHtml.setAttribute('data-theme-preference', pref);
+        rootHtml.style.colorScheme = effectiveTheme;
 
         themeOptions.forEach((option) => {
             const val = option.getAttribute('data-theme-value');
@@ -220,5 +221,46 @@ document.addEventListener('DOMContentLoaded', () => {
         markReadBtn.style.pointerEvents = 'none';
         markReadBtn.style.opacity = '0.5';
     });
+
+    // ==========================================
+    // 7. Đồng bộ mục đang chọn trong cài đặt tài khoản
+    // ==========================================
+    const settingsNav = document.querySelector('[data-settings-nav]');
+
+    if (settingsNav) {
+        const sectionLinks = [...settingsNav.querySelectorAll('a[href^="#"]')];
+        const sections = sectionLinks
+            .map((link) => document.querySelector(link.getAttribute('href')))
+            .filter(Boolean);
+
+        const setActiveSettingsLink = (sectionId) => {
+            settingsNav.querySelectorAll('a').forEach((link) => {
+                const isActive = link.getAttribute('href') === `#${sectionId}`;
+                link.classList.toggle('is-active', isActive);
+                if (isActive) link.setAttribute('aria-current', 'true');
+                else link.removeAttribute('aria-current');
+            });
+        };
+
+        sectionLinks.forEach((link) => {
+            link.addEventListener('click', () => {
+                setActiveSettingsLink(link.getAttribute('href').slice(1));
+            });
+        });
+
+        const initialSection = window.location.hash.slice(1);
+        if (sections.some((section) => section.id === initialSection)) {
+            setActiveSettingsLink(initialSection);
+        }
+
+        const observer = new IntersectionObserver((entries) => {
+            const visible = entries
+                .filter((entry) => entry.isIntersecting)
+                .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+            if (visible) setActiveSettingsLink(visible.target.id);
+        }, { rootMargin: '-18% 0px -62% 0px', threshold: [0.1, 0.35, 0.6] });
+
+        sections.forEach((section) => observer.observe(section));
+    }
 });
 

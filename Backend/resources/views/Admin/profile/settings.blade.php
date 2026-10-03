@@ -10,7 +10,7 @@
     </div>
 
     <div class="admin-account-settings">
-        <aside class="ant-card admin-account-settings-nav" aria-label="Danh mục cài đặt tài khoản">
+        <aside class="ant-card admin-account-settings-nav" data-settings-nav aria-label="Danh mục cài đặt tài khoản">
             <a href="#security" class="is-active"><x-anticon name="setting" /><span>Bảo mật</span></a>
             <a href="#notifications"><x-anticon name="bell" /><span>Thông báo</span></a>
             <a href="#appearance"><x-anticon name="setting" /><span>Giao diện</span></a>

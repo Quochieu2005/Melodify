@@ -15,7 +15,7 @@ class Admin extends Authenticatable implements CanResetPasswordContract
 
     protected $collection = 'admins';
 
-    protected $fillable = ['name', 'email', 'password', 'avatar', 'role', 'is_active'];
+    protected $fillable = ['name', 'email', 'slug', 'password', 'avatar', 'role', 'status', 'is_active'];
 
     protected $hidden = ['password', 'remember_token'];
 

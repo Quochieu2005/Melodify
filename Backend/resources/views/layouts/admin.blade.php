@@ -14,6 +14,7 @@
             }
             document.documentElement.setAttribute('data-admin-theme', effectiveTheme);
             document.documentElement.setAttribute('data-theme-preference', pref);
+document.documentElement.style.colorScheme = effectiveTheme;
         })();
     </script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])

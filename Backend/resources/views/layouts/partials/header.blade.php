@@ -1,16 +1,5 @@
 <header class="ant-layout-header admin-header">
     <div class="admin-header-left">
-        {{-- Mobile hamburger (visible < 768px) --}}
-        <button
-            type="button"
-            class="ant-btn ant-btn-text ant-btn-circle admin-icon-btn admin-mobile-toggle"
-            data-sidebar-mobile-toggle
-            aria-label="Mở menu"
-            title="Mở menu"
-        >
-            <x-anticon name="bars" />
-        </button>
-
         {{-- Desktop sidebar toggle (visible >= 768px) --}}
         <button 
             type="button" 

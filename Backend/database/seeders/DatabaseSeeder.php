@@ -26,7 +26,7 @@ class DatabaseSeeder extends Seeder
         if (filled(env('ADMIN_PASSWORD'))) {
             Admin::query()->updateOrCreate(
                 ['email' => env('ADMIN_EMAIL', 'admin@melodify.vn')],
-                ['name' => 'Melodify Admin', 'password' => env('ADMIN_PASSWORD'), 'role' => 'super_admin', 'is_active' => true]
+                ['name' => 'Melodify Admin', 'slug' => 'melodify-admin', 'password' => env('ADMIN_PASSWORD'), 'role' => 'super_admin', 'status' => 'active', 'is_active' => true]
             );
         }
     }

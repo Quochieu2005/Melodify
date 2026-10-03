@@ -16,6 +16,8 @@ class SubscriptionController extends CrudResourceController
 
     protected array $fields = [
         'name' => ['label' => 'Tên gói', 'required' => true],
+        'code' => ['label' => 'Mã gói', 'required' => true],
+        'slug' => ['label' => 'Slug', 'required' => true],
         'price' => ['label' => 'Giá', 'type' => 'number', 'required' => true],
         'duration_days' => ['label' => 'Thời hạn (ngày)', 'type' => 'number', 'required' => true],
         'description' => ['label' => 'Mô tả', 'type' => 'textarea'],
