@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Admin;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -21,5 +22,12 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+
+        if (filled(env('ADMIN_PASSWORD'))) {
+            Admin::query()->updateOrCreate(
+                ['email' => env('ADMIN_EMAIL', 'admin@melodify.vn')],
+                ['name' => 'Melodify Admin', 'slug' => 'melodify-admin', 'password' => env('ADMIN_PASSWORD'), 'role' => 'super_admin', 'status' => 'active', 'is_active' => true]
+            );
+        }
     }
 }

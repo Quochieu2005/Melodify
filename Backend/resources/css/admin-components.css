@@ -62,14 +62,14 @@
 
 .admin-theme-check-icon {
     font-size: 11px;
-    color: #1677ff;
+    color: var(--admin-accent);
     opacity: 0;
     transition: opacity 0.15s;
 }
 
 .admin-theme-option.is-selected {
-    color: #1677ff;
-    background: #e6f4ff;
+    color: #007f8a;
+    background: var(--admin-accent-soft);
     font-weight: 500;
 }
 
@@ -113,7 +113,7 @@
 
 .notification-panel-header button:hover,
 .notification-panel-footer:hover {
-    color: #1677ff;
+    color: var(--admin-accent);
 }
 
 .notification-list {
@@ -206,7 +206,7 @@
     width: 6px;
     height: 6px;
     margin-top: 6px;
-    background: #1677ff;
+    background: var(--admin-accent);
     border-radius: 50%;
 }
 
@@ -226,14 +226,16 @@
     flex: 1 1 auto;
     min-height: calc(100vh - 64px);
     padding: 24px 32px;
-    background: #f5f7fa;
+    background: var(--admin-bg);
 }
 
 /* ==========================================================================
    Admin Page Layout
    ========================================================================== */
 .admin-page {
-    max-width: 1200px;
+    width: 100%;
+    max-width: 1440px;
+    margin-inline: auto;
 }
 
 .admin-page-header {
@@ -254,7 +256,7 @@
     margin: 0;
     font-size: 22px;
     font-weight: 600;
-    color: #1f1f1f;
+    color: var(--admin-text);
 }
 
 .admin-page-desc {
@@ -267,8 +269,8 @@
    Ant Card
    ========================================================================== */
 .ant-card {
-    background: #fff;
-    border: 1px solid #f0f0f0;
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
     border-radius: 8px;
 }
 
@@ -277,13 +279,13 @@
     align-items: center;
     min-height: 48px;
     padding: 0 20px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--admin-border);
 }
 
 .ant-card-head-title {
     font-size: 15px;
     font-weight: 600;
-    color: #1f1f1f;
+    color: var(--admin-text);
 }
 
 .ant-card-body {
@@ -340,8 +342,8 @@
     font-size: 13px;
     font-weight: 600;
     color: #595959;
-    background: #fafafa;
-    border-bottom: 1px solid #f0f0f0;
+    background: #f8fafb;
+    border-bottom: 1px solid var(--admin-border);
     text-align: left;
 }
 
@@ -402,13 +404,13 @@
 }
 
 .admin-action-link {
-    color: #1677ff;
+    color: var(--admin-accent-hover);
     text-decoration: none;
     font-size: 13px;
 }
 
 .admin-action-link:hover {
-    color: #4096ff;
+    color: var(--admin-accent);
 }
 
 /* ==========================================================================
@@ -446,8 +448,8 @@
 }
 
 .admin-form-input:focus {
-    border-color: #1677ff;
-    box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+    border-color: var(--admin-accent);
+    box-shadow: 0 0 0 2px rgb(0 168 184 / 12%);
 }
 
 .admin-form-textarea {

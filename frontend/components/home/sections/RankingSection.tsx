@@ -1,5 +1,7 @@
 import { Lexend } from 'next/font/google';
 
+import styles from './RankingSection.module.css';
+
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 
 type RankingSong = {
@@ -14,7 +16,6 @@ type RankingBoard = {
   title: string;
   background: string;
   songs: RankingSong[];
-  activeIndex?: number;
 };
 
 const rankingBoards: RankingBoard[] = [
@@ -43,7 +44,6 @@ const rankingBoards: RankingBoard[] = [
   {
     title: 'Top 50 Nhạc Hoa',
     background: 'linear-gradient(rgba(180, 90, 203, 0.3) 0%, rgba(180, 90, 203, 0.06) 100%)',
-    activeIndex: 2,
     songs: [
       { title: 'Dạo Bước Hongkong 1999...', artist: 'Bố Lỗ Tích BlueC', publisher: 'BELIEVE MUSIC', image: 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=240&q=85' },
       { title: '大风在刮大雪在下 (Bản Họ...', artist: 'Lục Tiểu Lạc', publisher: 'BELIEVE MUSIC', image: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=240&q=85' },
@@ -105,7 +105,7 @@ function PublisherMark() {
 
 function RankingBoardCard({ board }: { board: RankingBoard }) {
   return (
-    <article className="h-[442px] w-[300px] shrink-0 rounded-[12px] p-5" style={{ background: board.background }}>
+    <article className="h-[442px] min-w-0 rounded-[12px] p-5" style={{ background: board.background }}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <h3 className="truncate text-[16px] font-bold leading-6 text-white" style={{ color: '#ffffff', fontWeight: 700, lineHeight: '24px' }}>{board.title}</h3>
@@ -121,10 +121,8 @@ function RankingBoardCard({ board }: { board: RankingBoard }) {
 
       <ol className="mt-2">
         {board.songs.map((song, index) => {
-          const isActive = board.activeIndex === index;
-
           return (
-            <li key={`${board.title}-${song.title}`} className={`group relative grid grid-cols-[24px_54px_minmax(0,1fr)] items-center gap-3 rounded-[14px] px-2 py-1 transition-colors hover:bg-white/10 ${isActive ? 'bg-white/10' : ''}`}>
+            <li key={`${board.title}-${song.title}`} className="group relative grid grid-cols-[24px_54px_minmax(0,1fr)] items-center gap-3 rounded-[14px] px-2 py-1 transition-colors hover:bg-white/10 focus-within:bg-white/10">
               <div className="flex h-[54px] flex-col items-center justify-center gap-1 text-center">
                 <span className="text-lg font-bold text-white">{index + 1}</span>
                 {song.trend === 'up' && <span className="text-[10px] leading-none text-cyan-300">▲</span>}
@@ -133,7 +131,7 @@ function RankingBoardCard({ board }: { board: RankingBoard }) {
               </div>
 
               <div className="relative size-[54px] overflow-hidden rounded-[6px] bg-black/20 bg-cover bg-center" style={{ backgroundImage: `url(${song.image})` }}>
-                <button type="button" aria-label={`Phát ${song.title}`} tabIndex={isActive ? 0 : -1} className={`absolute inset-0 grid place-items-center bg-black/20 text-white transition-opacity ${isActive ? 'opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}>
+                <button type="button" aria-label={`Phát ${song.title}`} className="pointer-events-none absolute inset-0 grid place-items-center bg-black/20 text-white opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
                   <span className="grid size-9 place-items-center rounded-full bg-white text-[#202a28]"><PlayIcon /></span>
                 </button>
               </div>
@@ -150,7 +148,7 @@ function RankingBoardCard({ board }: { board: RankingBoard }) {
                 </p>
               </div>
 
-              <button type="button" aria-label="Tùy chọn bài hát" tabIndex={isActive ? 0 : -1} className={`absolute right-3 top-1/2 -translate-y-1/2 text-lg font-bold tracking-[3px] text-white transition-opacity ${isActive ? 'opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}>
+              <button type="button" aria-label={`Tùy chọn ${song.title}`} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-lg font-bold tracking-[3px] text-white opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
                 ...
               </button>
             </li>
@@ -163,7 +161,7 @@ function RankingBoardCard({ board }: { board: RankingBoard }) {
 
 export default function RankingSection() {
   return (
-    <section aria-labelledby="ranking-heading" className="mt-12 h-[552px] w-full">
+    <section aria-labelledby="ranking-heading" className={`mt-12 h-[552px] w-full ${styles.rankingSection}`}>
       <div className="mb-5 flex items-center justify-between gap-4">
         <h2 id="ranking-heading" className={`${lexend.className} text-[24px] font-bold leading-none text-white`} style={{ color: '#ffffff', fontFamily: 'Lexend, sans-serif', fontSize: '24px', fontWeight: 700 }}>
           Bảng Xếp Hạng
@@ -173,8 +171,8 @@ export default function RankingSection() {
         </button>
       </div>
 
-      <div className="h-[442px] w-full overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="grid h-[442px] w-[1582px] grid-cols-[repeat(5,300px)] justify-between gap-5">
+      <div aria-label="Cuộn ngang để xem thêm bảng xếp hạng" role="region" tabIndex={0} className="h-[442px] w-full overflow-x-auto overflow-y-hidden [scrollbar-width:none] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 [&::-webkit-scrollbar]:hidden">
+        <div className={styles.boardTrack}>
           {[...rankingBoards, ...extraRankingBoards].map((board) => (
             <RankingBoardCard key={board.title} board={board} />
           ))}
