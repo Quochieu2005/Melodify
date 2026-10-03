@@ -392,8 +392,22 @@
 .admin-login-mobile-brand { color: #102c2a; display: none; margin-bottom: 56px; }
 .admin-login-form-wrap header h2 { font-size: 35px; letter-spacing: -.04em; margin: 0 0 10px; }
 .admin-login-form-wrap header > p { color: #71807f; margin: 0 0 38px; }
-.admin-login-input-wrap { display: block; position: relative; }
+.admin-login-input-wrap { display: block; isolation: isolate; position: relative; }
 .admin-login-input-wrap .ant-input { background: #fff; border: 1px solid #dbe3e3; border-radius: 9px; font-size: 15px; height: 48px; padding-left: 44px; transition: border-color .18s, box-shadow .18s; width: 100%; }
+.admin-login-input-wrap:has(.admin-password-toggle) .ant-input { padding-right: 46px; }
+.admin-login-input-icon.anticon { align-items: center; display: inline-flex; height: 18px; justify-content: center; overflow: hidden; width: 18px; }
+.admin-login-input-icon.anticon svg { display: block; height: 18px; max-height: 18px; max-width: 18px; overflow: hidden; width: 18px; }
+.admin-password-toggle { align-items: center; background: transparent; border: 0; border-radius: 6px; color: #718383; cursor: pointer; display: inline-flex; height: 34px; justify-content: center; padding: 0; position: absolute; right: 7px; top: 50%; transform: translateY(-50%); width: 34px; }
+.admin-password-toggle:hover { color: var(--admin-accent); background: var(--admin-accent-soft); }
+.admin-password-toggle:focus-visible { outline: 2px solid var(--admin-accent); outline-offset: 1px; }
+.admin-password-toggle .anticon { font-size: 18px; }
+.admin-password-eye-hide { display: none !important; }
+.admin-password-toggle.is-visible .admin-password-eye-show { display: none !important; }
+.admin-password-toggle.is-visible .admin-password-eye-hide { display: inline-flex !important; }
+.admin-login-text-button { color: var(--admin-accent); text-decoration: none; }
+.admin-login-text-button:hover { color: var(--admin-accent-hover); text-decoration: underline; }
+.admin-auth-back { align-self: center; color: var(--admin-text-secondary); font-size: 14px; font-weight: 600; text-decoration: none; }
+.admin-auth-back:hover { color: var(--admin-accent); }
 .admin-login-input-wrap .ant-input:focus { border-color: #00aeba; box-shadow: 0 0 0 3px rgba(0, 211, 229, .13); outline: 0; }
 .admin-login-input-icon { color: #78908e; font-weight: 700; left: 16px; position: absolute; top: 13px; z-index: 1; }
 .admin-login-options { align-items: center; display: flex; justify-content: space-between; }

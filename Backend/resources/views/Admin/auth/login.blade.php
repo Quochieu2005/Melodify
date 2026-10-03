@@ -31,17 +31,17 @@
             <div class="admin-auth-form" aria-label="Biểu mẫu đăng nhập minh họa">
                 <label>
                     <span>Email quản trị</span>
-                    <span class="admin-login-input-wrap"><span class="admin-login-input-icon">@</span><input class="ant-input" type="email" placeholder="admin@melodify.vn"></span>
+                    <span class="admin-login-input-wrap"><x-anticon name="mail" class="admin-login-input-icon" /><input class="ant-input" type="email" placeholder="admin@melodify.vn"></span>
                 </label>
                 <label>
                     <span>Mật khẩu</span>
-                    <span class="admin-login-input-wrap"><span class="admin-login-input-icon">•</span><input class="ant-input" type="password" placeholder="Nhập mật khẩu"></span>
+                    <span class="admin-login-input-wrap"><x-anticon name="lock" class="admin-login-input-icon" /><input class="ant-input" type="password" placeholder="Nhập mật khẩu" data-password-input><button type="button" class="admin-password-toggle" data-password-toggle aria-label="Hiện mật khẩu" aria-pressed="false"><x-anticon name="eye" class="admin-password-eye-show" /><x-anticon name="eye-invisible" class="admin-password-eye-hide" /></button></span>
                 </label>
                 <div class="admin-login-options">
                     <label class="admin-checkbox-row"><input type="checkbox"> <span>Ghi nhớ đăng nhập</span></label>
-                    <button type="button" class="admin-login-text-button">Quên mật khẩu?</button>
+                    <a href="{{ route('admin.password.request') }}" class="admin-login-text-button">Quên mật khẩu?</a>
                 </div>
-                <a href="{{ route('admin.dashboard') }}" class="ant-btn ant-btn-primary admin-login-submit">Vào dashboard <span>→</span></a>
+                <a href="{{ route('admin.dashboard') }}" class="ant-btn ant-btn-primary admin-login-submit">Đăng nhập <span>→</span></a>
             </div>
             <p class="admin-login-demo-note"><span>i</span> Giao diện minh họa — chưa kích hoạt xác thực.</p>
         </div>

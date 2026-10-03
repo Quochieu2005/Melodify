@@ -2,6 +2,20 @@
  * Melodify Admin Interface - Ant Design Vanilla JS Controllers
  */
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-password-toggle]').forEach((toggle) => {
+        const input = toggle.closest('.admin-login-input-wrap')?.querySelector('[data-password-input]');
+        if (!input) return;
+
+        toggle.addEventListener('click', () => {
+            const shouldShow = input.type === 'password';
+            input.type = shouldShow ? 'text' : 'password';
+            toggle.classList.toggle('is-visible', shouldShow);
+            toggle.setAttribute('aria-pressed', shouldShow ? 'true' : 'false');
+            toggle.setAttribute('aria-label', shouldShow ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+            input.focus();
+        });
+    });
+
     const toast = document.querySelector('[data-toast]');
     const closeToast = () => {
         if (!toast) return;
