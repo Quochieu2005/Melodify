@@ -109,7 +109,10 @@ class ProfileController extends Controller
             'current_password' => ['required', 'current_password:admin'],
             'password' => ['required', 'confirmed', Password::min(8)],
         ]);
-        $request->user('admin')->update(['password' => Hash::driver('bcrypt')->make($data['password'])]);
+        $request->user('admin')->forceFill([
+            'password' => Hash::driver('bcrypt')->make($data['password']),
+            'must_change_password' => false,
+        ])->save();
 
         return back()->with('success', 'Đã đổi mật khẩu quản trị viên.');
     }

@@ -18,8 +18,8 @@
 
     {{-- Quản lý Nội dung --}}
     @if($currentAdmin?->hasAdminPermission('content.manage'))
-    <li class="ant-menu-submenu ant-menu-submenu-inline {{ request()->is('admin/songs*') || request()->is('admin/albums*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'ant-menu-submenu-open ant-menu-submenu-selected' : '' }}" role="menuitem" data-menu-submenu>
-        <div class="ant-menu-submenu-title" role="button" aria-expanded="{{ request()->is('admin/songs*') || request()->is('admin/albums*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'true' : 'false' }}" data-submenu-trigger>
+    <li class="ant-menu-submenu ant-menu-submenu-inline {{ request()->is('admin/songs*') || request()->is('admin/albums*') || request()->is('admin/topics*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'ant-menu-submenu-open ant-menu-submenu-selected' : '' }}" role="menuitem" data-menu-submenu>
+        <div class="ant-menu-submenu-title" role="button" aria-expanded="{{ request()->is('admin/songs*') || request()->is('admin/albums*') || request()->is('admin/topics*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'true' : 'false' }}" data-submenu-trigger>
             <span class="ant-menu-title-content">
                 <x-anticon name="customer-service" class="ant-menu-item-icon" />
                 <span class="ant-menu-title-text">Nội dung</span>
@@ -39,6 +39,12 @@
                     <span class="ant-menu-title-text">Album</span>
                 </a>
             </li>
+            <li class="ant-menu-item {{ request()->is('admin/topics*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+                <a href="{{ url('/admin/topics') }}" class="ant-menu-title-content">
+                    <x-anticon name="appstore" class="ant-menu-item-icon" />
+                    <span class="ant-menu-title-text">Chủ đề</span>
+                </a>
+            </li>
             <li class="ant-menu-item {{ request()->is('admin/genres*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/genres') }}" class="ant-menu-title-content">
                     <x-anticon name="tags" class="ant-menu-item-icon" />
@@ -52,6 +58,16 @@
                 </a>
             </li>
         </ul>
+    </li>
+    @endif
+
+    {{-- Banner --}}
+    @if($currentAdmin?->hasAdminPermission('banners.manage'))
+    <li class="ant-menu-item {{ request()->is('admin/banners*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+        <a href="{{ route('admin.banners.index') }}" class="ant-menu-title-content">
+            <x-anticon name="appstore" class="ant-menu-item-icon" />
+            <span class="ant-menu-title-text">Banner</span>
+        </a>
     </li>
     @endif
 
@@ -75,7 +91,7 @@
     </li>
     @endif
 
-    @if(auth('admin')->user()?->role === 'super_admin')
+    @if($currentAdmin)
         <li class="ant-menu-item {{ request()->is('admin/admins*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
             <a href="{{ route('admin.admins.index') }}" class="ant-menu-title-content">
                 <x-anticon name="team" class="ant-menu-item-icon" />

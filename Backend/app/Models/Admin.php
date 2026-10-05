@@ -15,7 +15,7 @@ class Admin extends Authenticatable implements CanResetPasswordContract
 
     protected $collection = 'admins';
 
-    protected $fillable = ['name', 'email', 'slug', 'password', 'avatar', 'avatar_public_id', 'role', 'permissions', 'notification_preferences', 'appearance_preferences', 'status', 'is_active'];
+    protected $fillable = ['name', 'email', 'slug', 'password', 'avatar', 'avatar_public_id', 'role', 'permissions', 'notification_preferences', 'appearance_preferences', 'status', 'is_active', 'must_change_password', 'credentials_sent_at'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -28,6 +28,8 @@ class Admin extends Authenticatable implements CanResetPasswordContract
             'notification_preferences' => 'array',
             'appearance_preferences' => 'array',
             'email_verified_at' => 'datetime',
+            'must_change_password' => 'boolean',
+            'credentials_sent_at' => 'datetime',
         ];
     }
 

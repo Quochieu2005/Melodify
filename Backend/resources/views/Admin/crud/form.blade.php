@@ -23,7 +23,7 @@
             @foreach($fields as $name => $field)
                 @php
                     $type = $field['type'] ?? 'text';
-                    $value = old($name, $item ? data_get($item, $name) : null);
+                    $value = old($name, $item ? data_get($item, $name) : ($field['default'] ?? null));
                     if ($value instanceof \DateTimeInterface) $value = $value->format('Y-m-d');
                 @endphp
                 <div class="admin-form-group {{ in_array($type, ['textarea', 'checkbox', 'checkbox_group'], true) ? 'admin-form-span' : '' }}">

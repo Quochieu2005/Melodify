@@ -221,6 +221,7 @@ class PasswordResetController extends Controller
         $admin->forceFill([
             'password' => Hash::driver('bcrypt')->make($data['password']),
             'remember_token' => Str::random(60),
+            'must_change_password' => false,
         ])->save();
         $auditLogs->record($request, $admin, 'auth.password_reset.completed', 'Đặt lại mật khẩu thành công.');
 

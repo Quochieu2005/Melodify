@@ -37,7 +37,11 @@ class AuthController extends Controller
         $request->session()->regenerate();
         $auditLogs->record($request, $admin, 'auth.login', 'Đăng nhập vào hệ thống quản trị.');
 
-        return redirect()->intended(route('admin.dashboard'))->with('success', 'Đăng nhập thành công.');
+        $redirect = redirect()->intended(route('admin.dashboard'));
+
+        return $admin?->must_change_password
+            ? $redirect->with('warning', 'Bạn nên đổi mật khẩu khởi tạo trong Cài đặt tài khoản để bảo vệ tài khoản.')
+            : $redirect->with('success', 'Đăng nhập thành công.');
     }
 
     public function destroy(Request $request, AdminAuditLogService $auditLogs): RedirectResponse

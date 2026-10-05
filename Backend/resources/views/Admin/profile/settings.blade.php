@@ -9,6 +9,13 @@
         </div>
     </div>
 
+    @if($admin->must_change_password)
+        <div class="admin-account-settings-reminder" role="status">
+            <x-anticon name="safety-certificate" aria-hidden="true" />
+            <span>Bạn đang dùng mật khẩu khởi tạo. Bạn nên đổi mật khẩu để bảo vệ tài khoản.</span>
+        </div>
+    @endif
+
     <div class="admin-account-settings">
         <aside class="ant-card admin-account-settings-nav" data-settings-nav aria-label="Danh mục cài đặt tài khoản">
             <a href="#security" class="is-active"><x-anticon name="setting" /><span>Bảo mật</span></a>
