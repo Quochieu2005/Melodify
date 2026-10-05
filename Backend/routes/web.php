@@ -27,34 +27,52 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/login', [AuthController::class, 'create'])->name('login');
         Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
         Route::get('/forgot-password', [PasswordResetController::class, 'request'])->name('password.request');
-        Route::post('/forgot-password', [PasswordResetController::class, 'email'])->middleware('throttle:3,1')->name('password.email');
-        Route::get('/reset-password/{token}', [PasswordResetController::class, 'reset'])->name('password.reset');
-        Route::post('/reset-password', [PasswordResetController::class, 'update'])->name('password.update');
+        Route::post('/forgot-password', [PasswordResetController::class, 'sendOtp'])->middleware('throttle:5,1')->name('password.email');
+        Route::get('/forgot-password/verify', [PasswordResetController::class, 'otpForm'])->name('password.otp.form');
+        Route::post('/forgot-password/verify', [PasswordResetController::class, 'verifyOtp'])->middleware('throttle:8,1')->name('password.otp.verify');
+        Route::get('/forgot-password/reset', [PasswordResetController::class, 'resetForm'])->name('password.reset.form');
+        Route::post('/forgot-password/reset', [PasswordResetController::class, 'resetPassword'])->middleware('throttle:5,1')->name('password.reset');
     });
 
-    Route::middleware(app()->environment('local') ? [] : ['auth:admin'])->group(function () {
+    Route::middleware(['auth:admin', 'admin.idle'])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
         Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
         Route::get('/account-settings', [ProfileController::class, 'settings'])->name('profile.settings');
         Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+        Route::delete('/profile/avatar', [ProfileController::class, 'removeAvatar'])->name('profile.avatar.destroy');
         Route::put('/profile/password', [ProfileController::class, 'password'])->name('profile.password');
+        Route::put('/account-settings/notifications', [ProfileController::class, 'notifications'])->name('profile.notifications');
+        Route::put('/account-settings/appearance', [ProfileController::class, 'appearance'])->name('profile.appearance');
 
-        Route::resource('songs', SongController::class)->except('show');
-        Route::resource('albums', AlbumController::class)->except('show');
-        Route::resource('genres', GenreController::class)->except('show');
-        Route::resource('playlists', PlaylistController::class)->except('show');
-        Route::resource('artists', ArtistController::class)->except('show');
-        Route::resource('users', UserController::class)->except('show');
+        Route::middleware('admin.permission:content.manage')->group(function () {
+            Route::resource('songs', SongController::class)->except('show');
+            Route::resource('albums', AlbumController::class)->except('show');
+            Route::resource('genres', GenreController::class)->except('show');
+            Route::resource('playlists', PlaylistController::class)->except('show');
+            Route::resource('artists', ArtistController::class)->except('show');
+        });
+
+        Route::middleware('admin.permission:users.manage')->group(function () {
+            Route::resource('users', UserController::class)->except('show');
+        });
+
+        Route::middleware('admin.permission:billing.manage')->group(function () {
+            Route::resource('subscriptions', SubscriptionController::class)->except('show');
+            Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+        });
+
+        Route::middleware('admin.permission:moderation.manage')->group(function () {
+            Route::get('/comments', [CommentController::class, 'index'])->name('comments.index');
+            Route::patch('/comments/{comment}', [CommentController::class, 'update'])->name('comments.update');
+            Route::delete('/comments/{comment}', [CommentController::class, 'destroy'])->name('comments.destroy');
+            Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+            Route::patch('/reports/{report}', [ReportController::class, 'update'])->name('reports.update');
+        });
+    });
+
+    Route::middleware(['auth:admin', 'admin.idle', 'admin.super'])->group(function () {
         Route::resource('admins', AdminManagementController::class)->except('show');
-        Route::resource('subscriptions', SubscriptionController::class)->except('show');
-
-        Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
-        Route::get('/comments', [CommentController::class, 'index'])->name('comments.index');
-        Route::patch('/comments/{comment}', [CommentController::class, 'update'])->name('comments.update');
-        Route::delete('/comments/{comment}', [CommentController::class, 'destroy'])->name('comments.destroy');
-        Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
-        Route::patch('/reports/{report}', [ReportController::class, 'update'])->name('reports.update');
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
     });
 });

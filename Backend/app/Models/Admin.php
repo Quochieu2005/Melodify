@@ -15,7 +15,7 @@ class Admin extends Authenticatable implements CanResetPasswordContract
 
     protected $collection = 'admins';
 
-    protected $fillable = ['name', 'email', 'slug', 'password', 'avatar', 'role', 'status', 'is_active'];
+    protected $fillable = ['name', 'email', 'slug', 'password', 'avatar', 'avatar_public_id', 'role', 'permissions', 'notification_preferences', 'appearance_preferences', 'status', 'is_active'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -24,8 +24,16 @@ class Admin extends Authenticatable implements CanResetPasswordContract
         return [
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'permissions' => 'array',
+            'notification_preferences' => 'array',
+            'appearance_preferences' => 'array',
             'email_verified_at' => 'datetime',
         ];
+    }
+
+    public function hasAdminPermission(string $permission): bool
+    {
+        return $this->role === 'super_admin' || in_array($permission, $this->permissions ?? [], true);
     }
 
     public function songs()

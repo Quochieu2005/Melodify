@@ -35,7 +35,9 @@
     padding: 5px 8px !important;
     border-radius: 6px;
     cursor: pointer;
-    transition: background 0.15s, color 0.15s;
+    transition:
+        background 0.15s,
+        color 0.15s;
     list-style: none;
     white-space: nowrap !important;
 }
@@ -444,7 +446,9 @@
     border: 1px solid #d9d9d9;
     border-radius: 6px;
     outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s;
 }
 
 .admin-form-input:focus {

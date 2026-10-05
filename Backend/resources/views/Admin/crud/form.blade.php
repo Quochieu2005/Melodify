@@ -26,13 +26,26 @@
                     $value = old($name, $item ? data_get($item, $name) : null);
                     if ($value instanceof \DateTimeInterface) $value = $value->format('Y-m-d');
                 @endphp
-                <div class="admin-form-group {{ in_array($type, ['textarea', 'checkbox'], true) ? 'admin-form-span' : '' }}">
+                <div class="admin-form-group {{ in_array($type, ['textarea', 'checkbox', 'checkbox_group'], true) ? 'admin-form-span' : '' }}">
                     @if($type === 'checkbox')
                         <label class="admin-checkbox-card">
                             <input type="hidden" name="{{ $name }}" value="0">
                             <input type="checkbox" name="{{ $name }}" value="1" @checked((bool) $value)>
                             <span><strong>{{ $field['label'] }}</strong><small>{{ $field['help'] ?? 'Bật hoặc tắt tùy chọn này.' }}</small></span>
                         </label>
+                    @elseif($type === 'checkbox_group')
+                        @php($selectedValues = collect($value ?? [])->map(fn ($item) => (string) $item)->all())
+                        <fieldset class="admin-permission-group">
+                            <legend class="admin-form-label">{{ $field['label'] }}</legend>
+                            <div class="admin-permission-options">
+                                @foreach($field['options'] as $optionValue => $option)
+                                    <label class="admin-checkbox-card">
+                                        <input type="checkbox" name="{{ $name }}[]" value="{{ $optionValue }}" @checked(in_array($optionValue, $selectedValues, true))>
+                                        <span><strong>{{ is_array($option) ? $option['label'] : $option }}</strong><small>{{ is_array($option) ? ($option['description'] ?? '') : '' }}</small></span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        </fieldset>
                     @else
                         <label class="admin-form-label" for="{{ $name }}">{{ $field['label'] }} @if($field['required'] ?? false)<span aria-hidden="true">*</span>@endif</label>
                         @if($type === 'textarea')

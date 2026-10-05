@@ -1,3 +1,5 @@
+@php($currentAdmin = auth('admin')->user())
+
 <nav class="ant-menu ant-menu-root ant-menu-inline ant-menu-light admin-menu" role="menu" aria-label="Điều hướng quản trị">
     {{-- Tổng quan --}}
     <li class="ant-menu-item {{ request()->is('/') || request()->is('admin') || request()->is('admin/dashboard') ? 'ant-menu-item-selected' : '' }}" role="menuitem" tabindex="-1">
@@ -8,6 +10,7 @@
     </li>
 
     {{-- Quản lý Nội dung --}}
+    @if($currentAdmin?->hasAdminPermission('content.manage'))
     <li class="ant-menu-submenu ant-menu-submenu-inline {{ request()->is('admin/songs*') || request()->is('admin/albums*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'ant-menu-submenu-open ant-menu-submenu-selected' : '' }}" role="menuitem" data-menu-submenu>
         <div class="ant-menu-submenu-title" role="button" aria-expanded="{{ request()->is('admin/songs*') || request()->is('admin/albums*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'true' : 'false' }}" data-submenu-trigger>
             <span class="ant-menu-title-content">
@@ -43,31 +46,39 @@
             </li>
         </ul>
     </li>
+    @endif
 
     {{-- Nghệ sĩ --}}
+    @if($currentAdmin?->hasAdminPermission('content.manage'))
     <li class="ant-menu-item {{ request()->is('admin/artists*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
         <a href="{{ url('/admin/artists') }}" class="ant-menu-title-content">
             <x-anticon name="team" class="ant-menu-item-icon" />
             <span class="ant-menu-title-text">Nghệ sĩ</span>
         </a>
     </li>
+    @endif
 
     {{-- Người dùng --}}
+    @if($currentAdmin?->hasAdminPermission('users.manage'))
     <li class="ant-menu-item {{ request()->is('admin/users*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
         <a href="{{ url('/admin/users') }}" class="ant-menu-title-content">
             <x-anticon name="user" class="ant-menu-item-icon" />
             <span class="ant-menu-title-text">Người dùng</span>
         </a>
     </li>
+    @endif
 
-    <li class="ant-menu-item {{ request()->is('admin/admins*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
-        <a href="{{ route('admin.admins.index') }}" class="ant-menu-title-content">
-            <x-anticon name="team" class="ant-menu-item-icon" />
-            <span class="ant-menu-title-text">Quản trị viên</span>
-        </a>
-    </li>
+    @if(auth('admin')->user()?->role === 'super_admin')
+        <li class="ant-menu-item {{ request()->is('admin/admins*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+            <a href="{{ route('admin.admins.index') }}" class="ant-menu-title-content">
+                <x-anticon name="team" class="ant-menu-item-icon" />
+                <span class="ant-menu-title-text">Quản trị viên</span>
+            </a>
+        </li>
+    @endif
 
     {{-- Thanh toán --}}
+    @if($currentAdmin?->hasAdminPermission('billing.manage'))
     <li class="ant-menu-submenu ant-menu-submenu-inline {{ request()->is('admin/subscriptions*') || request()->is('admin/payments*') ? 'ant-menu-submenu-open ant-menu-submenu-selected' : '' }}" role="menuitem" data-menu-submenu>
         <div class="ant-menu-submenu-title" role="button" aria-expanded="{{ request()->is('admin/subscriptions*') || request()->is('admin/payments*') ? 'true' : 'false' }}" data-submenu-trigger>
             <span class="ant-menu-title-content">
@@ -91,8 +102,10 @@
             </li>
         </ul>
     </li>
+    @endif
 
     {{-- Tương tác --}}
+    @if($currentAdmin?->hasAdminPermission('moderation.manage'))
     <li class="ant-menu-submenu ant-menu-submenu-inline {{ request()->is('admin/comments*') || request()->is('admin/reports*') ? 'ant-menu-submenu-open ant-menu-submenu-selected' : '' }}" role="menuitem" data-menu-submenu>
         <div class="ant-menu-submenu-title" role="button" aria-expanded="{{ request()->is('admin/comments*') || request()->is('admin/reports*') ? 'true' : 'false' }}" data-submenu-trigger>
             <span class="ant-menu-title-content">
@@ -116,12 +129,15 @@
             </li>
         </ul>
     </li>
+    @endif
 
     {{-- Cài đặt --}}
+    @if($currentAdmin?->role === 'super_admin')
     <li class="ant-menu-item {{ request()->is('admin/settings*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
         <a href="{{ url('/admin/settings') }}" class="ant-menu-title-content">
             <x-anticon name="setting" class="ant-menu-item-icon" />
             <span class="ant-menu-title-text">Cài đặt</span>
         </a>
     </li>
+    @endif
 </nav>

@@ -24,7 +24,9 @@ class AuthController extends Controller
             return back()->withErrors(['email' => 'Email hoặc mật khẩu không chính xác.'])->onlyInput('email');
         }
 
-        if (Auth::guard('admin')->user()?->is_active === false) {
+        $admin = Auth::guard('admin')->user();
+
+        if ($admin?->is_active === false || $admin?->status === 'inactive') {
             Auth::guard('admin')->logout();
 
             return back()->withErrors(['email' => 'Tài khoản quản trị đã bị khóa.'])->onlyInput('email');

@@ -19,7 +19,7 @@ document.documentElement.style.colorScheme = effectiveTheme;
     </script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="admin-body">
+<body class="admin-body" data-admin-idle-timeout="3600" data-admin-logout-url="{{ route('admin.logout') }}">
     @include('layouts.partials.toast')
     <div class="ant-layout ant-layout-has-sider admin-layout-root" id="admin-shell" data-admin-shell>
         <div class="admin-sidebar-overlay" data-sidebar-overlay></div>

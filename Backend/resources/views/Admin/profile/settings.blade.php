@@ -31,17 +31,29 @@
 
             <section id="notifications" class="ant-card admin-settings-panel">
                 <div class="admin-settings-panel-heading"><div><h2>Thông báo quản trị</h2><p>Chọn những hoạt động bạn muốn được nhắc trong hệ thống.</p></div></div>
-                <label class="admin-settings-switch"><span><strong>Báo cáo nội dung mới</strong><small>Nhận thông báo khi có báo cáo cần xử lý.</small></span><input type="checkbox" checked></label>
-                <label class="admin-settings-switch"><span><strong>Thanh toán bất thường</strong><small>Cảnh báo giao dịch thất bại hoặc có rủi ro.</small></span><input type="checkbox" checked></label>
-                <label class="admin-settings-switch"><span><strong>Tóm tắt hoạt động</strong><small>Nhận bản tóm tắt hoạt động quản trị hằng tuần.</small></span><input type="checkbox"></label>
+                <form method="POST" action="{{ route('admin.profile.notifications') }}" data-settings-form>
+                    @csrf @method('PUT')
+                    @foreach([
+                        'content_reports' => ['Báo cáo nội dung mới', 'Nhận thông báo khi có báo cáo cần xử lý.'],
+                        'suspicious_payments' => ['Thanh toán bất thường', 'Cảnh báo giao dịch thất bại hoặc có rủi ro.'],
+                        'weekly_summary' => ['Tóm tắt hoạt động', 'Nhận bản tóm tắt hoạt động quản trị hằng tuần.'],
+                    ] as $key => $setting)
+                        <label class="admin-settings-switch"><span><strong>{{ $setting[0] }}</strong><small>{{ $setting[1] }}</small></span><input type="hidden" name="{{ $key }}" value="0"><input type="checkbox" name="{{ $key }}" value="1" @checked(old($key, $notifications[$key] ?? false))></label>
+                    @endforeach
+                    <div class="admin-form-actions"><button class="ant-btn ant-btn-primary" type="submit">Lưu thông báo</button></div>
+                </form>
             </section>
 
             <section id="appearance" class="ant-card admin-settings-panel">
                 <div class="admin-settings-panel-heading"><div><h2>Giao diện</h2><p>Tùy chỉnh cách hiển thị bảng điều khiển trên thiết bị này.</p></div></div>
-                <div class="admin-form-grid">
-                    <div class="admin-form-group"><label class="admin-form-label">Ngôn ngữ</label><select class="ant-input"><option>Tiếng Việt</option><option>English</option></select></div>
-                    <div class="admin-form-group"><label class="admin-form-label">Mật độ hiển thị</label><select class="ant-input"><option>Thoải mái</option><option>Thu gọn</option></select></div>
-                </div>
+                <form method="POST" action="{{ route('admin.profile.appearance') }}" data-appearance-form>
+                    @csrf @method('PUT')
+                    <div class="admin-form-grid">
+                        <div class="admin-form-group"><label class="admin-form-label" for="appearance-theme">Chế độ màu</label><select id="appearance-theme" name="theme" class="ant-input"><option value="system" @selected(old('theme', $appearance['theme']) === 'system')>Theo hệ thống</option><option value="light" @selected(old('theme', $appearance['theme']) === 'light')>Sáng</option><option value="dark" @selected(old('theme', $appearance['theme']) === 'dark')>Tối</option></select></div>
+                        <div class="admin-form-group"><label class="admin-form-label" for="appearance-density">Mật độ hiển thị</label><select id="appearance-density" name="density" class="ant-input"><option value="comfortable" @selected(old('density', $appearance['density']) === 'comfortable')>Thoải mái</option><option value="compact" @selected(old('density', $appearance['density']) === 'compact')>Thu gọn</option></select></div>
+                    </div>
+                    <div class="admin-form-actions"><button class="ant-btn ant-btn-primary" type="submit">Lưu giao diện</button></div>
+                </form>
             </section>
         </div>
     </div>

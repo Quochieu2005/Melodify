@@ -24,7 +24,7 @@
                     </span>
                     <span class="account-menu-text">
                     <strong>{{ auth('admin')->user()?->name ?? 'Admin' }}</strong>
-                        <small>admin@melodify.local</small>
+                        <small>{{ auth('admin')->user()?->email ?? 'admin@melodify.local' }}</small>
                     </span>
                 </div>
             </li>
@@ -43,10 +43,13 @@
             </li>
             <li class="ant-dropdown-menu-item-divider"></li>
             <li class="ant-dropdown-menu-item ant-dropdown-menu-item-danger" role="menuitem">
-                <a href="{{ route('admin.login') }}" class="admin-dropdown-link admin-logout-link">
-                    <x-anticon name="logout" class="admin-dropdown-item-icon" />
-                    <span>Về trang đăng nhập</span>
-                </a>
+                <form method="POST" action="{{ route('admin.logout') }}" class="admin-logout-form">
+                    @csrf
+                    <button type="submit" class="admin-dropdown-link admin-logout-link">
+                        <x-anticon name="logout" class="admin-dropdown-item-icon" />
+                        <span>Đăng xuất</span>
+                    </button>
+                </form>
             </li>
         </ul>
     </div>

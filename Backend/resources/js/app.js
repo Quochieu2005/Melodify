@@ -2,14 +2,212 @@
  * Melodify Admin Interface - Ant Design Vanilla JS Controllers
  */
 document.addEventListener('DOMContentLoaded', () => {
-    const toast = document.querySelector('[data-toast]');
-    const closeToast = () => {
-        if (!toast) return;
+    document.querySelectorAll('[data-password-toggle]').forEach((toggle) => {
+        const input = toggle.closest('.admin-login-input-wrap')?.querySelector('[data-password-input]');
+        if (!input) return;
+
+        toggle.addEventListener('click', () => {
+            const shouldShow = input.type === 'password';
+            input.type = shouldShow ? 'text' : 'password';
+            toggle.classList.toggle('is-visible', shouldShow);
+            toggle.setAttribute('aria-pressed', shouldShow ? 'true' : 'false');
+            toggle.setAttribute('aria-label', shouldShow ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+            input.focus();
+        });
+    });
+
+    const otpForm = document.querySelector('[data-otp-form]');
+    if (otpForm) {
+        const otpInput = otpForm.querySelector('#otp-code');
+        const otpSubmit = otpForm.querySelector('[data-otp-submit]');
+        const countdown = otpForm.querySelector('[data-otp-countdown]');
+        const expiredMessage = otpForm.querySelector('[data-otp-expired-message]');
+        const expiresAt = Number(otpForm.dataset.otpExpiresAt || 0) * 1000;
+
+        const formatRemaining = (milliseconds) => {
+            const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+            const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+            const seconds = String(totalSeconds % 60).padStart(2, '0');
+
+            return `${minutes}:${seconds}`;
+        };
+
+        const expireOtp = () => {
+            otpForm.classList.add('is-expired');
+            if (otpInput) otpInput.disabled = true;
+            if (otpSubmit) otpSubmit.disabled = true;
+            if (countdown) countdown.textContent = '00:00';
+            if (expiredMessage) expiredMessage.hidden = false;
+        };
+
+        const updateCountdown = () => {
+            const remaining = expiresAt - Date.now();
+
+            if (remaining <= 0) {
+                expireOtp();
+                window.clearInterval(countdownTimer);
+                return;
+            }
+
+            if (countdown) countdown.textContent = formatRemaining(remaining);
+        };
+
+        otpInput?.addEventListener('input', () => {
+            otpInput.value = otpInput.value.replace(/\D/g, '').slice(0, 6);
+        });
+
+        const countdownTimer = window.setInterval(updateCountdown, 1000);
+        updateCountdown();
+    }
+
+    const passwordResetForm = document.querySelector('[data-password-reset-form]');
+    if (passwordResetForm) {
+        const passwordInput = passwordResetForm.querySelector('[name="password"]');
+        const confirmationInput = passwordResetForm.querySelector('[name="password_confirmation"]');
+        const mismatchMessage = passwordResetForm.querySelector('[data-password-match-error]');
+
+        const validatePasswordMatch = () => {
+            const mismatch = Boolean(confirmationInput?.value) && passwordInput?.value !== confirmationInput.value;
+
+            if (confirmationInput) {
+                confirmationInput.setCustomValidity(mismatch ? 'Hai mật khẩu chưa giống nhau.' : '');
+            }
+            if (mismatchMessage) mismatchMessage.hidden = !mismatch;
+
+            return !mismatch;
+        };
+
+        passwordInput?.addEventListener('input', validatePasswordMatch);
+        confirmationInput?.addEventListener('input', validatePasswordMatch);
+        passwordResetForm.addEventListener('submit', (event) => {
+            if (!validatePasswordMatch()) {
+                event.preventDefault();
+                confirmationInput?.reportValidity();
+            }
+        });
+    }
+
+    const avatarInput = document.querySelector('[data-avatar-input]');
+    const avatarPreview = document.querySelector('[data-avatar-preview]');
+    avatarInput?.addEventListener('change', () => {
+        const [file] = avatarInput.files || [];
+        if (!file || !avatarPreview) return;
+
+        const imageUrl = URL.createObjectURL(file);
+        avatarPreview.replaceChildren();
+        const image = document.createElement('img');
+        image.src = imageUrl;
+        image.alt = 'Ảnh đại diện mới';
+        image.onload = () => URL.revokeObjectURL(imageUrl);
+        avatarPreview.append(image);
+    });
+
+    const closeToast = (toast) => {
+        if (!toast || toast.classList.contains('is-hiding')) return;
         toast.classList.add('is-hiding');
         window.setTimeout(() => toast.remove(), 220);
     };
-    document.querySelector('[data-toast-close]')?.addEventListener('click', closeToast);
-    if (toast) window.setTimeout(closeToast, 4200);
+
+    const scheduleToastDismissal = (toast) => {
+        const delay = toast.classList.contains('admin-toast-error') ? 6000 : 4200;
+        window.setTimeout(() => closeToast(toast), delay);
+    };
+
+    document.querySelectorAll('[data-toast]').forEach(scheduleToastDismissal);
+
+    document.addEventListener('click', (event) => {
+        const closeButton = event.target.closest('[data-toast-close]');
+        if (closeButton) closeToast(closeButton.closest('[data-toast]'));
+    });
+
+    window.MelodifyToast = {
+        show(message, type = 'info') {
+            const allowedTypes = ['success', 'error', 'warning', 'info'];
+            const toastType = allowedTypes.includes(type) ? type : 'info';
+            let stack = document.querySelector('[data-toast-stack]');
+
+            if (!stack) {
+                stack = document.createElement('div');
+                stack.className = 'admin-toast-stack';
+                stack.dataset.toastStack = '';
+                stack.setAttribute('aria-live', 'polite');
+                stack.setAttribute('aria-atomic', 'true');
+                document.body.append(stack);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `admin-toast admin-toast-${toastType}`;
+            toast.dataset.toast = '';
+            toast.setAttribute('role', toastType === 'error' ? 'alert' : 'status');
+
+            const icon = document.createElement('span');
+            icon.className = 'admin-toast-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = toastType === 'success' ? '✓' : '!';
+
+            const text = document.createElement('span');
+            text.className = 'admin-toast-message';
+            text.textContent = message;
+
+            const closeButton = document.createElement('button');
+            closeButton.type = 'button';
+            closeButton.className = 'admin-toast-close';
+            closeButton.dataset.toastClose = '';
+            closeButton.setAttribute('aria-label', 'Đóng thông báo');
+            closeButton.textContent = '×';
+
+            toast.append(icon, text, closeButton);
+            stack.append(toast);
+            scheduleToastDismissal(toast);
+        },
+    };
+
+    document.querySelector('[data-appearance-form]')?.addEventListener('submit', () => {
+        const form = document.querySelector('[data-appearance-form]');
+        const preference = form?.querySelector('[name="theme"]')?.value;
+        if (preference) {
+            localStorage.setItem('melodify-theme-preference', preference);
+            localStorage.setItem('melodify-theme', preference === 'system'
+                ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                : preference);
+        }
+    });
+
+    const idleTimeout = Number(document.body.dataset.adminIdleTimeout || 0) * 1000;
+    const logoutUrl = document.body.dataset.adminLogoutUrl;
+    if (idleTimeout > 0 && logoutUrl) {
+        let idleTimer;
+        let idleLogoutSubmitted = false;
+
+        const logoutAfterIdle = () => {
+            if (idleLogoutSubmitted) return;
+            idleLogoutSubmitted = true;
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = logoutUrl;
+            const token = document.querySelector('meta[name="csrf-token"]')?.content;
+            if (token) {
+                const csrf = document.createElement('input');
+                csrf.type = 'hidden';
+                csrf.name = '_token';
+                csrf.value = token;
+                form.append(csrf);
+            }
+            document.body.append(form);
+            form.submit();
+        };
+
+        const resetIdleTimer = () => {
+            window.clearTimeout(idleTimer);
+            idleTimer = window.setTimeout(logoutAfterIdle, idleTimeout);
+        };
+
+        ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach((eventName) => {
+            document.addEventListener(eventName, resetIdleTimer, { passive: true });
+        });
+        resetIdleTimer();
+    }
 
     document.querySelectorAll('[data-confirm-delete]').forEach((form) => {
         form.addEventListener('submit', (event) => {
@@ -264,3 +462,65 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+(() => {
+    const root = document.documentElement;
+    const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+
+    const resolveTheme = (preference) => {
+        if (preference === 'dark' || preference === 'light') {
+            return preference;
+        }
+
+        return mediaQuery?.matches ? 'dark' : 'light';
+    };
+
+    const applyTheme = (preference) => {
+        const theme = resolveTheme(preference);
+        root.setAttribute('data-admin-theme', theme);
+        root.setAttribute('data-theme-preference', preference);
+        root.style.colorScheme = theme;
+    };
+
+    const savedPreference = localStorage.getItem('melodify-theme-preference') || 'system';
+    applyTheme(savedPreference);
+
+    mediaQuery?.addEventListener?.('change', () => {
+        const preference = localStorage.getItem('melodify-theme-preference') || 'system';
+
+        if (preference === 'system') {
+            applyTheme('system');
+        }
+    });
+
+    window.MelodifyAdminTheme = {
+        apply(preference) {
+            const normalized = ['light', 'dark', 'system'].includes(preference) ? preference : 'system';
+            const effectiveTheme = resolveTheme(normalized);
+            localStorage.setItem('melodify-theme-preference', normalized);
+            localStorage.setItem('melodify-theme', effectiveTheme);
+            applyTheme(normalized);
+        },
+    };
+})();
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-appearance-form] select[name="theme"]').forEach((select) => {
+        select.value = localStorage.getItem('melodify-theme-preference')
+            || select.value
+            || 'system';
+
+        select.addEventListener('change', () => {
+            window.MelodifyAdminTheme?.apply(select.value);
+        });
+    });
+});
+
+document.addEventListener('submit', (event) => {
+    const form = event.target;
+
+    if (!(form instanceof HTMLFormElement) || !form.matches('[data-appearance-form]')) {
+        return;
+    }
+
+    const preference = form.elements.namedItem('theme')?.value;
+    window.MelodifyAdminTheme?.apply(preference);
+});

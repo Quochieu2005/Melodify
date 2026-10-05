@@ -11,7 +11,8 @@ class AuthenticationTest extends TestCase
         $this->get(route('admin.login'))
             ->assertOk()
             ->assertSee('Chào mừng trở lại')
-            ->assertSee('Giao diện minh họa');
+            ->assertSee('Đăng nhập')
+            ->assertSee('Quên mật khẩu?');
     }
 
     public function test_admin_dashboard_requires_authentication(): void
