@@ -102,6 +102,21 @@ document.addEventListener('DOMContentLoaded', () => {
         avatarPreview.append(image);
     });
 
+    const bannerInput = document.querySelector('[data-banner-input]');
+    const bannerPreview = document.querySelector('[data-banner-preview]');
+    bannerInput?.addEventListener('change', () => {
+        const [file] = bannerInput.files || [];
+        if (!file || !bannerPreview) return;
+
+        const imageUrl = URL.createObjectURL(file);
+        bannerPreview.replaceChildren();
+        const image = document.createElement('img');
+        image.src = imageUrl;
+        image.alt = 'Ảnh banner mới';
+        image.onload = () => URL.revokeObjectURL(imageUrl);
+        bannerPreview.append(image);
+    });
+
     const closeToast = (toast) => {
         if (!toast || toast.classList.contains('is-hiding')) return;
         toast.classList.add('is-hiding');

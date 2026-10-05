@@ -55,6 +55,16 @@
     </li>
     @endif
 
+    {{-- Banner --}}
+    @if($currentAdmin?->hasAdminPermission('banners.manage'))
+    <li class="ant-menu-item {{ request()->is('admin/banners*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+        <a href="{{ route('admin.banners.index') }}" class="ant-menu-title-content">
+            <x-anticon name="appstore" class="ant-menu-item-icon" />
+            <span class="ant-menu-title-text">Banner</span>
+        </a>
+    </li>
+    @endif
+
     {{-- Nghệ sĩ --}}
     @if($currentAdmin?->hasAdminPermission('content.manage'))
     <li class="ant-menu-item {{ request()->is('admin/artists*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
@@ -75,7 +85,7 @@
     </li>
     @endif
 
-    @if(auth('admin')->user()?->role === 'super_admin')
+    @if($currentAdmin)
         <li class="ant-menu-item {{ request()->is('admin/admins*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
             <a href="{{ route('admin.admins.index') }}" class="ant-menu-title-content">
                 <x-anticon name="team" class="ant-menu-item-icon" />

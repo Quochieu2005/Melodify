@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class AdminResourceRequest extends FormRequest
@@ -10,6 +11,15 @@ class AdminResourceRequest extends FormRequest
     public function authorize(): bool
     {
         return auth('admin')->check();
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $resource = explode('.', (string) $this->route()?->getName())[1] ?? '';
+
+        if ($resource === 'admins' && $this->filled('email')) {
+            $this->merge(['email' => Str::lower(trim((string) $this->input('email')))]);
+        }
     }
 
     public function rules(): array
@@ -83,12 +93,12 @@ class AdminResourceRequest extends FormRequest
             'admins' => [
                 'name' => ['required', 'string', 'max:120'],
                 'email' => ['required', 'email', 'max:160', Rule::unique('admins', 'email')->ignore($routeId)],
-                'slug' => ['required', 'alpha_dash', 'max:140', Rule::unique('admins', 'slug')->ignore($routeId)],
+                'slug' => ['nullable', 'alpha_dash', 'max:140', Rule::unique('admins', 'slug')->ignore($routeId)],
                 'role' => ['required', 'in:super_admin,admin'],
                 'permissions' => ['nullable', 'array'],
                 'permissions.*' => ['string', Rule::in(array_keys(config('admin-permissions.groups', [])))],
                 'status' => ['required', 'in:active,inactive'],
-                'password' => [$this->isMethod('post') ? 'required' : 'nullable', 'string', 'min:8', 'confirmed'],
+                'password' => ['nullable', 'string', 'min:8', 'confirmed'],
             ],
             default => [],
         };

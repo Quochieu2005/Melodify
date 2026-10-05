@@ -21,7 +21,7 @@ class InitializeMongoDb extends Command
         );
 
         $collections = [
-            'admins', 'users', 'artists', 'artist_followers', 'genres', 'albums', 'songs',
+            'admins', 'banners', 'users', 'artists', 'artist_followers', 'genres', 'albums', 'songs',
             'song_artists', 'song_genres', 'song_audio_files', 'lyrics', 'playlists',
             'playlist_songs', 'favorites', 'listening_history', 'devices', 'song_play_events',
             'comments', 'comment_likes', 'notifications', 'subscription_plans', 'subscriptions',
@@ -42,6 +42,7 @@ class InitializeMongoDb extends Command
 
         $indexes = [
             'admins' => [[['slug' => 1], ['unique' => true]], [['email' => 1], ['unique' => true]]],
+            'banners' => [[['slug' => 1], ['unique' => true]], [['sort_order' => 1], []], [['status' => 1], []]],
             'users' => [[['slug' => 1], ['unique' => true]], [['email' => 1], ['unique' => true]], [['username' => 1], ['unique' => true, 'sparse' => true]]],
             'artists' => [[['slug' => 1], ['unique' => true]], [['user_id' => 1], ['unique' => true, 'sparse' => true]]],
             'genres' => [[['slug' => 1], ['unique' => true]], [['name' => 1], ['unique' => true]]],
