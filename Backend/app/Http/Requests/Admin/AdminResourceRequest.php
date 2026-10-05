@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Models\Artist;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -40,7 +41,7 @@ class AdminResourceRequest extends FormRequest
             'albums' => [
                 'title' => ['required', 'string', 'max:160'],
                 'slug' => ['required', 'alpha_dash', 'max:180', Rule::unique('albums', 'slug')->ignore($routeId)],
-                'artist_id' => ['nullable', 'string'],
+                'artist_id' => ['required', 'string'],
                 'release_date' => ['nullable', 'date'],
                 'cover_url' => ['nullable', 'url', 'max:500'],
                 'status' => ['required', 'in:draft,published,blocked'],
@@ -102,6 +103,21 @@ class AdminResourceRequest extends FormRequest
             ],
             default => [],
         };
+    }
+
+    public function withValidator($validator): void
+    {
+        $resource = explode('.', (string) $this->route()?->getName())[1] ?? '';
+
+        if ($resource !== 'albums' || blank($this->input('artist_id'))) {
+            return;
+        }
+
+        $validator->after(function ($validator): void {
+            if (! Artist::query()->find($this->input('artist_id'))) {
+                $validator->errors()->add('artist_id', 'Nghệ sĩ đã chọn không tồn tại.');
+            }
+        });
     }
 
     private function routeParameterName(string $resource): string

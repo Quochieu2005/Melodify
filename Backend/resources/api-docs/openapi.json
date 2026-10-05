@@ -11,7 +11,8 @@
   "tags": [
     { "name": "System", "description": "System and service status" },
     { "name": "Auth", "description": "Authentication endpoints (coming soon)" },
-    { "name": "Music", "description": "Music, albums and playlists (coming soon)" }
+    { "name": "Music", "description": "Music, albums and playlists" },
+    { "name": "Catalog", "description": "Public topics, genres, banners, albums and artists" }
   ],
   "paths": {
     "/api/health": {
@@ -36,6 +37,77 @@
           }
         }
       }
+    },
+    "/api/v1/topics": {
+      "get": {
+        "tags": ["Catalog"],
+        "summary": "List active topics",
+        "parameters": [{ "$ref": "#/components/parameters/PerPage" }, { "$ref": "#/components/parameters/Search" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
+      }
+    },
+    "/api/v1/topics/{id}": {
+      "get": {
+        "tags": ["Catalog"], "summary": "Get an active topic",
+        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/v1/genres": {
+      "get": {
+        "tags": ["Catalog"], "summary": "List active genres",
+        "parameters": [{ "$ref": "#/components/parameters/PerPage" }, { "$ref": "#/components/parameters/Search" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
+      }
+    },
+    "/api/v1/genres/{id}": {
+      "get": {
+        "tags": ["Catalog"], "summary": "Get an active genre",
+        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/v1/banners": {
+      "get": {
+        "tags": ["Catalog"], "summary": "List active banners",
+        "parameters": [{ "$ref": "#/components/parameters/PerPage" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
+      }
+    },
+    "/api/v1/banners/{id}": {
+      "get": {
+        "tags": ["Catalog"], "summary": "Get an active banner",
+        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/v1/albums": {
+      "get": {
+        "tags": ["Catalog"], "summary": "List published albums with artist",
+        "parameters": [{ "$ref": "#/components/parameters/PerPage" }, { "$ref": "#/components/parameters/Search" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
+      }
+    },
+    "/api/v1/albums/{id}": {
+      "get": {
+        "tags": ["Catalog"], "summary": "Get a published album with artist",
+        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/v1/artists": {
+      "get": {
+        "tags": ["Catalog"], "summary": "List active artists",
+        "parameters": [{ "$ref": "#/components/parameters/PerPage" }, { "$ref": "#/components/parameters/Search" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
+      }
+    },
+    "/api/v1/artists/{id}": {
+      "get": {
+        "tags": ["Catalog"], "summary": "Get an active artist",
+        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
     }
   },
   "components": {
@@ -47,7 +119,53 @@
         "description": "Nhập access token theo dạng: Bearer {token}"
       }
     },
+    "parameters": {
+      "Id": { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+      "PerPage": { "name": "per_page", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } },
+      "Search": { "name": "q", "in": "query", "schema": { "type": "string" } }
+    },
+    "responses": {
+      "CatalogList": {
+        "description": "Paginated catalog data",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CatalogListResponse" } } }
+      },
+      "CatalogItem": {
+        "description": "Catalog item",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CatalogItemResponse" } } }
+      },
+      "NotFound": { "description": "Item was not found or is inactive" }
+    },
     "schemas": {
+      "CatalogListResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/CatalogItem" } },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "current_page": { "type": "integer" }, "last_page": { "type": "integer" },
+              "per_page": { "type": "integer" }, "total": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "CatalogItemResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": { "data": { "$ref": "#/components/schemas/CatalogItem" } }
+      },
+      "CatalogItem": {
+        "type": "object",
+        "description": "Topic, genre, banner, album or artist. Fields vary by resource.",
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" }, "name": { "type": "string" }, "title": { "type": "string" },
+          "slug": { "type": "string" }, "image_url": { "type": "string", "nullable": true },
+          "cover_url": { "type": "string", "nullable": true }, "avatar_url": { "type": "string", "nullable": true },
+          "status": { "type": "string" }
+        }
+      },
       "HealthResponse": {
         "type": "object",
         "required": ["status", "service", "database", "timestamp"],
