@@ -694,6 +694,213 @@
     }
 }
 
+/* Shared catalog forms and the reusable Cloudinary image library. */
+.admin-catalog-form {
+    overflow: hidden;
+}
+
+.admin-catalog-form-layout {
+    align-items: start;
+    display: grid;
+    gap: 28px;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    padding: 24px;
+}
+
+.admin-catalog-fields {
+    align-content: start;
+}
+
+.admin-media-library {
+    background: var(--admin-surface-raised);
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.admin-media-library-heading {
+    align-items: start;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.admin-media-library-heading strong,
+.admin-media-library-heading span,
+.admin-media-library-title {
+    display: block;
+}
+
+.admin-media-library-heading strong {
+    color: var(--admin-text);
+    font-size: 15px;
+}
+
+.admin-media-library-heading > div > span {
+    color: var(--admin-text-muted);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.admin-media-upload {
+    align-items: center;
+    background: var(--admin-surface);
+    border: 1px dashed var(--admin-accent);
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding: 14px;
+    transition: background .2s ease, border-color .2s ease, transform .2s ease;
+}
+
+.admin-media-upload:hover {
+    background: var(--admin-accent-soft);
+    transform: translateY(-1px);
+}
+
+.admin-media-upload input {
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+    position: absolute;
+    width: 1px;
+}
+
+.admin-media-upload-icon {
+    align-items: center;
+    background: var(--admin-accent-soft);
+    border-radius: 8px;
+    color: var(--admin-accent);
+    display: inline-flex;
+    font-size: 20px;
+    height: 38px;
+    justify-content: center;
+    width: 38px;
+}
+
+.admin-media-upload strong,
+.admin-media-upload small {
+    display: block;
+}
+
+.admin-media-upload strong {
+    color: var(--admin-text);
+    font-size: 13px;
+}
+
+.admin-media-upload small {
+    color: var(--admin-text-muted);
+    font-size: 11px;
+    margin-top: 3px;
+}
+
+.admin-media-library-title {
+    border-top: 1px solid var(--admin-border);
+    color: var(--admin-text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    margin-bottom: 10px;
+    padding-top: 14px;
+}
+
+.admin-media-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-height: 360px;
+    overflow-y: auto;
+    padding: 2px;
+}
+
+.admin-media-card {
+    border: 2px solid transparent;
+    border-radius: 9px;
+    cursor: pointer;
+    min-width: 0;
+    overflow: hidden;
+    position: relative;
+    transition: border-color .2s ease, transform .2s ease;
+}
+
+.admin-media-card:hover {
+    transform: translateY(-2px);
+}
+
+.admin-media-card:has(input:checked) {
+    border-color: var(--admin-accent);
+    box-shadow: 0 0 0 2px var(--admin-accent-soft);
+}
+
+.admin-media-card input {
+    opacity: 0;
+    position: absolute;
+}
+
+.admin-media-card img {
+    aspect-ratio: 1;
+    background: var(--admin-surface);
+    display: block;
+    object-fit: cover;
+    width: 100%;
+}
+
+.admin-media-card span {
+    background: var(--admin-surface);
+    color: var(--admin-text-muted);
+    display: block;
+    font-size: 10px;
+    overflow: hidden;
+    padding: 5px 6px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-media-empty {
+    color: var(--admin-text-muted);
+    font-size: 12px;
+    grid-column: 1 / -1;
+    padding: 16px 4px;
+    text-align: center;
+}
+
+.admin-catalog-thumb {
+    border-radius: 7px;
+    height: 40px;
+    object-fit: cover;
+    vertical-align: middle;
+    width: 40px;
+}
+
+.admin-catalog-image-empty {
+    color: var(--admin-text-muted);
+    font-size: 12px;
+}
+
+@media (max-width: 900px) {
+    .admin-catalog-form-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-media-library {
+        order: -1;
+    }
+}
+
+@media (max-width: 600px) {
+    .admin-catalog-form-layout {
+        gap: 18px;
+        padding: 18px;
+    }
+
+    .admin-media-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
 /* Audit log filters: compact toolbar with clearer hierarchy and focus states. */
 .admin-log-filters {
     align-items: end;

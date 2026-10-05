@@ -17,6 +17,7 @@ use App\Http\Controllers\AdminController\ReportController;
 use App\Http\Controllers\AdminController\SettingController;
 use App\Http\Controllers\AdminController\SongController;
 use App\Http\Controllers\AdminController\SubscriptionController;
+use App\Http\Controllers\AdminController\TopicController;
 use App\Http\Controllers\AdminController\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -57,7 +58,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::middleware('admin.permission:content.manage')->group(function () {
             Route::resource('songs', SongController::class)->except('show');
             Route::resource('albums', AlbumController::class)->except('show');
+            Route::patch('/topics/{topic}/status', [TopicController::class, 'toggleStatus'])->name('topics.status');
+            Route::resource('topics', TopicController::class)->except('show');
+            Route::patch('/genres/{genre}/status', [GenreController::class, 'toggleStatus'])->name('genres.status');
             Route::resource('genres', GenreController::class)->except('show');
+            Route::patch('/playlists/{playlist}/status', [PlaylistController::class, 'toggleStatus'])->name('playlists.status');
             Route::resource('playlists', PlaylistController::class)->except('show');
             Route::resource('artists', ArtistController::class)->except('show');
         });

@@ -2,26 +2,26 @@
 
 namespace App\Http\Controllers\AdminController;
 
-use App\Models\Genre;
+use App\Models\Topic;
 
-class GenreController extends MediaCatalogController
+class TopicController extends MediaCatalogController
 {
-    protected string $model = Genre::class;
+    protected string $model = Topic::class;
 
-    protected string $resource = 'genres';
+    protected string $resource = 'topics';
 
-    protected string $title = 'thể loại';
+    protected string $title = 'chủ đề';
 
     protected array $columns = [
         'image_url' => 'Ảnh',
-        'name' => 'Tên thể loại',
+        'name' => 'Tên chủ đề',
         'slug' => 'Slug',
         'sort_order' => 'Thứ tự',
         'status' => 'Trạng thái',
     ];
 
     protected array $formFields = [
-        'name' => ['label' => 'Tên thể loại', 'required' => true],
+        'name' => ['label' => 'Tên chủ đề', 'required' => true],
         'slug' => ['label' => 'Slug', 'help' => 'Để trống để tự tạo theo tên; slug không được trùng.'],
         'description' => ['label' => 'Mô tả', 'type' => 'textarea'],
         'sort_order' => ['label' => 'Thứ tự hiển thị', 'type' => 'number', 'default' => 0, 'required' => true],

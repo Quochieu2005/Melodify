@@ -32,6 +32,8 @@ const collections = [
     "logs",
     "reports",
     "recommendations",
+    "topics",
+    "media_assets",
 ];
 
 const existing = db.getCollectionNames();
@@ -68,6 +70,13 @@ const indexes = {
     genres: [
         [{ slug: 1 }, { unique: true }],
         [{ name: 1 }, { unique: true }],
+        [{ status: 1 }, {}],
+        [{ sort_order: 1 }, {}],
+    ],
+    topics: [
+        [{ slug: 1 }, { unique: true }],
+        [{ status: 1 }, {}],
+        [{ sort_order: 1 }, {}],
     ],
     albums: [
         [{ slug: 1 }, { unique: true }],
@@ -98,6 +107,13 @@ const indexes = {
         [{ slug: 1 }, { unique: true }],
         [{ user_id: 1 }, {}],
         [{ visibility: 1 }, {}],
+        [{ status: 1 }, {}],
+        [{ sort_order: 1 }, {}],
+    ],
+    media_assets: [
+        [{ public_id: 1 }, { unique: true }],
+        [{ folder: 1 }, {}],
+        [{ created_at: -1 }, {}],
     ],
     playlist_songs: [
         [{ playlist_id: 1, song_id: 1 }, { unique: true }],
