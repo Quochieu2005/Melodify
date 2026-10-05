@@ -509,3 +509,265 @@
 .admin-dashboard .rounded-2xl {
     box-sizing: border-box;
 }
+
+/* ==========================================================================
+   Admin audit logs
+   ========================================================================== */
+.admin-log-timezone {
+    color: var(--admin-text-muted);
+    font-size: 13px;
+    padding-top: 8px;
+}
+
+.admin-log-filters {
+    align-items: end;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(150px, 1fr)) auto;
+    margin-bottom: 20px;
+    padding: 18px;
+}
+
+.admin-log-filters label {
+    color: var(--admin-text-secondary);
+    display: grid;
+    font-size: 12px;
+    font-weight: 600;
+    gap: 7px;
+}
+
+.admin-log-filters .ant-input {
+    min-height: 38px;
+}
+
+.admin-log-filter-actions {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+}
+
+.admin-log-table-card {
+    overflow: hidden;
+}
+
+.admin-log-table {
+    min-width: 1040px;
+}
+
+.admin-log-table td {
+    vertical-align: top;
+}
+
+.admin-log-time,
+.admin-log-admin {
+    display: grid;
+    gap: 3px;
+}
+
+.admin-log-time strong,
+.admin-log-admin strong {
+    color: var(--admin-text);
+}
+
+.admin-log-time span,
+.admin-log-admin span,
+.admin-log-route,
+.admin-log-target-id {
+    color: var(--admin-text-muted);
+    font-size: 12px;
+}
+
+.admin-log-ip {
+    background: var(--admin-surface-soft);
+    border: 1px solid var(--admin-border);
+    border-radius: 5px;
+    color: var(--admin-text-secondary);
+    display: inline-block;
+    font-size: 12px;
+    padding: 3px 6px;
+}
+
+.admin-log-route {
+    display: block;
+    margin-top: 4px;
+}
+
+.admin-log-target-id {
+    display: block;
+    margin-top: 4px;
+}
+
+.admin-log-details {
+    margin-top: 7px;
+    max-width: 360px;
+    white-space: normal;
+}
+
+.admin-log-details summary {
+    color: var(--admin-accent-hover);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.admin-log-details pre {
+    background: var(--admin-surface-soft);
+    border: 1px solid var(--admin-border);
+    border-radius: 6px;
+    color: var(--admin-text-secondary);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    margin: 8px 0 0;
+    max-height: 160px;
+    overflow: auto;
+    padding: 8px;
+    white-space: pre-wrap;
+}
+
+@media (max-width: 1100px) {
+    .admin-log-filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-log-filter-actions {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+    }
+}
+
+@media (max-width: 600px) {
+    .admin-log-filters {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-log-filter-actions {
+        grid-column: auto;
+        justify-content: stretch;
+    }
+
+    .admin-log-filter-actions .ant-btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .admin-log-timezone {
+        padding-top: 0;
+    }
+}
+
+/* Audit log filters: compact toolbar with clearer hierarchy and focus states. */
+.admin-log-filters {
+    align-items: end;
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgb(21 38 37 / 5%);
+    gap: 16px;
+    padding: 20px;
+}
+
+.admin-log-filter-field {
+    gap: 8px;
+    min-width: 0;
+}
+
+.admin-log-filter-label {
+    align-items: center;
+    color: var(--admin-text-secondary);
+    display: flex;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    min-height: 18px;
+}
+
+.admin-log-input-wrap,
+.admin-log-select-wrap {
+    display: block;
+    min-width: 0;
+    position: relative;
+}
+
+.admin-log-input-icon {
+    color: var(--admin-text-muted);
+    height: 16px;
+    left: 13px;
+    pointer-events: none;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    z-index: 1;
+}
+
+.admin-log-input-wrap .ant-input {
+    padding-left: 40px;
+}
+
+.admin-log-filters .ant-input,
+.admin-log-filters select.ant-input {
+    background: var(--admin-surface-soft);
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    box-sizing: border-box;
+    color: var(--admin-text);
+    font-size: 13px;
+    height: 42px;
+    min-height: 42px;
+    outline: 0;
+    transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    width: 100%;
+}
+
+.admin-log-filters select.ant-input {
+    cursor: pointer;
+}
+
+.admin-log-filters .ant-input::placeholder {
+    color: var(--admin-text-muted);
+    opacity: 0.82;
+}
+
+.admin-log-filters .ant-input:hover,
+.admin-log-filters select.ant-input:hover {
+    background: var(--admin-surface);
+    border-color: var(--admin-border-strong);
+}
+
+.admin-log-filters .ant-input:focus,
+.admin-log-filters select.ant-input:focus {
+    background: var(--admin-surface);
+    border-color: var(--admin-accent);
+    box-shadow: 0 0 0 3px rgb(0 211 229 / 12%);
+}
+
+.admin-log-filters input[type="date"] {
+    color-scheme: light;
+}
+
+[data-admin-theme="dark"] .admin-log-filters input[type="date"] {
+    color-scheme: dark;
+}
+
+.admin-log-filter-actions {
+    align-self: end;
+    min-height: 42px;
+    white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+    .admin-log-filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .admin-log-filters {
+        gap: 14px;
+        padding: 16px;
+    }
+
+    .admin-log-filter-actions {
+        min-height: 40px;
+    }
+}
