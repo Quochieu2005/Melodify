@@ -269,7 +269,10 @@
     }
 
     .is-sidebar-collapsed .admin-menu .ant-menu-item > a,
-    .is-sidebar-collapsed .admin-menu .ant-menu-submenu-title > span.ant-menu-title-content {
+    .is-sidebar-collapsed
+        .admin-menu
+        .ant-menu-submenu-title
+        > span.ant-menu-title-content {
         justify-content: flex-start;
     }
 

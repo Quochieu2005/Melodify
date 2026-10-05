@@ -5,6 +5,7 @@ namespace App\Http\Controllers\AdminController;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminResourceRequest;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
 
 abstract class CrudResourceController extends Controller
@@ -72,9 +73,15 @@ abstract class CrudResourceController extends Controller
             }
         }
 
-        if (array_key_exists('password', $data) && blank($data['password'])) {
-            unset($data['password']);
+        if (array_key_exists('password', $data)) {
+            if (blank($data['password'])) {
+                unset($data['password']);
+            } else {
+                $data['password'] = Hash::driver('bcrypt')->make($data['password']);
+            }
         }
+
+        unset($data['password_confirmation']);
 
         return $data;
     }

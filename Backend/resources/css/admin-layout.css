@@ -132,7 +132,9 @@ body.admin-body {
     cursor: pointer;
     text-decoration: none;
     list-style: none;
-    transition: background 0.15s, color 0.15s;
+    transition:
+        background 0.15s,
+        color 0.15s;
     user-select: none;
 }
 
@@ -175,7 +177,10 @@ body.admin-body {
     transition: transform 0.2s ease;
 }
 
-.admin-menu .ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow {
+.admin-menu
+    .ant-menu-submenu-open
+    > .ant-menu-submenu-title
+    .ant-menu-submenu-arrow {
     transform: rotate(180deg);
 }
 
@@ -267,7 +272,10 @@ body.admin-body {
 }
 
 .is-sidebar-collapsed .admin-menu .ant-menu-item > a,
-.is-sidebar-collapsed .admin-menu .ant-menu-submenu-title > span.ant-menu-title-content {
+.is-sidebar-collapsed
+    .admin-menu
+    .ant-menu-submenu-title
+    > span.ant-menu-title-content {
     justify-content: center;
 }
 

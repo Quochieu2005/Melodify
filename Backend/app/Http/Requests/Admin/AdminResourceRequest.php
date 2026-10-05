@@ -9,7 +9,7 @@ class AdminResourceRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth('admin')->check() || app()->environment('local');
+        return auth('admin')->check();
     }
 
     public function rules(): array
@@ -84,7 +84,9 @@ class AdminResourceRequest extends FormRequest
                 'name' => ['required', 'string', 'max:120'],
                 'email' => ['required', 'email', 'max:160', Rule::unique('admins', 'email')->ignore($routeId)],
                 'slug' => ['required', 'alpha_dash', 'max:140', Rule::unique('admins', 'slug')->ignore($routeId)],
-                'role' => ['required', 'in:super_admin,content_manager,support'],
+                'role' => ['required', 'in:super_admin,admin'],
+                'permissions' => ['nullable', 'array'],
+                'permissions.*' => ['string', Rule::in(array_keys(config('admin-permissions.groups', [])))],
                 'status' => ['required', 'in:active,inactive'],
                 'password' => [$this->isMethod('post') ? 'required' : 'nullable', 'string', 'min:8', 'confirmed'],
             ],
