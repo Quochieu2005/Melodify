@@ -5,6 +5,7 @@ namespace App\Http\Controllers\AdminController;
 use App\Http\Controllers\Controller;
 use App\Mail\AdminPasswordOtpMail;
 use App\Models\Admin;
+use App\Services\AdminAuditLogService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -34,7 +35,7 @@ class PasswordResetController extends Controller
         return view('Admin.auth.forgot-password');
     }
 
-    public function sendOtp(Request $request): RedirectResponse
+    public function sendOtp(Request $request, AdminAuditLogService $auditLogs): RedirectResponse
     {
         $data = $request->validate(['email' => ['required', 'email', 'max:160']]);
         $email = Str::lower($data['email']);
@@ -92,6 +93,7 @@ class PasswordResetController extends Controller
 
         $request->session()->put('admin_password_otp_email', $email);
         $request->session()->put('admin_password_otp_expires_at', $expiresAt->toIso8601String());
+        $auditLogs->record($request, $admin, 'auth.password_reset.requested', 'Yêu cầu mã OTP đặt lại mật khẩu.');
 
         return redirect()->route('admin.password.otp.form')
             ->with('success', 'Mã OTP đã được gửi. Mã có hiệu lực trong 5 phút.');
@@ -119,7 +121,7 @@ class PasswordResetController extends Controller
         ]);
     }
 
-    public function verifyOtp(Request $request): RedirectResponse
+    public function verifyOtp(Request $request, AdminAuditLogService $auditLogs): RedirectResponse
     {
         $data = $request->validate(['code' => ['required', 'digits:6']]);
         $email = $request->session()->get('admin_password_otp_email');
@@ -179,6 +181,7 @@ class PasswordResetController extends Controller
         ]);
         $request->session()->put('admin_password_reset_verified_email', $email);
         $request->session()->put('admin_password_reset_verified_at', now()->toIso8601String());
+        $auditLogs->record($request, $admin, 'auth.password_reset.otp_verified', 'Xác minh mã OTP thành công.');
 
         return redirect()->route('admin.password.reset.form')
             ->with('success', 'OTP chính xác. Hãy tạo mật khẩu mới của bạn.');
@@ -194,7 +197,7 @@ class PasswordResetController extends Controller
         return view('Admin.auth.reset-password');
     }
 
-    public function resetPassword(Request $request): RedirectResponse
+    public function resetPassword(Request $request, AdminAuditLogService $auditLogs): RedirectResponse
     {
         $data = $request->validate([
             'password' => ['required', 'confirmed', PasswordRule::min(8)],
@@ -219,6 +222,7 @@ class PasswordResetController extends Controller
             'password' => Hash::driver('bcrypt')->make($data['password']),
             'remember_token' => Str::random(60),
         ])->save();
+        $auditLogs->record($request, $admin, 'auth.password_reset.completed', 'Đặt lại mật khẩu thành công.');
 
         $this->forgetResetSession($request);
 

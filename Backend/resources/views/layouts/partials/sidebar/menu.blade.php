@@ -9,6 +9,13 @@
         </a>
     </li>
 
+    <li class="ant-menu-item {{ request()->is('admin/logs*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+        <a href="{{ route('admin.logs.index') }}" class="ant-menu-title-content">
+            <x-anticon name="file-text" class="ant-menu-item-icon" />
+            <span class="ant-menu-title-text">Nhật ký hoạt động</span>
+        </a>
+    </li>
+
     {{-- Quản lý Nội dung --}}
     @if($currentAdmin?->hasAdminPermission('content.manage'))
     <li class="ant-menu-submenu ant-menu-submenu-inline {{ request()->is('admin/songs*') || request()->is('admin/albums*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'ant-menu-submenu-open ant-menu-submenu-selected' : '' }}" role="menuitem" data-menu-submenu>

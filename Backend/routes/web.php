@@ -7,6 +7,7 @@ use App\Http\Controllers\AdminController\AuthController;
 use App\Http\Controllers\AdminController\CommentController;
 use App\Http\Controllers\AdminController\DashboardController;
 use App\Http\Controllers\AdminController\GenreController;
+use App\Http\Controllers\AdminController\LogController;
 use App\Http\Controllers\AdminController\PasswordResetController;
 use App\Http\Controllers\AdminController\PaymentController;
 use App\Http\Controllers\AdminController\PlaylistController;
@@ -34,8 +35,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/forgot-password/reset', [PasswordResetController::class, 'resetPassword'])->middleware('throttle:5,1')->name('password.reset');
     });
 
-    Route::middleware(['auth:admin', 'admin.idle'])->group(function () {
+    Route::middleware(['auth:admin', 'admin.idle', 'admin.audit'])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+        Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
         Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
         Route::get('/account-settings', [ProfileController::class, 'settings'])->name('profile.settings');
@@ -71,7 +73,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         });
     });
 
-    Route::middleware(['auth:admin', 'admin.idle', 'admin.super'])->group(function () {
+    Route::middleware(['auth:admin', 'admin.idle', 'admin.audit', 'admin.super'])->group(function () {
         Route::resource('admins', AdminManagementController::class)->except('show');
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
     });
