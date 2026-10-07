@@ -45,7 +45,7 @@ class AdminResourceRequest extends FormRequest
         return match ($resource) {
             'songs' => [
                 'title' => ['required', 'string', 'max:160', new PlainText()],
-                'slug' => ['required', 'alpha_dash', 'max:180', new PlainText(), Rule::unique('songs', 'slug')->ignore($routeId)],
+                'slug' => ['nullable', 'alpha_dash', 'max:180', new PlainText(), Rule::unique('songs', 'slug')->ignore($routeId)],
                 'album_id' => ['nullable', 'string', 'max:64'],
                 'release_date' => ['nullable', 'date'],
                 'duration_seconds' => ['nullable', 'integer', 'min:0', 'max:86400'],
@@ -54,7 +54,7 @@ class AdminResourceRequest extends FormRequest
             ],
             'albums' => [
                 'title' => ['required', 'string', 'max:160', new PlainText()],
-                'slug' => ['required', 'alpha_dash', 'max:180', new PlainText(), Rule::unique('albums', 'slug')->ignore($routeId)],
+                'slug' => ['nullable', 'alpha_dash', 'max:180', new PlainText(), Rule::unique('albums', 'slug')->ignore($routeId)],
                 'artist_id' => ['required', 'string', 'max:64'],
                 'release_date' => ['nullable', 'date'],
                 'cover_url' => ['nullable', 'url', 'max:500', new PlainText()],
@@ -62,7 +62,7 @@ class AdminResourceRequest extends FormRequest
             ],
             'artists' => [
                 'name' => ['required', 'string', 'max:120', new PlainText()],
-                'slug' => ['required', 'alpha_dash', 'max:140', new PlainText(), Rule::unique('artists', 'slug')->ignore($routeId)],
+                'slug' => ['nullable', 'alpha_dash', 'max:140', new PlainText(), Rule::unique('artists', 'slug')->ignore($routeId)],
                 'user_id' => ['nullable', 'string', 'max:64'],
                 'bio' => ['nullable', 'string', 'max:2000', new PlainText()],
                 'avatar_url' => ['nullable', 'url', 'max:500', new PlainText()],
@@ -71,13 +71,13 @@ class AdminResourceRequest extends FormRequest
             ],
             'genres' => [
                 'name' => ['required', 'string', 'max:80', new PlainText()],
-                'slug' => ['required', 'alpha_dash', 'max:100', new PlainText(), Rule::unique('genres', 'slug')->ignore($routeId)],
+                'slug' => ['nullable', 'alpha_dash', 'max:100', new PlainText(), Rule::unique('genres', 'slug')->ignore($routeId)],
                 'description' => ['nullable', 'string', 'max:1000', new PlainText()],
                 'status' => ['required', 'in:active,inactive'],
             ],
             'playlists' => [
                 'name' => ['required', 'string', 'max:160', new PlainText()],
-                'slug' => ['required', 'alpha_dash', 'max:180', new PlainText(), Rule::unique('playlists', 'slug')->ignore($routeId)],
+                'slug' => ['nullable', 'alpha_dash', 'max:180', new PlainText(), Rule::unique('playlists', 'slug')->ignore($routeId)],
                 'user_id' => ['nullable', 'string', 'max:64'],
                 'description' => ['nullable', 'string', 'max:1500', new PlainText()],
                 'cover_url' => ['nullable', 'url', 'max:500', new PlainText()],
@@ -88,7 +88,7 @@ class AdminResourceRequest extends FormRequest
                 'name' => ['required', 'string', 'max:120', new PlainText()],
                 'email' => ['required', 'email', 'max:160', new PlainText(), Rule::unique('users', 'email')->ignore($routeId)],
                 'username' => ['nullable', 'alpha_dash', 'max:80', new PlainText()],
-                'slug' => ['required', 'alpha_dash', 'max:140', new PlainText(), Rule::unique('users', 'slug')->ignore($routeId)],
+                'slug' => ['nullable', 'alpha_dash', 'max:140', new PlainText(), Rule::unique('users', 'slug')->ignore($routeId)],
                 'phone' => ['nullable', 'string', 'max:30', new PlainText()],
                 'status' => ['required', 'in:active,blocked'],
                 'password' => [$this->isMethod('post') ? 'required' : 'nullable', 'string', 'min:8', 'max:72', 'confirmed'],
@@ -96,7 +96,7 @@ class AdminResourceRequest extends FormRequest
             'subscriptions' => [
                 'name' => ['required', 'string', 'max:120', new PlainText()],
                 'code' => ['required', 'alpha_dash', 'max:60', new PlainText(), Rule::unique('subscription_plans', 'code')->ignore($routeId)],
-                'slug' => ['required', 'alpha_dash', 'max:140', new PlainText(), Rule::unique('subscription_plans', 'slug')->ignore($routeId)],
+                'slug' => ['nullable', 'alpha_dash', 'max:140', new PlainText(), Rule::unique('subscription_plans', 'slug')->ignore($routeId)],
                 'price' => ['required', 'numeric', 'min:0', 'max:999999999.99'],
                 'duration_days' => ['required', 'integer', 'min:1', 'max:36500'],
                 'description' => ['nullable', 'string', 'max:1000', new PlainText()],

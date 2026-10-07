@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminResourceRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 abstract class CrudResourceController extends Controller
@@ -59,7 +61,7 @@ abstract class CrudResourceController extends Controller
     public function update(AdminResourceRequest $request, string $id): RedirectResponse
     {
         $item = ($this->model)::query()->findOrFail($id);
-        $item->update($this->normalize($request->validated()));
+        $item->update($this->normalize($request->validated(), $item->getKey()));
 
         return redirect()->route("admin.{$this->resource}.index")
             ->with('success', "Đã cập nhật {$this->title}.");
@@ -73,7 +75,7 @@ abstract class CrudResourceController extends Controller
         return back()->with('success', "Đã xóa {$this->title}.");
     }
 
-    protected function normalize(array $data): array
+    protected function normalize(array $data, mixed $ignoreId = null): array
     {
         foreach ($this->fields as $name => $field) {
             if (($field['type'] ?? '') === 'checkbox') {
@@ -90,6 +92,39 @@ abstract class CrudResourceController extends Controller
         }
 
         unset($data['password_confirmation']);
+
+        if (array_key_exists('slug', $data)) {
+            $name = (string) ($data['name'] ?? $data['title'] ?? '');
+            $providedSlug = trim((string) ($data['slug'] ?? ''));
+            $baseSlug = Str::slug($providedSlug !== '' ? $providedSlug : $name);
+
+            if ($baseSlug === '') {
+                throw ValidationException::withMessages([
+                    'slug' => 'Không thể tạo slug từ tên này.',
+                ]);
+            }
+
+            $slugExists = function (string $candidate) use ($ignoreId): bool {
+                $existing = ($this->model)::query()->where('slug', $candidate)->first();
+
+                return $existing !== null
+                    && ($ignoreId === null || (string) $existing->getKey() !== (string) $ignoreId);
+            };
+
+            if ($slugExists($baseSlug) && $providedSlug !== '') {
+                throw ValidationException::withMessages([
+                    'slug' => 'Slug này đã tồn tại, vui lòng chọn slug khác.',
+                ]);
+            }
+
+            $slug = $baseSlug;
+            $suffix = 2;
+            while ($slugExists($slug)) {
+                $slug = $baseSlug.'-'.$suffix++;
+            }
+
+            $data['slug'] = $slug;
+        }
 
         return $data;
     }

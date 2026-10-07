@@ -1875,6 +1875,19 @@ body.admin-body,
 .admin-resource-form .ant-input.is-invalid {
     border-color: #ef4444;
 }
+.admin-slug-input-row {
+    align-items: stretch;
+    display: flex;
+    gap: 8px;
+}
+.admin-slug-input-row .admin-form-input {
+    flex: 1 1 auto;
+}
+.admin-slug-reset {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding-inline: 12px;
+}
 .admin-checkbox-card {
     align-items: center;
     display: flex;
@@ -1968,6 +1981,12 @@ body.admin-body,
     .admin-resource-form .admin-form-grid {
         grid-template-columns: 1fr;
         padding: 18px;
+    }
+    .admin-slug-input-row {
+        flex-direction: column;
+    }
+    .admin-slug-reset {
+        width: 100%;
     }
     .admin-permission-options {
         grid-template-columns: 1fr;
