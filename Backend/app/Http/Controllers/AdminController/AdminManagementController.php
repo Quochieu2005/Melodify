@@ -21,6 +21,8 @@ class AdminManagementController extends CrudResourceController
 
     protected string $title = 'quản trị viên';
 
+    protected string $viewDirectory = 'Admin.admins';
+
     protected array $columns = [
         'name' => 'Họ tên',
         'email' => 'Email',

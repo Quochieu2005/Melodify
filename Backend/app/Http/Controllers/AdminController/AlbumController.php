@@ -13,6 +13,8 @@ class AlbumController extends CrudResourceController
 
     protected string $title = 'album';
 
+    protected string $viewDirectory = 'Admin.albums';
+
     protected array $columns = ['title' => 'Tên album', 'artist.name' => 'Nghệ sĩ', 'release_date' => 'Ngày phát hành', 'status' => 'Trạng thái'];
 
     protected array $fields = [

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
+use App\Rules\PlainText;
 use App\Services\CloudinaryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -42,7 +43,7 @@ class ProfileController extends Controller
     {
         $admin = $request->user('admin');
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
+            'name' => ['required', 'string', 'max:120', new PlainText()],
             'email' => ['required', 'email', 'max:160', Rule::unique('admins', 'email')->ignore($admin->getKey())],
             'avatar_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'remove_avatar' => ['nullable', 'boolean'],
@@ -107,7 +108,7 @@ class ProfileController extends Controller
     {
         $data = $request->validate([
             'current_password' => ['required', 'current_password:admin'],
-            'password' => ['required', 'confirmed', Password::min(8)],
+            'password' => ['required', 'confirmed', 'max:72', Password::min(8)],
         ]);
         $request->user('admin')->forceFill([
             'password' => Hash::driver('bcrypt')->make($data['password']),

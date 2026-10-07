@@ -20,7 +20,7 @@ class MediaAssetService
         return MediaAsset::query()
             ->where('folder', $this->folder())
             ->latest()
-            ->limit($limit)
+            ->limit(min(max($limit, 1), 60))
             ->get();
     }
 

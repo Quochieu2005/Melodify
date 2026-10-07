@@ -20,6 +20,8 @@ abstract class CrudResourceController extends Controller
 
     protected array $columns = [];
 
+    protected string $viewDirectory = 'Admin.crud';
+
     public function index(): View
     {
         $items = ($this->model)::query()->latest()->paginate(10);
@@ -29,7 +31,10 @@ abstract class CrudResourceController extends Controller
 
     public function create(): View
     {
-        return view('Admin.crud.form', $this->viewData(['item' => null, 'fields' => $this->resolvedFields()]));
+        return view("{$this->viewDirectory}.create", $this->viewData([
+            'item' => null,
+            'fields' => $this->resolvedFields(),
+        ]));
     }
 
     public function store(AdminResourceRequest $request): RedirectResponse
@@ -45,7 +50,10 @@ abstract class CrudResourceController extends Controller
     {
         $item = ($this->model)::query()->findOrFail($id);
 
-        return view('Admin.crud.form', $this->viewData(['item' => $item, 'fields' => $this->resolvedFields()]));
+        return view("{$this->viewDirectory}.edit", $this->viewData([
+            'item' => $item,
+            'fields' => $this->resolvedFields(),
+        ]));
     }
 
     public function update(AdminResourceRequest $request, string $id): RedirectResponse

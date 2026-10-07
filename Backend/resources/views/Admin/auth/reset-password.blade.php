@@ -26,7 +26,7 @@
                     <span>Mật khẩu mới</span>
                     <span class="admin-login-input-wrap">
                         <x-anticon name="lock" class="admin-login-input-icon" />
-                        <input id="new-password" class="ant-input @error('password') is-invalid @enderror" type="password" name="password" autocomplete="new-password" placeholder="Ít nhất 8 ký tự" minlength="8" data-password-input required>
+                        <input id="new-password" class="ant-input @error('password') is-invalid @enderror" type="password" name="password" autocomplete="new-password" placeholder="Ít nhất 8 ký tự" minlength="8" maxlength="72" data-password-input required>
                         <button type="button" class="admin-password-toggle" data-password-toggle aria-label="Hiện mật khẩu" aria-pressed="false"><x-anticon name="eye" class="admin-password-eye-show" /><x-anticon name="eye-invisible" class="admin-password-eye-hide" /></button>
                     </span>
                 </label>
@@ -34,7 +34,7 @@
                     <span>Xác nhận mật khẩu mới</span>
                     <span class="admin-login-input-wrap">
                         <x-anticon name="lock" class="admin-login-input-icon" />
-                        <input id="confirm-password" class="ant-input" type="password" name="password_confirmation" autocomplete="new-password" placeholder="Nhập lại mật khẩu mới" minlength="8" data-password-confirmation required>
+                        <input id="confirm-password" class="ant-input" type="password" name="password_confirmation" autocomplete="new-password" placeholder="Nhập lại mật khẩu mới" minlength="8" maxlength="72" data-password-confirmation required>
                         <button type="button" class="admin-password-toggle" data-password-toggle aria-label="Hiện mật khẩu" aria-pressed="false"><x-anticon name="eye" class="admin-password-eye-show" /><x-anticon name="eye-invisible" class="admin-password-eye-hide" /></button>
                     </span>
                 </label>

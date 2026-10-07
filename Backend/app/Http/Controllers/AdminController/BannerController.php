@@ -4,6 +4,7 @@ namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
 use App\Models\Banner;
+use App\Rules\PlainText;
 use App\Services\CloudinaryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,7 +28,7 @@ class BannerController extends Controller
 
     public function create(): View
     {
-        return view('Admin.banners.form', ['item' => null]);
+        return view('Admin.banners.create', ['item' => null]);
     }
 
     public function store(Request $request, CloudinaryService $cloudinary): RedirectResponse
@@ -60,7 +61,7 @@ class BannerController extends Controller
 
     public function edit(string $id): View
     {
-        return view('Admin.banners.form', [
+        return view('Admin.banners.edit', [
             'item' => Banner::query()->findOrFail($id),
         ]);
     }
@@ -115,10 +116,10 @@ class BannerController extends Controller
     private function validated(Request $request, ?Banner $banner = null): array
     {
         $data = $request->validate([
-            'title' => ['required', 'string', 'max:160'],
-            'slug' => ['nullable', 'string', 'max:180', 'regex:/^[a-zA-Z0-9_-]+$/'],
+            'title' => ['required', 'string', 'max:160', new PlainText()],
+            'slug' => ['nullable', 'string', 'max:180', 'regex:/^[a-zA-Z0-9_-]+$/', new PlainText()],
             'image' => [$banner ? 'nullable' : 'required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
-            'link_url' => ['nullable', 'string', 'max:500', 'regex:/^(https?:\/\/|\/)/'],
+            'link_url' => ['nullable', 'string', 'max:500', 'regex:/^(https?:\/\/|\/)[^<>"\']*$/', new PlainText()],
             'sort_order' => ['required', 'integer', 'min:0', 'max:999999'],
             'status' => ['required', 'in:active,inactive'],
         ]);

@@ -12,6 +12,8 @@ class UserController extends CrudResourceController
 
     protected string $title = 'người dùng';
 
+    protected string $viewDirectory = 'Admin.users';
+
     protected array $columns = ['name' => 'Họ tên', 'email' => 'Email', 'phone' => 'Điện thoại', 'status' => 'Trạng thái'];
 
     protected array $fields = [

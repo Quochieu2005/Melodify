@@ -1,0 +1,26 @@
+@php($isEditing = $isEditing ?? filled($item))
+<section class="admin-page admin-form-page">
+    <div class="admin-page-header">
+        <div>
+            <a href="{{ route('admin.subscriptions.index') }}" class="admin-back-link">← Quay lại danh sách gói</a>
+            <h1 class="admin-page-title">{{ $isEditing ? 'Chỉnh sửa gói đăng ký' : 'Thêm gói đăng ký' }}</h1>
+            <p class="admin-page-description">Giá và thời hạn có giới hạn để tránh dữ liệu bất thường.</p>
+        </div>
+    </div>
+    <form method="POST" action="{{ $isEditing ? route('admin.subscriptions.update', $item->getKey()) : route('admin.subscriptions.store') }}" class="ant-card admin-resource-form" autocomplete="off">
+        @csrf
+        @if($isEditing) @method('PUT') @endif
+        <div class="admin-resource-form-heading"><div><strong>Thông tin gói đăng ký</strong><span>Các trường có dấu * là bắt buộc.</span></div><span class="ant-tag {{ $isEditing ? 'ant-tag-blue' : 'ant-tag-green' }}">{{ $isEditing ? 'Đang chỉnh sửa' : 'Tạo mới' }}</span></div>
+        <div class="admin-form-grid">
+            <div class="admin-form-group"><label class="admin-form-label" for="plan-name">Tên gói <span>*</span></label><input id="plan-name" name="name" value="{{ old('name', $item?->name) }}" maxlength="120" class="ant-input admin-form-input @error('name') is-invalid @enderror" required>@error('name')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+            <div class="admin-form-group"><label class="admin-form-label" for="plan-code">Mã gói <span>*</span></label><input id="plan-code" name="code" value="{{ old('code', $item?->code) }}" maxlength="60" pattern="[A-Za-z0-9_-]+" class="ant-input admin-form-input @error('code') is-invalid @enderror" required>@error('code')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+            <div class="admin-form-group"><label class="admin-form-label" for="plan-slug">Slug <span>*</span></label><input id="plan-slug" name="slug" value="{{ old('slug', $item?->slug) }}" maxlength="140" pattern="[A-Za-z0-9_-]+" class="ant-input admin-form-input @error('slug') is-invalid @enderror" required>@error('slug')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+            <div class="admin-form-group"><label class="admin-form-label" for="plan-price">Giá <span>*</span></label><input id="plan-price" name="price" type="number" min="0" max="999999999.99" step="0.01" inputmode="decimal" value="{{ old('price', $item?->price) }}" class="ant-input admin-form-input @error('price') is-invalid @enderror" required><p class="admin-field-help">Từ 0 đến 999.999.999,99.</p>@error('price')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+            <div class="admin-form-group"><label class="admin-form-label" for="plan-duration">Thời hạn (ngày) <span>*</span></label><input id="plan-duration" name="duration_days" type="number" min="1" max="36500" step="1" inputmode="numeric" value="{{ old('duration_days', $item?->duration_days) }}" class="ant-input admin-form-input @error('duration_days') is-invalid @enderror" required><p class="admin-field-help">Tối đa 100 năm.</p>@error('duration_days')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+            <div class="admin-form-group"><label class="admin-form-label" for="plan-status">Trạng thái <span>*</span></label><select id="plan-status" name="status" class="ant-input admin-form-input @error('status') is-invalid @enderror" required>@foreach(['active' => 'Hoạt động', 'inactive' => 'Tạm dừng'] as $value => $label)<option value="{{ $value }}" @selected(old('status', $item?->status ?? 'active') === $value)>{{ $label }}</option>@endforeach</select>@error('status')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+            <div class="admin-form-group admin-form-span"><label class="admin-form-label" for="plan-description">Mô tả</label><textarea id="plan-description" name="description" rows="5" maxlength="1000" class="ant-input admin-form-input @error('description') is-invalid @enderror">{{ old('description', $item?->description) }}</textarea>@error('description')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+            <div class="admin-form-group admin-form-span"><div class="admin-checkbox-options"><label class="admin-checkbox-card"><input type="hidden" name="offline_download" value="0"><input type="checkbox" name="offline_download" value="1" @checked(old('offline_download', $item?->offline_download))><span><strong>Cho phép tải offline</strong></span></label><label class="admin-checkbox-card"><input type="hidden" name="ads_enabled" value="0"><input type="checkbox" name="ads_enabled" value="1" @checked(old('ads_enabled', $item?->ads_enabled))><span><strong>Hiển thị quảng cáo</strong></span></label><label class="admin-checkbox-card"><input type="hidden" name="unlimited_skip" value="0"><input type="checkbox" name="unlimited_skip" value="1" @checked(old('unlimited_skip', $item?->unlimited_skip))><span><strong>Bỏ qua không giới hạn</strong></span></label></div></div>
+        </div>
+        <div class="admin-form-actions admin-resource-form-actions"><a href="{{ route('admin.subscriptions.index') }}" class="ant-btn">Hủy</a><button class="ant-btn ant-btn-primary" type="submit">{{ $isEditing ? 'Lưu thay đổi' : 'Tạo gói' }}</button></div>
+    </form>
+</section>

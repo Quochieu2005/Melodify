@@ -12,6 +12,8 @@ class SubscriptionController extends CrudResourceController
 
     protected string $title = 'gói đăng ký';
 
+    protected string $viewDirectory = 'Admin.subscriptions';
+
     protected array $columns = ['name' => 'Tên gói', 'price' => 'Giá', 'duration_days' => 'Số ngày', 'status' => 'Trạng thái'];
 
     protected array $fields = [
