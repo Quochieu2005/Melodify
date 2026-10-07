@@ -53,23 +53,8 @@ return Application::configure(basePath: dirname(__DIR__))
                 default => 500,
             };
 
-            $messages = [
-                400 => ['title' => 'Yêu cầu không hợp lệ', 'message' => 'Thông tin gửi lên chưa đúng định dạng. Hãy kiểm tra lại và thử lại.'],
-                401 => ['title' => 'Cần đăng nhập', 'message' => 'Phiên quản trị của bạn không còn hợp lệ. Vui lòng đăng nhập lại.'],
-                403 => ['title' => 'Không có quyền truy cập', 'message' => 'Tài khoản của bạn không được phép thực hiện thao tác hoặc mở trang này.'],
-                404 => ['title' => 'Không tìm thấy trang', 'message' => 'Đường dẫn này không tồn tại hoặc nội dung đã được di chuyển.'],
-                419 => ['title' => 'Phiên đã hết hạn', 'message' => 'Biểu mẫu đã hết thời gian bảo vệ. Hãy tải lại trang và thực hiện lại thao tác.'],
-                429 => ['title' => 'Quá nhiều yêu cầu', 'message' => 'Hệ thống đang giới hạn tạm thời. Vui lòng đợi một chút rồi thử lại.'],
-                500 => ['title' => 'Hệ thống gặp sự cố', 'message' => 'Melodify Admin chưa thể hoàn tất yêu cầu này. Vui lòng thử lại sau.'],
-                503 => ['title' => 'Hệ thống đang bận', 'message' => 'Dịch vụ tạm thời không sẵn sàng. Vui lòng quay lại sau ít phút.'],
-            ];
+            $view = view()->exists("errors.{$status}") ? "errors.{$status}" : 'errors.500';
 
-            $copy = $messages[$status] ?? ['title' => 'Có lỗi xảy ra', 'message' => 'Đã xảy ra lỗi ngoài dự kiến. Vui lòng thử lại.'];
-
-            return response()->view('errors.admin', [
-                'status' => $status,
-                'title' => $copy['title'],
-                'message' => $copy['message'],
-            ], $status);
+            return response()->view($view, [], $status);
         });
     })->create();
