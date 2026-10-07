@@ -43,9 +43,9 @@ class ProfileController extends Controller
     {
         $admin = $request->user('admin');
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:120', new PlainText()],
-            'email' => ['required', 'email', 'max:160', Rule::unique('admins', 'email')->ignore($admin->getKey())],
-            'avatar_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'name' => ['bail', 'required', 'string', 'min:1', 'max:120', new PlainText()],
+            'email' => ['bail', 'required', 'string', 'email', 'max:160', new PlainText(), Rule::unique('admins', 'email')->ignore($admin->getKey())],
+            'avatar_file' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=4000,max_height=4000'],
             'remove_avatar' => ['nullable', 'boolean'],
         ]);
 
@@ -110,7 +110,15 @@ class ProfileController extends Controller
             'current_password' => ['required', 'current_password:admin'],
             'password' => ['required', 'confirmed', 'max:72', Password::min(8)],
         ]);
-        $request->user('admin')->forceFill([
+        $admin = $request->user('admin');
+
+        if (Hash::check($data['password'], (string) $admin->password)) {
+            return back()->withInput()->withErrors([
+                'password' => 'Mật khẩu mới phải khác mật khẩu hiện tại.',
+            ]);
+        }
+
+        $admin->forceFill([
             'password' => Hash::driver('bcrypt')->make($data['password']),
             'must_change_password' => false,
         ])->save();

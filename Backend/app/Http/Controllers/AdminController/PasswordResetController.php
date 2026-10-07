@@ -37,7 +37,7 @@ class PasswordResetController extends Controller
 
     public function sendOtp(Request $request, AdminAuditLogService $auditLogs): RedirectResponse
     {
-        $data = $request->validate(['email' => ['required', 'email', 'max:160']]);
+        $data = $request->validate(['email' => ['bail', 'required', 'string', 'email', 'max:160']]);
         $email = Str::lower($data['email']);
         $request->session()->forget([
             'admin_password_reset_verified_email',
@@ -123,7 +123,7 @@ class PasswordResetController extends Controller
 
     public function verifyOtp(Request $request, AdminAuditLogService $auditLogs): RedirectResponse
     {
-        $data = $request->validate(['code' => ['required', 'digits:6']]);
+        $data = $request->validate(['code' => ['bail', 'required', 'string', 'digits:6']]);
         $email = $request->session()->get('admin_password_otp_email');
 
         if (! $email) {
@@ -200,7 +200,7 @@ class PasswordResetController extends Controller
     public function resetPassword(Request $request, AdminAuditLogService $auditLogs): RedirectResponse
     {
         $data = $request->validate([
-            'password' => ['required', 'confirmed', PasswordRule::min(8)],
+            'password' => ['bail', 'required', 'string', 'max:72', 'confirmed', PasswordRule::min(8)],
         ]);
 
         if (! $this->hasVerifiedResetSession($request)) {
@@ -216,6 +216,12 @@ class PasswordResetController extends Controller
 
             return redirect()->route('admin.password.request')
                 ->withErrors(['email' => 'Không tìm thấy tài khoản quản trị.']);
+        }
+
+        if (Hash::check($data['password'], (string) $admin->password)) {
+            return back()->withInput()->withErrors([
+                'password' => 'Mật khẩu mới phải khác mật khẩu hiện tại.',
+            ]);
         }
 
         $admin->forceFill([

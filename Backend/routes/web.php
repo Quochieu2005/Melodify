@@ -49,9 +49,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::put('/account-settings/notifications', [ProfileController::class, 'notifications'])->name('profile.notifications');
         Route::put('/account-settings/appearance', [ProfileController::class, 'appearance'])->name('profile.appearance');
         Route::get('/admins', [AdminManagementController::class, 'index'])->name('admins.index');
+          Route::resource('admins', AdminManagementController::class)->only(['edit', 'update']);
         Route::patch('/admins/{admin}/status', [AdminManagementController::class, 'toggleStatus'])->name('admins.status');
 
         Route::middleware('admin.permission:banners.manage')->group(function () {
+            Route::delete('/banners/bulk', [BannerController::class, 'destroyBulk'])->name('banners.bulk-destroy');
+            Route::delete('/banners/all', [BannerController::class, 'destroyAll'])->name('banners.destroy-all');
             Route::resource('banners', BannerController::class)->except('show');
         });
 
@@ -68,7 +71,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         });
 
         Route::middleware('admin.permission:users.manage')->group(function () {
-            Route::resource('users', UserController::class)->except('show');
+              Route::resource('users', UserController::class)->except(['show', 'create', 'store']);
         });
 
         Route::middleware('admin.permission:billing.manage')->group(function () {
@@ -86,8 +89,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
     });
 
     Route::middleware(['auth:admin', 'admin.idle', 'admin.audit', 'admin.super'])->group(function () {
+        Route::post('/admins/credentials/bulk', [AdminManagementController::class, 'sendCredentialsBulk'])
+            ->middleware('throttle:10,1')
+            ->name('admins.credentials.bulk');
         Route::post('/admins/{admin}/credentials', [AdminManagementController::class, 'sendCredentials'])->name('admins.credentials');
-        Route::resource('admins', AdminManagementController::class)->except(['show', 'index']);
+        Route::resource('admins', AdminManagementController::class)->only(['create', 'store', 'destroy']);
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
     });
 });

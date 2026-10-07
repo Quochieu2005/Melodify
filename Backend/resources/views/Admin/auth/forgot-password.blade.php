@@ -17,7 +17,7 @@
             <header><span class="admin-login-eyebrow">Melodify Admin</span><h2>Quên mật khẩu?</h2><p>Nhập email quản trị để nhận mã OTP đặt lại mật khẩu.</p></header>
             <form method="POST" action="{{ route('admin.password.email') }}" class="admin-auth-form">
                 @csrf
-                <label><span>Email quản trị</span><span class="admin-login-input-wrap"><x-anticon name="mail" class="admin-login-input-icon" /><input class="ant-input" type="email" name="email" value="{{ old('email') }}" placeholder="admin@melodify.vn" required autofocus></span></label>
+                <label><span>Email quản trị</span><span class="admin-login-input-wrap"><x-anticon name="mail" class="admin-login-input-icon" /><input class="ant-input" type="email" name="email" value="{{ old('email') }}" maxlength="160" autocomplete="email" placeholder="admin@melodify.vn" required autofocus></span></label>
                 @error('email')<span class="admin-field-error">{{ $message }}</span>@enderror
                 <button class="ant-btn ant-btn-primary admin-login-submit" type="submit">Gửi mã OTP <span>→</span></button>
                 <a href="{{ route('admin.login') }}" class="admin-auth-back">← Quay lại đăng nhập</a>

@@ -48,7 +48,7 @@ abstract class CrudResourceController extends Controller
             ->with('success', "Đã tạo {$this->title} thành công.");
     }
 
-    public function edit(string $id): View
+    public function edit(string $id): View|RedirectResponse
     {
         $item = ($this->model)::query()->findOrFail($id);
 

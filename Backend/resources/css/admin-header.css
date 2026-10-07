@@ -41,6 +41,21 @@
     transition: background 0.15s, color 0.15s;
 }
 
+.admin-icon-btn > .anticon,
+.admin-icon-btn .admin-badge-container > .anticon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+}
+
+.admin-theme-btn > .anticon {
+    width: 21px;
+    height: 21px;
+    font-size: 21px;
+}
+
 .admin-icon-btn:hover {
     background: #f3f4f6;
     color: var(--admin-text);

@@ -19,6 +19,145 @@
 .admin-inline-form {
     display: inline;
 }
+.admin-page-header-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.admin-bulk-credentials-form {
+    margin: 0;
+}
+.admin-bulk-credentials-btn:disabled {
+    color: var(--admin-text-muted);
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+.admin-bulk-delete-form {
+    margin: 0;
+}
+.admin-bulk-delete-btn {
+    color: #cf1322 !important;
+    border-color: #ffa39e !important;
+    background: #fff1f0 !important;
+}
+.admin-bulk-delete-btn:hover:not(:disabled) {
+    color: #a8071a !important;
+    border-color: #ff7875 !important;
+    background: #ffccc7 !important;
+}
+.admin-bulk-delete-btn:disabled {
+    background: var(--admin-surface-soft) !important;
+    border-color: var(--admin-border) !important;
+    color: var(--admin-text-muted) !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+[data-admin-theme="dark"] .admin-bulk-delete-btn:not(:disabled) {
+    background: #3b1f22 !important;
+    border-color: #7f3035 !important;
+    color: #ffaaa5 !important;
+}
+[data-admin-theme="dark"] .admin-bulk-delete-btn:hover:not(:disabled) {
+    background: #592126 !important;
+    border-color: #ff7875 !important;
+    color: #ffccc7 !important;
+}
+.admin-delete-all-btn {
+    background: #cf1322 !important;
+    border-color: #cf1322 !important;
+    color: #fff !important;
+}
+.admin-delete-all-btn:hover:not(:disabled) {
+    background: #a8071a !important;
+    border-color: #a8071a !important;
+}
+.admin-delete-all-btn:disabled {
+    background: var(--admin-surface-soft) !important;
+    border-color: var(--admin-border) !important;
+    color: var(--admin-text-muted) !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+.admin-select-column {
+    width: 48px;
+    text-align: center;
+}
+.admin-select-column input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    align-items: center;
+    background: var(--admin-surface-raised);
+    border: 1.5px solid var(--admin-border-strong);
+    border-radius: 50%;
+    cursor: pointer;
+    display: inline-grid;
+    height: 19px;
+    justify-content: center;
+    margin: 0;
+    position: relative;
+    transition:
+        background-color 160ms ease,
+        border-color 160ms ease,
+        box-shadow 160ms ease;
+    vertical-align: middle;
+    width: 19px;
+}
+.admin-select-column input[type="checkbox"]:checked {
+    background: var(--admin-accent);
+    border-color: var(--admin-accent);
+}
+.admin-select-column input[type="checkbox"]:checked::after {
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    content: "";
+    height: 8px;
+    transform: rotate(45deg) translate(-1px, -1px);
+    width: 4px;
+}
+.admin-select-column input[type="checkbox"]:indeterminate {
+    background: var(--admin-accent);
+    border-color: var(--admin-accent);
+}
+.admin-select-column input[type="checkbox"]:indeterminate::after {
+    background: #fff;
+    border-radius: 2px;
+    content: "";
+    height: 2px;
+    width: 8px;
+}
+.admin-select-column input[type="checkbox"]:focus-visible {
+    box-shadow: 0 0 0 3px
+        color-mix(in srgb, var(--admin-accent) 18%, transparent);
+    outline: none;
+}
+.admin-select-column input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+.admin-table-avatar {
+    align-items: center;
+    display: flex;
+    height: 42px;
+    justify-content: center;
+    width: 42px;
+}
+.admin-table-avatar img,
+.admin-table-avatar > span {
+    align-items: center;
+    background: var(--admin-accent-soft);
+    border: 1px solid var(--admin-border);
+    border-radius: 50%;
+    color: var(--admin-accent);
+    display: flex;
+    font-size: 15px;
+    font-weight: 700;
+    height: 38px;
+    justify-content: center;
+    object-fit: cover;
+    overflow: hidden;
+    width: 38px;
+}
 .admin-action-danger {
     appearance: none;
     border: 0;
@@ -177,6 +316,18 @@
     display: grid;
     gap: 6px;
     min-width: 0;
+}
+
+.admin-avatar-remove-option {
+    align-items: center;
+    color: var(--admin-text-secondary);
+    display: inline-flex;
+    font-size: 13px;
+    gap: 8px;
+}
+
+.admin-avatar-remove-option input {
+    accent-color: var(--admin-accent);
 }
 .admin-form-help {
     color: var(--admin-text-muted);
@@ -350,6 +501,140 @@
 .admin-toast.is-hiding {
     opacity: 0;
     transform: translateY(-8px);
+}
+.admin-modal-open {
+    overflow: hidden;
+}
+.admin-confirm-modal {
+    align-items: center;
+    display: grid;
+    inset: 0;
+    justify-items: center;
+    padding: 24px;
+    position: fixed;
+    z-index: 10000;
+}
+.admin-confirm-modal[hidden] {
+    display: none;
+}
+.admin-confirm-backdrop {
+    animation: admin-confirm-fade-in 160ms ease-out;
+    background: rgb(15 23 42 / 58%);
+    inset: 0;
+    position: absolute;
+}
+.admin-confirm-dialog {
+    animation: admin-confirm-slide-in 180ms ease-out;
+    background: var(--admin-surface-raised);
+    border: 1px solid var(--admin-border);
+    border-radius: 18px;
+    box-shadow: 0 24px 70px rgb(15 23 42 / 24%);
+    color: var(--admin-text);
+    max-width: 440px;
+    padding: 28px;
+    position: relative;
+    width: min(100%, 440px);
+    z-index: 1;
+}
+.admin-confirm-close {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    color: var(--admin-text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 25px;
+    height: 32px;
+    justify-content: center;
+    line-height: 1;
+    position: absolute;
+    right: 16px;
+    top: 14px;
+    transition:
+        background-color 160ms ease,
+        color 160ms ease;
+    width: 32px;
+}
+.admin-confirm-close:hover {
+    background: var(--admin-surface-hover);
+    color: var(--admin-text);
+}
+.admin-confirm-close:focus-visible,
+.admin-confirm-dialog:focus-visible,
+.admin-confirm-actions button:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--admin-accent) 28%, transparent);
+    outline-offset: 2px;
+}
+.admin-confirm-body {
+    align-items: flex-start;
+    display: flex;
+    gap: 16px;
+    padding-right: 20px;
+}
+.admin-confirm-icon {
+    align-items: center;
+    background: #fff1f0;
+    border: 1px solid #ffa39e;
+    border-radius: 50%;
+    color: #cf1322;
+    display: inline-flex;
+    flex: 0 0 44px;
+    font-size: 24px;
+    font-weight: 700;
+    height: 44px;
+    justify-content: center;
+    line-height: 1;
+    width: 44px;
+}
+.admin-confirm-body h2 {
+    color: var(--admin-text);
+    font-size: 19px;
+    font-weight: 700;
+    margin: 4px 0 8px;
+}
+.admin-confirm-body p {
+    color: var(--admin-text-secondary);
+    font-size: 14px;
+    line-height: 1.55;
+    margin: 0;
+}
+.admin-confirm-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 28px;
+}
+.admin-confirm-delete-button {
+    background: #cf1322 !important;
+    border-color: #cf1322 !important;
+    color: #fff !important;
+}
+.admin-confirm-delete-button:hover:not(:disabled) {
+    background: #a8071a !important;
+    border-color: #a8071a !important;
+}
+.admin-confirm-delete-button:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+@keyframes admin-confirm-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+@keyframes admin-confirm-slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 @media (max-width: 767px) {
     .admin-form-grid,
@@ -529,6 +814,16 @@
     border-color: var(--admin-accent);
     box-shadow: 0 0 0 3px
         color-mix(in srgb, var(--admin-accent) 16%, transparent);
+}
+
+.admin-settings-panel .admin-login-input-wrap .ant-input {
+    height: 44px;
+    padding-left: 42px;
+    padding-right: 46px;
+}
+
+.admin-settings-panel .admin-password-toggle {
+    right: 6px;
 }
 
 .admin-settings-panel .ant-input::placeholder {
@@ -1975,6 +2270,14 @@ body.admin-body,
     .admin-page-header .admin-create-btn {
         width: 100%;
     }
+    .admin-page-header-actions {
+        align-items: stretch;
+        width: 100%;
+    }
+    .admin-page-header-actions > *,
+    .admin-page-header-actions .ant-btn {
+        width: 100%;
+    }
     .admin-table-hint {
         display: inline !important;
     }
@@ -2153,40 +2456,40 @@ body.admin-body,
     }
 }
 /* Keep all admin surfaces consistent when the dark theme is active. */
-html[data-theme='dark'] body,
-body[data-theme='dark'] {
+html[data-theme="dark"] body,
+body[data-theme="dark"] {
     background: #101415;
     color: #eef6f7;
 }
 
-html[data-theme='dark'] .admin-card,
-html[data-theme='dark'] .admin-panel,
-html[data-theme='dark'] .admin-section,
-html[data-theme='dark'] .admin-table-card,
-html[data-theme='dark'] .admin-table-wrap,
-html[data-theme='dark'] .admin-empty-state,
-body[data-theme='dark'] .admin-card,
-body[data-theme='dark'] .admin-panel,
-body[data-theme='dark'] .admin-section,
-body[data-theme='dark'] .admin-table-card,
-body[data-theme='dark'] .admin-table-wrap,
-body[data-theme='dark'] .admin-empty-state {
+html[data-theme="dark"] .admin-card,
+html[data-theme="dark"] .admin-panel,
+html[data-theme="dark"] .admin-section,
+html[data-theme="dark"] .admin-table-card,
+html[data-theme="dark"] .admin-table-wrap,
+html[data-theme="dark"] .admin-empty-state,
+body[data-theme="dark"] .admin-card,
+body[data-theme="dark"] .admin-panel,
+body[data-theme="dark"] .admin-section,
+body[data-theme="dark"] .admin-table-card,
+body[data-theme="dark"] .admin-table-wrap,
+body[data-theme="dark"] .admin-empty-state {
     background-color: #171b1c;
     color: #eef6f7;
     border-color: #2c383a;
 }
 
-html[data-theme='dark'] .admin-table,
-body[data-theme='dark'] .admin-table {
+html[data-theme="dark"] .admin-table,
+body[data-theme="dark"] .admin-table {
     color: #eef6f7;
 }
 
-html[data-theme='dark'] .admin-table thead,
-body[data-theme='dark'] .admin-table thead {
+html[data-theme="dark"] .admin-table thead,
+body[data-theme="dark"] .admin-table thead {
     background: #202728;
 }
 
-html[data-theme='dark'] .admin-table tbody tr,
-body[data-theme='dark'] .admin-table tbody tr {
+html[data-theme="dark"] .admin-table tbody tr,
+body[data-theme="dark"] .admin-table tbody tr {
     border-color: #2c383a;
 }

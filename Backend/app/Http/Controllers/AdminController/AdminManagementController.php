@@ -5,12 +5,16 @@ namespace App\Http\Controllers\AdminController;
 use App\Http\Requests\Admin\AdminResourceRequest;
 use App\Mail\AdminCredentialsMail;
 use App\Models\Admin;
+use App\Services\CloudinaryService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 use Throwable;
 
 class AdminManagementController extends CrudResourceController
@@ -24,9 +28,9 @@ class AdminManagementController extends CrudResourceController
     protected string $viewDirectory = 'Admin.admins';
 
     protected array $columns = [
+        'avatar' => 'Ảnh',
         'name' => 'Họ tên',
         'email' => 'Email',
-        'slug' => 'Slug',
         'role' => 'Vai trò',
         'status' => 'Trạng thái',
         'must_change_password' => 'Mật khẩu',
@@ -40,7 +44,7 @@ class AdminManagementController extends CrudResourceController
         'permissions' => ['label' => 'Chức năng được phép', 'type' => 'checkbox_group', 'help' => 'Chỉ áp dụng cho Admin nhỏ. Admin lớn luôn có toàn quyền.', 'options' => [
             'content.manage' => ['label' => 'Nội dung âm nhạc', 'description' => 'Bài hát, album, thể loại, playlist và nghệ sĩ.'],
             'banners.manage' => ['label' => 'Banner', 'description' => 'Tạo, sắp xếp, cập nhật và xóa banner.'],
-            'users.manage' => ['label' => 'Người dùng', 'description' => 'Xem, tạo, sửa và khóa tài khoản người dùng.'],
+            'users.manage' => ['label' => 'Người dùng', 'description' => 'Xem, sửa và khóa tài khoản người dùng đã đăng ký.'],
             'billing.manage' => ['label' => 'Gói và thanh toán', 'description' => 'Gói đăng ký và lịch sử giao dịch.'],
             'moderation.manage' => ['label' => 'Kiểm duyệt', 'description' => 'Bình luận và báo cáo vi phạm.'],
         ]],
@@ -52,40 +56,118 @@ class AdminManagementController extends CrudResourceController
         return $this->normalizeAdminData($data, $ignoreId === null ? null : (string) $ignoreId);
     }
 
-    public function store(AdminResourceRequest $request): RedirectResponse
+    public function store(AdminResourceRequest $request, ?CloudinaryService $cloudinary = null): RedirectResponse
     {
-        $data = $this->normalizeAdminData($request->validated());
+        $cloudinary ??= app(CloudinaryService::class);
+        $validated = $request->validated();
+        $avatarFile = $request->file('avatar_file');
+        unset($validated['avatar_file'], $validated['remove_avatar']);
+
+        $data = $this->normalizeAdminData($validated);
         $data['password'] = Hash::driver('bcrypt')->make(config('admin.initial_password'));
         $data['must_change_password'] = true;
         $data['credentials_sent_at'] = null;
+        $uploaded = null;
 
-        Admin::query()->create($data);
+        try {
+            if ($avatarFile instanceof UploadedFile) {
+                $uploaded = $this->uploadAvatar($cloudinary, $avatarFile);
+                $data = array_merge($data, $uploaded);
+            }
+
+            Admin::query()->create($data);
+        } catch (Throwable $exception) {
+            if ($uploaded['avatar_public_id'] ?? null) {
+                $this->deleteCloudinaryImage($cloudinary, $uploaded['avatar_public_id']);
+            }
+
+            report($exception);
+
+            return back()->withInput()->withErrors([
+                'avatar_file' => 'Không thể lưu ảnh đại diện. Vui lòng kiểm tra cấu hình Cloudinary.',
+            ]);
+        }
 
         return redirect()->route('admin.admins.index')
-            ->with('success', 'Đã tạo quản trị viên. Mật khẩu khởi tạo là '.config('admin.initial_password').' và cần đổi ngay lần đăng nhập đầu tiên.');
+            ->with('success', 'Đã tạo quản trị viên. Hãy chọn tài khoản trong danh sách và bấm "Gửi thông tin đăng nhập" để cấp tài khoản qua email.');
     }
 
-    public function update(AdminResourceRequest $request, string $id): RedirectResponse
+    public function update(AdminResourceRequest $request, string $id, ?CloudinaryService $cloudinary = null): RedirectResponse
     {
+        $cloudinary ??= app(CloudinaryService::class);
         $admin = Admin::query()->findOrFail($id);
         $currentAdmin = auth('admin')->user();
 
-        if ($admin->role === 'super_admin' && (string) $currentAdmin?->getKey() !== (string) $admin->getKey()) {
-            return back()->withInput()->with('error', 'Không thể chỉnh sửa hồ sơ của Admin lớn khác.');
+        if ((string) $currentAdmin?->getKey() !== (string) $admin->getKey()) {
+            return back()->withInput()->with('error', 'Bạn chỉ được chỉnh sửa hồ sơ của chính mình.');
         }
 
-        $data = $this->normalizeAdminData($request->validated(), $id);
+        $validated = $request->validated();
+        $avatarFile = $request->file('avatar_file');
+        $removeAvatar = $request->boolean('remove_avatar');
+        unset($validated['avatar_file'], $validated['remove_avatar']);
+
+        $data = $this->normalizeAdminData($validated, $id);
 
         if ($admin->role === 'super_admin') {
             $data['role'] = 'super_admin';
             $data['status'] = 'active';
             $data['is_active'] = true;
             $data['permissions'] = array_keys(config('admin-permissions.groups', []));
+        } else {
+            // Self-edit is limited to profile data; never allow role or access escalation.
+            $data['role'] = 'admin';
+            $data['status'] = $admin->status;
+            $data['is_active'] = (bool) $admin->is_active;
+            $data['permissions'] = $admin->permissions ?? [];
         }
 
-        $admin->update($data);
+        $oldPublicId = $admin->avatar_public_id;
+        $uploaded = null;
+
+        try {
+            if ($avatarFile instanceof UploadedFile) {
+                $uploaded = $this->uploadAvatar($cloudinary, $avatarFile);
+                $data = array_merge($data, $uploaded);
+            } elseif ($removeAvatar) {
+                $data['avatar'] = null;
+                $data['avatar_public_id'] = null;
+            }
+
+            $admin->update($data);
+
+            if ($oldPublicId && (($data['avatar_public_id'] ?? $oldPublicId) !== $oldPublicId)) {
+                $this->deleteCloudinaryImage($cloudinary, $oldPublicId);
+            }
+        } catch (Throwable $exception) {
+            if ($uploaded['avatar_public_id'] ?? null) {
+                $this->deleteCloudinaryImage($cloudinary, $uploaded['avatar_public_id']);
+            }
+
+            report($exception);
+
+            return back()->withInput()->withErrors([
+                'avatar_file' => 'Không thể cập nhật ảnh đại diện. Vui lòng kiểm tra cấu hình Cloudinary.',
+            ]);
+        }
 
         return redirect()->route('admin.admins.index')->with('success', 'Đã cập nhật quản trị viên.');
+    }
+
+    public function edit(string $id): View|RedirectResponse
+    {
+        $admin = Admin::query()->findOrFail($id);
+        $currentAdmin = auth('admin')->user();
+
+        if ((string) $currentAdmin?->getKey() !== (string) $admin->getKey()) {
+            return redirect()->route('admin.admins.index')
+                ->with('error', 'Bạn chỉ được chỉnh sửa hồ sơ của chính mình.');
+        }
+
+        return view("{$this->viewDirectory}.edit", $this->viewData([
+            'item' => $admin,
+            'fields' => $this->resolvedFields(),
+        ]));
     }
 
     public function sendCredentials(string $id): RedirectResponse
@@ -94,6 +176,10 @@ class AdminManagementController extends CrudResourceController
 
         if ($admin->role === 'super_admin') {
             return back()->with('error', 'Không gửi lại mật khẩu khởi tạo cho Admin lớn bằng chức năng này.');
+        }
+
+        if (filled($admin->credentials_sent_at)) {
+            return back()->with('error', 'Tài khoản này đã được gửi thông tin đăng nhập trước đó.');
         }
 
         $password = (string) config('admin.initial_password');
@@ -112,6 +198,58 @@ class AdminManagementController extends CrudResourceController
         }
 
         return back()->with('success', "Đã gửi thông tin tài khoản tới {$admin->email}.");
+    }
+
+    public function sendCredentialsBulk(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'admin_ids' => ['required', 'array', 'min:1', 'max:50'],
+            'admin_ids.*' => ['required', 'string', 'max:64', 'distinct'],
+        ], [
+            'admin_ids.required' => 'Hãy chọn ít nhất một quản trị viên.',
+            'admin_ids.min' => 'Hãy chọn ít nhất một quản trị viên.',
+        ]);
+
+        $sent = 0;
+        $skipped = 0;
+        $failed = 0;
+        $password = (string) config('admin.initial_password');
+
+        foreach (array_unique($data['admin_ids']) as $adminId) {
+            $admin = Admin::query()->find($adminId);
+
+            if (! $admin || $admin->role !== 'admin' || filled($admin->credentials_sent_at)) {
+                $skipped++;
+                continue;
+            }
+
+            try {
+                Mail::to($admin->email)->send(new AdminCredentialsMail($admin->name, $admin->email, $password));
+                $admin->forceFill([
+                    'password' => Hash::driver('bcrypt')->make($password),
+                    'must_change_password' => true,
+                    'credentials_sent_at' => now(),
+                ])->save();
+                $sent++;
+            } catch (Throwable $exception) {
+                report($exception);
+                $failed++;
+            }
+        }
+
+        if ($sent === 0) {
+            return back()->with('error', 'Không có tài khoản Admin nhỏ nào được gửi. Vui lòng kiểm tra lại lựa chọn và cấu hình SMTP.');
+        }
+
+        $message = "Đã gửi thông tin đăng nhập cho {$sent} tài khoản.";
+        if ($skipped > 0) {
+            $message .= " Bỏ qua {$skipped} tài khoản không hợp lệ hoặc Admin lớn.";
+        }
+        if ($failed > 0) {
+            $message .= " {$failed} tài khoản gửi thất bại.";
+        }
+
+        return back()->with('success', $message);
     }
 
     public function toggleStatus(Request $request, string $id): RedirectResponse
@@ -194,6 +332,40 @@ class AdminManagementController extends CrudResourceController
         return $slug;
     }
 
+    /**
+     * @return array{avatar: string, avatar_public_id: string|null}
+     */
+    private function uploadAvatar(CloudinaryService $cloudinary, UploadedFile $file): array
+    {
+        $uploaded = $cloudinary->uploadImage($file, config('cloudinary.admin_folder', 'admin'));
+        $url = $uploaded['secure_url'] ?? $uploaded['url'] ?? null;
+
+        if (blank($url)) {
+            throw new \RuntimeException('Cloudinary không trả về URL ảnh đại diện.');
+        }
+
+        return [
+            'avatar' => $url,
+            'avatar_public_id' => $uploaded['public_id'] ?? null,
+        ];
+    }
+
+    private function deleteCloudinaryImage(CloudinaryService $cloudinary, ?string $publicId): void
+    {
+        if (blank($publicId)) {
+            return;
+        }
+
+        try {
+            $cloudinary->deleteImage($publicId);
+        } catch (Throwable $exception) {
+            Log::warning('Cloudinary admin avatar cleanup failed.', [
+                'public_id' => $publicId,
+                'exception' => $exception,
+            ]);
+        }
+    }
+
     public function destroy(string $id): RedirectResponse
     {
         if ((string) auth('admin')->id() === $id) {
@@ -202,8 +374,8 @@ class AdminManagementController extends CrudResourceController
 
         $admin = Admin::query()->findOrFail($id);
 
-        if ($admin->role === 'super_admin' && Admin::query()->where('role', 'super_admin')->count() <= 1) {
-            return back()->with('error', 'Hệ thống phải còn ít nhất một Admin lớn.');
+        if ($admin->role === 'super_admin') {
+            return back()->with('error', 'Không thể xóa tài khoản Admin lớn.');
         }
 
         return parent::destroy($id);
