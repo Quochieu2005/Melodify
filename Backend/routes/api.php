@@ -7,13 +7,21 @@ use Illuminate\Support\Facades\Route;
 Route::get('/docs', function () {
     abort_unless(config('app.api_docs_enabled') || app()->environment('local'), 404);
 
-    return response()->file(resource_path('api-docs/index.html'));
+    $response = response()->file(resource_path('api-docs/index.html'));
+    $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    $response->headers->set('Pragma', 'no-cache');
+
+    return $response;
 });
 
 Route::get('/docs/openapi.json', function () {
     abort_unless(config('app.api_docs_enabled') || app()->environment('local'), 404);
 
-    return response()->file(resource_path('api-docs/openapi.json'));
+    $response = response()->file(resource_path('api-docs/openapi.json'));
+    $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    $response->headers->set('Pragma', 'no-cache');
+
+    return $response;
 });
 
 Route::get('/health', function () {
