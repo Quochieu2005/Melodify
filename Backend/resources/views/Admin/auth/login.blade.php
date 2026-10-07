@@ -33,12 +33,12 @@
                 @csrf
                 <label for="admin-email">
                     <span>Email quản trị</span>
-                    <span class="admin-login-input-wrap"><x-anticon name="mail" class="admin-login-input-icon" /><input id="admin-email" class="ant-input @error('email') is-invalid @enderror" type="email" name="email" value="{{ old('email') }}" placeholder="thaitrungquochieu@gmail.com" autocomplete="email" required autofocus></span>
+                    <span class="admin-login-input-wrap"><x-anticon name="mail" class="admin-login-input-icon" /><input id="admin-email" class="ant-input @error('email') is-invalid @enderror" type="email" name="email" value="{{ old('email') }}" maxlength="160" placeholder="thaitrungquochieu@gmail.com" autocomplete="email" required autofocus></span>
                 </label>
                 @error('email')<p class="admin-field-error">{{ $message }}</p>@enderror
                 <label for="admin-password">
                     <span>Mật khẩu</span>
-                    <span class="admin-login-input-wrap"><x-anticon name="lock" class="admin-login-input-icon" /><input id="admin-password" class="ant-input @error('password') is-invalid @enderror" type="password" name="password" placeholder="Nhập mật khẩu" autocomplete="current-password" data-password-input required><button type="button" class="admin-password-toggle" data-password-toggle aria-label="Hiện mật khẩu" aria-pressed="false"><x-anticon name="eye" class="admin-password-eye-show" /><x-anticon name="eye-invisible" class="admin-password-eye-hide" /></button></span>
+                    <span class="admin-login-input-wrap"><x-anticon name="lock" class="admin-login-input-icon" /><input id="admin-password" class="ant-input @error('password') is-invalid @enderror" type="password" name="password" maxlength="72" placeholder="Nhập mật khẩu" autocomplete="current-password" data-password-input required><button type="button" class="admin-password-toggle" data-password-toggle aria-label="Hiện mật khẩu" aria-pressed="false"><x-anticon name="eye" class="admin-password-eye-show" /><x-anticon name="eye-invisible" class="admin-password-eye-hide" /></button></span>
                 </label>
                 @error('password')<p class="admin-field-error">{{ $message }}</p>@enderror
                 <div class="admin-login-options">

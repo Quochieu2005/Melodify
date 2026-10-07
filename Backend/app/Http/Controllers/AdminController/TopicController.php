@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Models\Topic;
+use App\Rules\PlainText;
 
 class TopicController extends MediaCatalogController
 {
@@ -11,6 +12,8 @@ class TopicController extends MediaCatalogController
     protected string $resource = 'topics';
 
     protected string $title = 'chủ đề';
+
+    protected string $viewDirectory = 'Admin.topics';
 
     protected array $columns = [
         'image_url' => 'Ảnh',
@@ -31,13 +34,13 @@ class TopicController extends MediaCatalogController
     protected function rules(?object $item): array
     {
         return [
-            'name' => ['required', 'string', 'max:150'],
-            'slug' => ['nullable', 'string', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/'],
-            'description' => ['nullable', 'string'],
-            'sort_order' => ['nullable', 'integer', 'min:0'],
+            'name' => ['required', 'string', 'max:150', new PlainText()],
+            'slug' => ['nullable', 'string', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', new PlainText()],
+            'description' => ['nullable', 'string', 'max:2000', new PlainText()],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],
             'status' => ['required', 'in:active,inactive'],
             'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
-            'image_asset_id' => ['nullable', 'string'],
+            'image_asset_id' => ['nullable', 'string', 'max:64'],
         ];
     }
 }

@@ -29,9 +29,9 @@
                 @csrf @method('PUT')
                 <div class="admin-settings-panel-heading"><div><h2>Đổi mật khẩu</h2><p>Nên sử dụng ít nhất 8 ký tự và không dùng lại mật khẩu cũ.</p></div><span class="ant-tag ant-tag-green">Bảo mật</span></div>
                 <div class="admin-form-grid">
-                    <div class="admin-form-group admin-form-span"><label class="admin-form-label">Mật khẩu hiện tại</label><input class="ant-input" type="password" name="current_password" placeholder="Nhập mật khẩu hiện tại"></div>
-                    <div class="admin-form-group"><label class="admin-form-label">Mật khẩu mới</label><input class="ant-input" type="password" name="password" placeholder="Tối thiểu 8 ký tự"></div>
-                    <div class="admin-form-group"><label class="admin-form-label">Xác nhận mật khẩu</label><input class="ant-input" type="password" name="password_confirmation" placeholder="Nhập lại mật khẩu mới"></div>
+                    <div class="admin-form-group admin-form-span"><label class="admin-form-label" for="current-password">Mật khẩu hiện tại</label><input id="current-password" class="ant-input" type="password" name="current_password" maxlength="72" autocomplete="current-password" placeholder="Nhập mật khẩu hiện tại"></div>
+                    <div class="admin-form-group"><label class="admin-form-label" for="new-password">Mật khẩu mới</label><input id="new-password" class="ant-input" type="password" name="password" minlength="8" maxlength="72" autocomplete="new-password" placeholder="Tối thiểu 8 ký tự"></div>
+                    <div class="admin-form-group"><label class="admin-form-label" for="password-confirmation">Xác nhận mật khẩu</label><input id="password-confirmation" class="ant-input" type="password" name="password_confirmation" minlength="8" maxlength="72" autocomplete="new-password" placeholder="Nhập lại mật khẩu mới"></div>
                 </div>
                 <div class="admin-form-actions"><button class="ant-btn ant-btn-primary" type="submit">Cập nhật mật khẩu</button></div>
             </form>

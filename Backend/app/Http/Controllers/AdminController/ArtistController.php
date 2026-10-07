@@ -13,6 +13,8 @@ class ArtistController extends CrudResourceController
 
     protected string $title = 'nghệ sĩ';
 
+    protected string $viewDirectory = 'Admin.artists';
+
     protected array $columns = ['name' => 'Tên nghệ sĩ', 'verified' => 'Xác minh', 'status' => 'Trạng thái'];
 
     protected array $fields = [

@@ -30,6 +30,8 @@ abstract class MediaCatalogController extends Controller
 
     protected array $columns = [];
 
+    protected string $viewDirectory = 'Admin.catalog';
+
     abstract protected function rules(?object $item): array;
 
     public function index(): View
@@ -44,7 +46,7 @@ abstract class MediaCatalogController extends Controller
 
     public function create(): View
     {
-        return view('Admin.catalog.form', $this->viewData([
+        return view("{$this->viewDirectory}.create", $this->viewData([
             'item' => null,
             'fields' => $this->resolvedFields(),
             'mediaAssets' => app(MediaAssetService::class)->latest(),
@@ -65,7 +67,7 @@ abstract class MediaCatalogController extends Controller
     {
         $item = ($this->model)::query()->findOrFail($id);
 
-        return view('Admin.catalog.form', $this->viewData([
+        return view("{$this->viewDirectory}.edit", $this->viewData([
             'item' => $item,
             'fields' => $this->resolvedFields(),
             'mediaAssets' => app(MediaAssetService::class)->latest(),

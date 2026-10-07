@@ -12,8 +12,8 @@
                 <div><h2>Thông tin cá nhân</h2><p>Thông tin được dùng để nhận diện tài khoản quản trị.</p></div>
             </header>
             <div class="admin-profile-form-body">
-                <div class="admin-form-group"><label class="admin-form-label" for="profile-name">Họ tên</label><input id="profile-name" class="ant-input" name="name" value="{{ old('name', $admin->name) }}" required>@error('name')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
-                <div class="admin-form-group"><label class="admin-form-label" for="profile-email">Email</label><input id="profile-email" class="ant-input" type="email" name="email" value="{{ old('email', $admin->email) }}" required>@error('email')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+                <div class="admin-form-group"><label class="admin-form-label" for="profile-name">Họ tên</label><input id="profile-name" class="ant-input" name="name" value="{{ old('name', $admin->name) }}" maxlength="120" required>@error('name')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+                <div class="admin-form-group"><label class="admin-form-label" for="profile-email">Email</label><input id="profile-email" class="ant-input" type="email" name="email" value="{{ old('email', $admin->email) }}" maxlength="160" autocomplete="email" required>@error('email')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
                 <div class="admin-form-group admin-form-span">
                     <label class="admin-form-label" for="profile-avatar-file">Ảnh đại diện</label>
                     <div class="admin-avatar-upload-row">

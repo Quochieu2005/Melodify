@@ -13,6 +13,8 @@ class SongController extends CrudResourceController
 
     protected string $title = 'bài hát';
 
+    protected string $viewDirectory = 'Admin.songs';
+
     protected array $columns = ['title' => 'Tên bài hát', 'release_date' => 'Ngày phát hành', 'duration_seconds' => 'Thời lượng', 'status' => 'Trạng thái'];
 
     protected array $fields = [
