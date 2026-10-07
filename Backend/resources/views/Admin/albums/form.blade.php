@@ -20,7 +20,7 @@
         </div>
         <div class="admin-form-grid">
             <div class="admin-form-group admin-form-span"><label class="admin-form-label" for="album-title">Tên album
-                    <span>*</span></label><input id="album-title" name="title"
+                    <span>*</span></label><input id="album-title" name="title" data-slug-source="album-slug"
                     value="{{ old('title', $item?->title) }}" maxlength="160"
                     class="ant-input admin-form-input @error('title') is-invalid @enderror" required>
                 @error('title')
@@ -28,9 +28,9 @@
                 @enderror
             </div>
             <div class="admin-form-group"><label class="admin-form-label" for="album-slug">Slug
-                    <span>*</span></label><input id="album-slug" name="slug" value="{{ old('slug', $item?->slug) }}"
+                    <span>*</span></label><div class="admin-slug-input-row"><input id="album-slug" name="slug" value="{{ old('slug', $item?->slug) }}"
                     maxlength="180" pattern="[A-Za-z0-9_-]+"
-                    class="ant-input admin-form-input @error('slug') is-invalid @enderror" required>
+                    class="ant-input admin-form-input @error('slug') is-invalid @enderror" required><button type="button" class="ant-btn admin-slug-reset" data-slug-reset="album-slug">Theo tên</button></div><p class="admin-field-help">Tự tạo theo tên, hoặc tự sửa; slug không được trùng.</p>
                 @error('slug')
                     <p class="admin-field-error">{{ $message }}</p>
                 @enderror

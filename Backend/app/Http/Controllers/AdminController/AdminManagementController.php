@@ -47,9 +47,9 @@ class AdminManagementController extends CrudResourceController
         'status' => ['label' => 'Trạng thái', 'type' => 'select', 'required' => true, 'default' => 'active', 'options' => ['active' => 'Hoạt động', 'inactive' => 'Tạm khóa']],
     ];
 
-    protected function normalize(array $data): array
+    protected function normalize(array $data, mixed $ignoreId = null): array
     {
-        return $this->normalizeAdminData($data);
+        return $this->normalizeAdminData($data, $ignoreId === null ? null : (string) $ignoreId);
     }
 
     public function store(AdminResourceRequest $request): RedirectResponse

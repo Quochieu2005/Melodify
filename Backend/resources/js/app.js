@@ -2,6 +2,49 @@
  * Melodify Admin Interface - Ant Design Vanilla JS Controllers
  */
 document.addEventListener('DOMContentLoaded', () => {
+    const slugify = (value) => value
+        .replace(/[đĐơƠưƯ]/g, (character) => ({
+            đ: 'd', Đ: 'D', ơ: 'o', Ơ: 'O', ư: 'u', Ư: 'U',
+        })[character] || character)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/-{2,}/g, '-')
+        .replace(/^[-_]+|[-_]+$/g, '')
+        .slice(0, 220);
+
+    document.querySelectorAll('[data-slug-source]').forEach((source) => {
+        const form = source.closest('form') || document;
+        const targetId = source.dataset.slugSource;
+        const slugInput = [...form.querySelectorAll('input[name="slug"]')]
+            .find((input) => input.id === targetId);
+        const resetButton = [...form.querySelectorAll('[data-slug-reset]')]
+            .find((button) => button.dataset.slugReset === targetId);
+
+        if (!targetId || !slugInput) return;
+
+        const sourceSlug = () => slugify(source.value || '');
+        let followsSource = slugInput.value.trim() === '' || slugInput.value.trim() === sourceSlug();
+
+        const syncSlug = () => {
+            if (followsSource) slugInput.value = sourceSlug();
+        };
+
+        source.addEventListener('input', syncSlug);
+        slugInput.addEventListener('input', () => {
+            const typedSlug = slugInput.value.trim();
+            followsSource = typedSlug === '' || typedSlug === sourceSlug();
+        });
+        resetButton?.addEventListener('click', () => {
+            followsSource = true;
+            syncSlug();
+            slugInput.focus();
+        });
+
+        syncSlug();
+    });
+
     document.querySelectorAll('[data-password-toggle]').forEach((toggle) => {
         const input = toggle.closest('.admin-login-input-wrap')?.querySelector('[data-password-input]');
         if (!input) return;
