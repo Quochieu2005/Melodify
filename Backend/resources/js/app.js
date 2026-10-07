@@ -24,7 +24,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!targetId || !slugInput) return;
 
-        const sourceSlug = () => slugify(source.value || '');
+        const sourceSlug = () => {
+            const maxLength = Number(slugInput.maxLength);
+            const generatedSlug = slugify(source.value || '');
+
+            return maxLength > 0 ? generatedSlug.slice(0, maxLength) : generatedSlug;
+        };
         let followsSource = slugInput.value.trim() === '' || slugInput.value.trim() === sourceSlug();
 
         const syncSlug = () => {
@@ -46,7 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.querySelectorAll('[data-password-toggle]').forEach((toggle) => {
-        const input = toggle.closest('.admin-login-input-wrap')?.querySelector('[data-password-input]');
+        const input = toggle.closest('.admin-login-input-wrap')?.querySelector('[data-password-input]')
+            || document.getElementById(toggle.dataset.passwordFor || '');
         if (!input) return;
 
         toggle.addEventListener('click', () => {
@@ -58,6 +64,56 @@ document.addEventListener('DOMContentLoaded', () => {
             input.focus();
         });
     });
+
+    const adminSelectAll = document.querySelector('[data-admin-select-all]');
+    const adminRecipients = [...document.querySelectorAll('[data-admin-recipient]')];
+    const adminBulkSend = document.querySelector('[data-admin-bulk-send]');
+
+    if (adminSelectAll && adminBulkSend) {
+        const updateBulkSelection = () => {
+            const enabledRecipients = adminRecipients.filter((input) => !input.disabled);
+            const selectedRecipients = enabledRecipients.filter((input) => input.checked);
+            adminBulkSend.disabled = selectedRecipients.length === 0;
+            adminSelectAll.disabled = enabledRecipients.length === 0;
+            adminSelectAll.checked = enabledRecipients.length > 0 && selectedRecipients.length === enabledRecipients.length;
+            adminSelectAll.indeterminate = selectedRecipients.length > 0 && selectedRecipients.length < enabledRecipients.length;
+        };
+
+        adminSelectAll.addEventListener('change', () => {
+            adminRecipients.forEach((input) => {
+                if (!input.disabled) input.checked = adminSelectAll.checked;
+            });
+            updateBulkSelection();
+        });
+
+        adminRecipients.forEach((input) => input.addEventListener('change', updateBulkSelection));
+        updateBulkSelection();
+    }
+
+    const bannerSelectAll = document.querySelector('[data-banner-select-all]');
+    const bannerSelections = [...document.querySelectorAll('[data-banner-select]')];
+    const bannerBulkDelete = document.querySelector('[data-banner-bulk-delete]');
+    const bannerSelectedCount = document.querySelector('[data-banner-selected-count]');
+
+    if (bannerSelectAll && bannerBulkDelete) {
+        const updateBannerSelection = () => {
+            const selectedCount = bannerSelections.filter((input) => input.checked).length;
+            bannerBulkDelete.disabled = selectedCount === 0;
+            bannerSelectAll.checked = bannerSelections.length > 0 && selectedCount === bannerSelections.length;
+            bannerSelectAll.indeterminate = selectedCount > 0 && selectedCount < bannerSelections.length;
+            if (bannerSelectedCount) bannerSelectedCount.textContent = `(${selectedCount})`;
+        };
+
+        bannerSelectAll.addEventListener('change', () => {
+            bannerSelections.forEach((input) => {
+                input.checked = bannerSelectAll.checked;
+            });
+            updateBannerSelection();
+        });
+
+        bannerSelections.forEach((input) => input.addEventListener('change', updateBannerSelection));
+        updateBannerSelection();
+    }
 
     const otpForm = document.querySelector('[data-otp-form]');
     if (otpForm) {
@@ -130,6 +186,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const sortOrderInput = document.querySelector('#banner-sort-order');
+    const selectDefaultSortOrder = () => {
+        if (sortOrderInput?.value === '0') sortOrderInput.select();
+    };
+
+    sortOrderInput?.addEventListener('focus', selectDefaultSortOrder);
+    sortOrderInput?.addEventListener('keydown', (event) => {
+        if (sortOrderInput.value === '0' && /^\d$/.test(event.key)) {
+            sortOrderInput.select();
+        }
+    });
+
     const avatarInput = document.querySelector('[data-avatar-input]');
     const avatarPreview = document.querySelector('[data-avatar-preview]');
     avatarInput?.addEventListener('change', () => {
@@ -147,9 +215,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const bannerInput = document.querySelector('[data-banner-input]');
     const bannerPreview = document.querySelector('[data-banner-preview]');
+    const bannerFileName = document.querySelector('[data-banner-file-name]');
     bannerInput?.addEventListener('change', () => {
         const [file] = bannerInput.files || [];
         if (!file || !bannerPreview) return;
+
+        if (bannerFileName) bannerFileName.textContent = `Đã chọn: ${file.name}`;
 
         const imageUrl = URL.createObjectURL(file);
         bannerPreview.replaceChildren();
@@ -267,9 +338,118 @@ document.addEventListener('DOMContentLoaded', () => {
         resetIdleTimer();
     }
 
-    document.querySelectorAll('[data-confirm-delete]').forEach((form) => {
-        form.addEventListener('submit', (event) => {
-            if (!window.confirm('Bạn chắc chắn muốn xóa mục này? Hành động này không thể hoàn tác.')) event.preventDefault();
+    const deleteForms = [...document.querySelectorAll('[data-confirm-delete], [data-confirm-delete-bulk], [data-confirm-delete-all]')];
+    if (deleteForms.length > 0) {
+        const deleteModal = document.createElement('div');
+        deleteModal.className = 'admin-confirm-modal';
+        deleteModal.hidden = true;
+        deleteModal.innerHTML = `
+            <div class="admin-confirm-backdrop" data-confirm-backdrop></div>
+            <div class="admin-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-confirm-delete-title" aria-describedby="admin-confirm-delete-message" tabindex="-1">
+                <button type="button" class="admin-confirm-close" data-confirm-cancel aria-label="Đóng hộp thoại">
+                    <span aria-hidden="true">×</span>
+                </button>
+                <div class="admin-confirm-body">
+                    <div class="admin-confirm-icon" aria-hidden="true">!</div>
+                    <div>
+                        <h2 id="admin-confirm-delete-title">Xóa mục này?</h2>
+                        <p id="admin-confirm-delete-message">Bạn có chắc chắn muốn xóa mục này không? Dữ liệu đã xóa sẽ không thể khôi phục.</p>
+                    </div>
+                </div>
+                <div class="admin-confirm-actions">
+                    <button type="button" class="ant-btn" data-confirm-cancel>Hủy</button>
+                    <button type="button" class="ant-btn admin-confirm-delete-button" data-confirm-submit>Xóa vĩnh viễn</button>
+                </div>
+            </div>
+        `;
+        document.body.append(deleteModal);
+
+        const deleteDialog = deleteModal.querySelector('.admin-confirm-dialog');
+        const deleteTitle = deleteModal.querySelector('#admin-confirm-delete-title');
+        const deleteMessage = deleteModal.querySelector('#admin-confirm-delete-message');
+        const cancelButtons = [...deleteModal.querySelectorAll('[data-confirm-cancel]')];
+        const confirmButton = deleteModal.querySelector('[data-confirm-submit]');
+        const defaultDeleteTitle = 'Xóa mục này?';
+        const defaultDeleteMessage = 'Bạn có chắc chắn muốn xóa mục này không? Dữ liệu đã xóa sẽ không thể khôi phục.';
+        let pendingDeleteForm = null;
+        let restoreFocusElement = null;
+
+        const closeDeleteModal = () => {
+            deleteModal.hidden = true;
+            document.body.classList.remove('admin-modal-open');
+
+            if (restoreFocusElement?.isConnected) restoreFocusElement.focus();
+
+            pendingDeleteForm = null;
+            restoreFocusElement = null;
+            if (deleteTitle) deleteTitle.textContent = defaultDeleteTitle;
+            if (deleteMessage) deleteMessage.textContent = defaultDeleteMessage;
+            if (confirmButton) {
+                confirmButton.disabled = false;
+                confirmButton.textContent = 'Xóa vĩnh viễn';
+            }
+        };
+
+        const openDeleteModal = (form, submitter) => {
+            pendingDeleteForm = form;
+            restoreFocusElement = submitter;
+            if (form.matches('[data-confirm-delete-all]')) {
+                const totalCount = form.dataset.confirmDeleteCount || 'toàn bộ';
+                if (deleteTitle) deleteTitle.textContent = 'Xóa toàn bộ banner?';
+                if (deleteMessage) deleteMessage.textContent = `Bạn có chắc chắn muốn xóa tất cả ${totalCount} banner không? Dữ liệu đã xóa sẽ không thể khôi phục.`;
+            } else if (form.matches('[data-confirm-delete-bulk]')) {
+                const selectedCount = document.querySelectorAll('[data-banner-select]:checked').length;
+                if (deleteTitle) deleteTitle.textContent = `Xóa ${selectedCount} banner đã chọn?`;
+                if (deleteMessage) deleteMessage.textContent = `Bạn có chắc chắn muốn xóa ${selectedCount} banner này không? Dữ liệu đã xóa sẽ không thể khôi phục.`;
+            } else {
+                if (deleteTitle) deleteTitle.textContent = defaultDeleteTitle;
+                if (deleteMessage) deleteMessage.textContent = defaultDeleteMessage;
+            }
+            deleteModal.hidden = false;
+            document.body.classList.add('admin-modal-open');
+            window.requestAnimationFrame(() => deleteDialog?.focus());
+        };
+
+        deleteForms.forEach((form) => {
+            form.addEventListener('submit', (event) => {
+                if (form.dataset.confirmed === 'true') {
+                    delete form.dataset.confirmed;
+                    return;
+                }
+
+                event.preventDefault();
+                openDeleteModal(form, event.submitter || form.querySelector('button[type="submit"]'));
+            });
+        });
+
+        cancelButtons.forEach((button) => button.addEventListener('click', closeDeleteModal));
+        deleteModal.querySelector('[data-confirm-backdrop]')?.addEventListener('click', closeDeleteModal);
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !deleteModal.hidden) {
+                event.preventDefault();
+                closeDeleteModal();
+            }
+        });
+
+        confirmButton?.addEventListener('click', () => {
+            if (!pendingDeleteForm) return;
+
+            const form = pendingDeleteForm;
+            confirmButton.disabled = true;
+            confirmButton.textContent = 'Đang xóa...';
+            form.dataset.confirmed = 'true';
+            window.setTimeout(() => HTMLFormElement.prototype.submit.call(form), 80);
+        });
+    }
+
+    document.querySelectorAll('[data-submit-once]').forEach((form) => {
+        form.addEventListener('submit', () => {
+            const submitButton = form.querySelector('button[type="submit"]');
+
+            if (!submitButton) return;
+
+            submitButton.disabled = true;
+            submitButton.textContent = 'Đang lưu...';
         });
     });
     const rootHtml = document.documentElement;

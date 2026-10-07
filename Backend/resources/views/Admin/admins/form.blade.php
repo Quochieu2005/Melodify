@@ -7,7 +7,7 @@
             <p class="admin-page-description">Admin lớn có toàn quyền; Admin nhỏ chỉ dùng các nhóm quyền được chọn.</p>
         </div>
     </div>
-    <form method="POST" action="{{ $isEditing ? route('admin.admins.update', $item->getKey()) : route('admin.admins.store') }}" class="ant-card admin-resource-form" autocomplete="off">
+    <form method="POST" action="{{ $isEditing ? route('admin.admins.update', $item->getKey()) : route('admin.admins.store') }}" enctype="multipart/form-data" class="ant-card admin-resource-form" autocomplete="off">
         @csrf
         @if($isEditing) @method('PUT') @endif
         <div class="admin-resource-form-heading"><div><strong>Thông tin quản trị viên</strong><span>Mật khẩu khởi tạo được hệ thống cấp và mã hóa bằng bcrypt.</span></div><span class="ant-tag {{ $isEditing ? 'ant-tag-blue' : 'ant-tag-green' }}">{{ $isEditing ? 'Đang chỉnh sửa' : 'Tạo mới' }}</span></div>
@@ -25,6 +25,26 @@
             </div>
             <div class="admin-form-group"><label class="admin-form-label" for="admin-role">Phân quyền <span>*</span></label><select id="admin-role" name="role" class="ant-input admin-form-input @error('role') is-invalid @enderror" required>@foreach($fields['role']['options'] ?? [] as $value => $label)<option value="{{ $value }}" @selected(old('role', $item?->role ?? 'admin') === $value)>{{ $label }}</option>@endforeach</select>@error('role')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
             <div class="admin-form-group"><label class="admin-form-label" for="admin-status">Trạng thái <span>*</span></label><select id="admin-status" name="status" class="ant-input admin-form-input @error('status') is-invalid @enderror" required>@foreach($fields['status']['options'] ?? [] as $value => $label)<option value="{{ $value }}" @selected(old('status', $item?->status ?? 'active') === $value)>{{ $label }}</option>@endforeach</select>@error('status')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+            <div class="admin-form-group admin-form-span">
+                <label class="admin-form-label" for="admin-avatar-file">Ảnh đại diện</label>
+                <div class="admin-avatar-upload-row">
+                    <div class="admin-avatar-upload-preview" data-avatar-preview>
+                        @if(filled($item?->avatar))
+                            <img src="{{ $item->avatar }}" alt="Ảnh đại diện hiện tại">
+                        @else
+                            <span>{{ mb_strtoupper(mb_substr($item?->name ?? 'A', 0, 1)) }}</span>
+                        @endif
+                    </div>
+                    <div class="admin-avatar-upload-copy">
+                        <input id="admin-avatar-file" class="ant-input" type="file" name="avatar_file" accept="image/jpeg,image/png,image/webp" data-avatar-input>
+                        <p class="admin-form-help">JPG, PNG hoặc WebP, tối đa 5 MB. Ảnh được lưu trên Cloudinary trong folder <code>admin</code>.</p>
+                        @if($isEditing && filled($item?->avatar))
+                            <label class="admin-avatar-remove-option"><input type="checkbox" name="remove_avatar" value="1" @checked(old('remove_avatar'))> Xóa ảnh hiện tại</label>
+                        @endif
+                        @error('avatar_file')<p class="admin-field-error">{{ $message }}</p>@enderror
+                    </div>
+                </div>
+            </div>
             <fieldset class="admin-form-group admin-form-span admin-permission-group"><legend class="admin-form-label">Chức năng được phép</legend><p class="admin-field-help">Chỉ áp dụng cho Admin nhỏ. Admin lớn luôn có toàn quyền.</p><div class="admin-permission-options">@foreach($fields['permissions']['options'] ?? [] as $permission => $option)<label class="admin-checkbox-card"><input type="checkbox" name="permissions[]" value="{{ $permission }}" @checked(in_array($permission, old('permissions', $item?->permissions ?? []), true))><span><strong>{{ $option['label'] }}</strong><small>{{ $option['description'] }}</small></span></label>@endforeach</div>@error('permissions')<p class="admin-field-error">{{ $message }}</p>@enderror</fieldset>
         </div>
         <div class="admin-form-actions admin-resource-form-actions"><a href="{{ route('admin.admins.index') }}" class="ant-btn">Hủy</a><button class="ant-btn ant-btn-primary" type="submit">{{ $isEditing ? 'Lưu thay đổi' : 'Tạo quản trị viên' }}</button></div>

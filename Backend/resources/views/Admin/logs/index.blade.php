@@ -15,7 +15,7 @@
             <span class="admin-log-filter-label">Tìm kiếm</span>
             <span class="admin-log-input-wrap">
                 <x-anticon name="search" class="admin-log-input-icon" />
-                <input class="ant-input" type="search" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Tên admin, hành động, IP..." aria-label="Tìm trong nhật ký">
+                <input class="ant-input" type="search" name="search" value="{{ $filters['search'] ?? '' }}" maxlength="100" placeholder="Tên admin, hành động, IP..." aria-label="Tìm trong nhật ký">
             </span>
         </label>
         <label class="admin-log-filter-field">
@@ -31,11 +31,11 @@
         </label>
         <label class="admin-log-filter-field">
             <span class="admin-log-filter-label">Từ ngày</span>
-            <input class="ant-input" type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}">
+            <input class="ant-input" type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}" max="{{ now()->toDateString() }}">
         </label>
         <label class="admin-log-filter-field">
             <span class="admin-log-filter-label">Đến ngày</span>
-            <input class="ant-input" type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}">
+            <input class="ant-input" type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}" max="{{ now()->toDateString() }}">
         </label>
         <div class="admin-log-filter-actions">
             <button class="ant-btn ant-btn-primary" type="submit">Lọc nhật ký</button>

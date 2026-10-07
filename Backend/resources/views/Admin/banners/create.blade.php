@@ -2,19 +2,43 @@
 
 @section('content')
 <section class="admin-page admin-form-page admin-banner-form-page">
-    <div class="admin-page-header"><div><a href="{{ route('admin.banners.index') }}" class="admin-back-link">← Quay lại danh sách banner</a><p class="admin-page-kicker">Melodify / Banner</p><h1 class="admin-page-title">Tạo banner mới</h1><p class="admin-page-description">Tải ảnh lên Cloudinary và cấu hình vị trí hiển thị trên hệ thống.</p></div></div>
-    <form method="POST" action="{{ route('admin.banners.store') }}" enctype="multipart/form-data" class="ant-card admin-resource-form admin-banner-form" autocomplete="off">
+    <div class="admin-page-header">
+        <a href="{{ route('admin.banners.index') }}" class="admin-back-link">← Quay lại danh sách banner</a>
+    </div>
+    <form method="POST" action="{{ route('admin.banners.store') }}" enctype="multipart/form-data" class="ant-card admin-resource-form admin-banner-form" autocomplete="off" data-submit-once>
         @csrf
-        <div class="admin-resource-form-heading"><div><strong>Thông tin banner</strong><span>Các trường có dấu * là bắt buộc. Tên tối đa 160 ký tự.</span></div><span class="ant-tag ant-tag-green">Tạo mới</span></div>
+        <input type="hidden" name="form_token" value="{{ old('form_token', (string) \Illuminate\Support\Str::uuid()) }}">
+        <div class="admin-resource-form-heading">
+            <div class="admin-banner-heading-copy">
+                <span class="admin-banner-heading-icon"><x-anticon name="sound" aria-hidden="true" /></span>
+                <div><strong>Tạo banner mới</strong><span>Tải ảnh lên Cloudinary và cấu hình vị trí hiển thị trên hệ thống.</span></div>
+            </div>
+            <span class="ant-tag ant-tag-green"><x-anticon name="plus" aria-hidden="true" /> Tạo mới</span>
+        </div>
         <div class="admin-banner-form-layout">
             <div class="admin-banner-form-fields">
-                <div class="admin-form-group"><label class="admin-form-label" for="banner-title">Tên banner <span>*</span></label><input id="banner-title" name="title" data-slug-source="banner-slug" value="{{ old('title') }}" maxlength="160" class="ant-input admin-form-input @error('title') is-invalid @enderror" required>@error('title')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
-                <div class="admin-form-group"><label class="admin-form-label" for="banner-slug">Slug</label><div class="admin-slug-input-row"><input id="banner-slug" name="slug" value="{{ old('slug') }}" maxlength="180" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" class="ant-input admin-form-input @error('slug') is-invalid @enderror" placeholder="tu-dong-theo-ten"><button type="button" class="ant-btn admin-slug-reset" data-slug-reset="banner-slug">Theo tên</button></div><p class="admin-field-help">Tự tạo theo tên, hoặc tự sửa; slug không được trùng.</p>@error('slug')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+                <div class="admin-banner-section-heading admin-form-span">
+                    <span class="admin-banner-section-marker" aria-hidden="true"></span>
+                    <div><strong>Nội dung & đường dẫn</strong><p>Đặt tên dễ nhận biết và nơi người dùng sẽ đến khi nhấn vào banner.</p></div>
+                </div>
+                <div class="admin-form-group"><label class="admin-form-label" for="banner-title">Tên banner <span>*</span></label><input id="banner-title" name="title" data-slug-source="banner-slug" value="{{ old('title') }}" maxlength="100" class="ant-input admin-form-input @error('title') is-invalid @enderror" required><p class="admin-field-help">Tối đa 100 ký tự.</p>@error('title')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+                <div class="admin-form-group"><label class="admin-form-label" for="banner-slug">Slug</label><div class="admin-slug-input-row"><input id="banner-slug" name="slug" value="{{ old('slug') }}" maxlength="120" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" class="ant-input admin-form-input @error('slug') is-invalid @enderror" placeholder="tu-dong-theo-ten"><button type="button" class="ant-btn admin-slug-reset" data-slug-reset="banner-slug">Theo tên</button></div><p class="admin-field-help">Tối đa 120 ký tự; tự tạo theo tên hoặc tự sửa, không được trùng.</p>@error('slug')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
                 <div class="admin-form-group admin-form-span"><label class="admin-form-label" for="banner-link-url">URL khi nhấn vào banner</label><input id="banner-link-url" name="link_url" type="text" value="{{ old('link_url') }}" maxlength="500" class="ant-input admin-form-input @error('link_url') is-invalid @enderror" placeholder="/home hoặc https://melodify.vn/..."><p class="admin-field-help">Chỉ dùng đường dẫn nội bộ bắt đầu bằng / hoặc URL http(s) hợp lệ.</p>@error('link_url')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
-                <div class="admin-form-group"><label class="admin-form-label" for="banner-sort-order">Thứ tự hiển thị <span>*</span></label><input id="banner-sort-order" name="sort_order" type="number" min="0" max="999999" step="1" inputmode="numeric" value="{{ old('sort_order', 0) }}" class="ant-input admin-form-input @error('sort_order') is-invalid @enderror" required><p class="admin-field-help">Số nhỏ hơn sẽ được hiển thị trước.</p>@error('sort_order')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+                <div class="admin-banner-section-heading admin-form-span">
+                    <span class="admin-banner-section-marker" aria-hidden="true"></span>
+                    <div><strong>Cách hiển thị</strong><p>Điều chỉnh thứ tự và trạng thái xuất hiện của banner.</p></div>
+                </div>
+                <div class="admin-form-group"><label class="admin-form-label" for="banner-sort-order">Thứ tự hiển thị <span>*</span></label><input id="banner-sort-order" name="sort_order" type="number" min="0" max="9999" step="1" inputmode="numeric" value="{{ old('sort_order', 0) }}" class="ant-input admin-form-input @error('sort_order') is-invalid @enderror" required><p class="admin-field-help">Số nhỏ hơn sẽ được hiển thị trước.</p>@error('sort_order')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
                 <div class="admin-form-group"><label class="admin-form-label" for="banner-status">Trạng thái <span>*</span></label><select id="banner-status" name="status" class="ant-input admin-form-input @error('status') is-invalid @enderror" required><option value="active" @selected(old('status', 'active') === 'active')>Đang hiển thị</option><option value="inactive" @selected(old('status') === 'inactive')>Tạm ẩn</option></select>@error('status')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
             </div>
-            <aside class="admin-banner-upload-card"><div class="admin-banner-preview" data-banner-preview><x-anticon name="cloud-upload" aria-hidden="true" /><strong>Chưa có ảnh</strong><span>Ảnh sẽ được lưu trong Cloudinary / banner</span></div><label class="admin-form-label" for="banner-image">Ảnh banner <span>*</span></label><input id="banner-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" class="ant-input admin-form-input @error('image') is-invalid @enderror" data-banner-input required><p class="admin-field-help">JPG, PNG hoặc WebP, tối đa 5 MB.</p>@error('image')<p class="admin-field-error">{{ $message }}</p>@enderror</aside>
+            <aside class="admin-banner-upload-card">
+                <div class="admin-banner-upload-heading"><span class="admin-banner-upload-icon"><x-anticon name="cloud-upload" aria-hidden="true" /></span><div><strong>Ảnh hiển thị</strong><span>Khung đề xuất 16:7</span></div></div>
+                <div class="admin-banner-preview" data-banner-preview><x-anticon name="cloud-upload" aria-hidden="true" /><strong>Chưa có ảnh</strong><span>Ảnh sẽ được lưu trong Cloudinary / banner</span></div>
+                <div class="admin-banner-upload-meta"><div><label class="admin-form-label" for="banner-image">Ảnh banner <span>*</span></label><p>JPG, PNG hoặc WebP, tối đa 5 MB.</p></div><span class="ant-tag ant-tag-blue">16:7</span></div>
+                <label class="admin-banner-file-picker" for="banner-image"><span class="admin-banner-file-picker-icon"><x-anticon name="folder" aria-hidden="true" /></span><span><strong>Chọn ảnh banner</strong><small>Nhấn để chọn tệp từ máy tính</small></span><span class="admin-banner-file-picker-action">Chọn tệp</span><input id="banner-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" class="admin-banner-file-input @error('image') is-invalid @enderror" data-banner-input required></label>
+                <p class="admin-banner-selected-file" data-banner-file-name>Chưa chọn tệp</p>
+                @error('image')<p class="admin-field-error">{{ $message }}</p>@enderror
+            </aside>
         </div>
         <div class="admin-form-actions admin-resource-form-actions"><a href="{{ route('admin.banners.index') }}" class="ant-btn">Hủy</a><button type="submit" class="ant-btn ant-btn-primary">Tạo banner</button></div>
     </form>
