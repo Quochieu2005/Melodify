@@ -9,9 +9,9 @@
         </div>
     </div>
     <div class="admin-table-card ant-card">
-        <div class="ant-card-body" style="padding: 0;">
-            <div class="admin-table-wrapper">
-                <table class="ant-table admin-table">
+        <div class="admin-table-toolbar"><div><strong>Giao dịch</strong><span>{{ $payments->total() }} mục</span></div></div>
+            <div class="admin-table-scroll">
+                <table class="ant-table admin-data-table">
                     <thead class="ant-table-thead">
                         <tr>
                             <th>#</th>
@@ -25,13 +25,15 @@
                         </tr>
                     </thead>
                     <tbody class="ant-table-tbody">
-                        <tr><td>1</td><td>TXN-20260901</td><td>Nguyễn Văn A</td><td>Premium</td><td>59,000₫</td><td>MoMo</td><td>01/09/2026</td><td><span class="ant-tag ant-tag-green">Thành công</span></td></tr>
-                        <tr><td>2</td><td>TXN-20260902</td><td>Trần Thị B</td><td>Student</td><td>29,000₫</td><td>ZaloPay</td><td>02/09/2026</td><td><span class="ant-tag ant-tag-green">Thành công</span></td></tr>
-                        <tr><td>3</td><td>TXN-20260903</td><td>Lê Văn C</td><td>Family</td><td>89,000₫</td><td>VNPAY</td><td>03/09/2026</td><td><span class="ant-tag ant-tag-red">Thất bại</span></td></tr>
+                        @forelse($payments as $payment)
+                            <tr><td>{{ $payments->firstItem() + $loop->index }}</td><td>{{ $payment->payment_code ?? '—' }}</td><td>{{ $payment->user?->name ?? $payment->user?->email ?? '—' }}</td><td>{{ $payment->details->first()?->plan?->name ?? '—' }}</td><td>{{ number_format((float) ($payment->amount ?? 0), 0, ',', '.') }}₫</td><td>{{ $payment->method ?? '—' }}</td><td>{{ $payment->paid_at?->format('d/m/Y H:i') ?? $payment->created_at?->format('d/m/Y H:i') ?? '—' }}</td><td><span class="ant-tag {{ $payment->status === 'success' ? 'ant-tag-green' : ($payment->status === 'failed' ? 'ant-tag-red' : 'ant-tag-orange') }}">{{ $payment->status ?? 'pending' }}</span></td></tr>
+                        @empty
+                            <tr><td colspan="8" class="admin-empty-state"><span class="admin-empty-icon">₫</span><strong>Chưa có giao dịch</strong><span>Giao dịch thanh toán sẽ xuất hiện tại đây.</span></td></tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
-        </div>
+        @if($payments->hasPages())<div class="admin-pagination">{{ $payments->links() }}</div>@endif
     </div>
 </div>
 @endsection

@@ -1,16 +1,5 @@
 <header class="ant-layout-header admin-header">
     <div class="admin-header-left">
-        {{-- Mobile hamburger (visible < 768px) --}}
-        <button
-            type="button"
-            class="ant-btn ant-btn-text ant-btn-circle admin-icon-btn admin-mobile-toggle"
-            data-sidebar-mobile-toggle
-            aria-label="Mở menu"
-            title="Mở menu"
-        >
-            <x-anticon name="bars" />
-        </button>
-
         {{-- Desktop sidebar toggle (visible >= 768px) --}}
         <button 
             type="button" 
@@ -27,10 +16,9 @@
     </div>
 
     <div class="admin-header-right">
-        @include('layouts.partials.header.quick-create')
-
-        <a class="ant-btn ant-btn-link admin-header-link" href="/api/docs" target="_blank">
-            API Docs
+        <a href="{{ url('/api/docs') }}" class="ant-btn admin-api-docs-btn" target="_blank" rel="noopener">
+            <x-anticon name="file-text" />
+            <span>API Docs</span>
         </a>
 
         @include('layouts.partials.header.theme-toggle')

@@ -9,9 +9,9 @@
         </div>
     </div>
     <div class="admin-table-card ant-card">
-        <div class="ant-card-body" style="padding: 0;">
-            <div class="admin-table-wrapper">
-                <table class="ant-table admin-table">
+        <div class="admin-table-toolbar"><div><strong>Báo cáo</strong><span>{{ $reports->total() }} mục</span></div></div>
+            <div class="admin-table-scroll">
+                <table class="ant-table admin-data-table">
                     <thead class="ant-table-thead">
                         <tr>
                             <th>#</th>
@@ -25,13 +25,15 @@
                         </tr>
                     </thead>
                     <tbody class="ant-table-tbody">
-                        <tr><td>1</td><td>user456</td><td>Bài hát</td><td>Bài hát XYZ</td><td>Vi phạm bản quyền</td><td>29/09/2026</td><td><span class="ant-tag ant-tag-orange">Chờ xử lý</span></td><td><a href="#" class="admin-action-link">Xử lý</a></td></tr>
-                        <tr><td>2</td><td>user789</td><td>Bình luận</td><td>Comment #123</td><td>Nội dung xấu</td><td>28/09/2026</td><td><span class="ant-tag ant-tag-orange">Chờ xử lý</span></td><td><a href="#" class="admin-action-link">Xử lý</a></td></tr>
-                        <tr><td>3</td><td>user321</td><td>Người dùng</td><td>Lê Văn C</td><td>Spam</td><td>27/09/2026</td><td><span class="ant-tag ant-tag-green">Đã xử lý</span></td><td><a href="#" class="admin-action-link">Xem</a></td></tr>
+                        @forelse($reports as $report)
+                            <tr><td>{{ $reports->firstItem() + $loop->index }}</td><td>{{ $report->reporter?->name ?? $report->reporter?->email ?? '—' }}</td><td>{{ $report->target_type ?? '—' }}</td><td>{{ $report->target_id ?? '—' }}</td><td title="{{ $report->reason }}">{{ $report->reason ?? '—' }}</td><td>{{ $report->created_at?->format('d/m/Y H:i') ?? '—' }}</td><td><span class="ant-tag {{ $report->status === 'resolved' ? 'ant-tag-green' : ($report->status === 'rejected' ? 'ant-tag-red' : 'ant-tag-orange') }}">{{ $report->status ?? 'pending' }}</span></td><td><form method="POST" action="{{ route('admin.reports.update', $report) }}" class="admin-report-action">@csrf @method('PATCH')<select name="status" class="ant-input" aria-label="Trạng thái báo cáo"><option value="pending" @selected($report->status === 'pending')>Chờ xử lý</option><option value="resolved" @selected($report->status === 'resolved')>Đã xử lý</option><option value="rejected" @selected($report->status === 'rejected')>Từ chối</option></select><button class="ant-btn" type="submit">Lưu</button></form></td></tr>
+                        @empty
+                            <tr><td colspan="8" class="admin-empty-state"><span class="admin-empty-icon">!</span><strong>Không có báo cáo cần xử lý</strong><span>Báo cáo mới từ người dùng sẽ xuất hiện tại đây.</span></td></tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
-        </div>
+        @if($reports->hasPages())<div class="admin-pagination">{{ $reports->links() }}</div>@endif
     </div>
 </div>
 @endsection

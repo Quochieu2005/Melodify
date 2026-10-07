@@ -8,8 +8,8 @@ body.admin-body {
     min-height: 100vh;
     margin: 0;
     padding: 0;
-    color: #1f1f1f;
-    background: #f5f7fa;
+    color: var(--admin-text);
+    background: var(--admin-bg);
     font-family: var(--font-sans);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
@@ -22,7 +22,7 @@ body.admin-body {
     flex-direction: row !important;
     min-height: 100vh;
     width: 100%;
-    background: #f5f7fa;
+    background: var(--admin-bg);
 }
 
 .admin-layout-main,
@@ -38,15 +38,17 @@ body.admin-body {
 .ant-layout-sider {
     display: flex !important;
     flex-direction: column !important;
-    flex: 0 0 256px !important;
-    width: 256px !important;
-    min-width: 256px !important;
-    max-width: 256px !important;
+    flex: 0 0 240px !important;
+    width: 240px !important;
+    min-width: 240px !important;
+    max-width: 240px !important;
+    height: 100vh;
     min-height: 100vh;
-    background: #fff !important;
-    border-inline-end: 1px solid #f0f0f0;
+    background: var(--admin-surface) !important;
+    border-inline-end: 1px solid var(--admin-border);
     transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
-    position: relative;
+    position: sticky;
+    top: 0;
     z-index: 10;
 }
 
@@ -61,7 +63,9 @@ body.admin-body {
     flex: 1 1 auto;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 12px 8px;
+    padding: 12px 10px;
+    scrollbar-width: thin;
+    scrollbar-color: #d1d5db transparent;
 }
 
 .admin-brand {
@@ -70,11 +74,11 @@ body.admin-body {
     gap: 12px;
     height: 64px;
     padding: 0 20px;
-    color: #1f1f1f;
+    color: var(--admin-text);
     font-size: 16px;
     font-weight: 600;
     white-space: nowrap;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--admin-border);
     flex-shrink: 0;
 }
 
@@ -84,12 +88,25 @@ body.admin-body {
     justify-content: center;
     width: 32px;
     height: 32px;
-    border-radius: 50%;
-    background: #1677ff;
+    border-radius: 9px;
+    background: var(--admin-accent);
     color: #fff;
     font-weight: 700;
     font-size: 15px;
     flex-shrink: 0;
+}
+
+.admin-brand-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    line-height: 1.25;
+}
+
+.admin-brand-copy small {
+    color: #9ca3af;
+    font-size: 11px;
+    font-weight: 400;
 }
 
 /* Navigation Menu */
@@ -109,13 +126,15 @@ body.admin-body {
     line-height: 42px;
     margin: 4px 0;
     padding: 0 12px;
-    color: #595959;
+    color: #4b5563;
     font-size: 14px;
-    border-radius: 8px;
+    border-radius: 7px;
     cursor: pointer;
     text-decoration: none;
     list-style: none;
-    transition: background 0.15s, color 0.15s;
+    transition:
+        background 0.15s,
+        color 0.15s;
     user-select: none;
 }
 
@@ -154,11 +173,14 @@ body.admin-body {
     justify-content: center;
     font-size: 12px;
     margin-left: auto;
-    color: #8c8c8c;
+    color: #9ca3af;
     transition: transform 0.2s ease;
 }
 
-.admin-menu .ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow {
+.admin-menu
+    .ant-menu-submenu-open
+    > .ant-menu-submenu-title
+    .ant-menu-submenu-arrow {
     transform: rotate(180deg);
 }
 
@@ -167,7 +189,7 @@ body.admin-body {
     list-style: none;
     margin: 2px 0 2px 14px;
     padding: 0 0 0 8px;
-    border-left: 1px solid #f0f0f0;
+    border-left: 1px solid var(--admin-border);
 }
 
 .admin-menu .ant-menu-submenu-open > .admin-submenu-list {
@@ -176,18 +198,18 @@ body.admin-body {
 
 .admin-menu .ant-menu-item:hover,
 .admin-menu .ant-menu-submenu-title:hover {
-    color: #1677ff;
-    background: #f5f5f5;
+    color: var(--admin-text);
+    background: #f3f4f6;
 }
 
 .admin-menu .ant-menu-item.ant-menu-item-selected {
-    color: #1677ff;
-    background: #e6f4ff;
-    font-weight: 500;
+    color: #007f8a;
+    background: var(--admin-accent-soft);
+    font-weight: 600;
 }
 
 .admin-menu .ant-menu-item.ant-menu-item-selected a {
-    color: #1677ff;
+    color: #007f8a;
 }
 
 .admin-menu .ant-menu-item-selected::after {
@@ -203,11 +225,11 @@ body.admin-body {
     margin: 12px 16px;
     padding: 12px;
     overflow: hidden;
-    color: #595959;
+    color: var(--admin-muted);
     font-size: 12px;
     white-space: nowrap;
-    background: #f5f5f5;
-    border-radius: 8px;
+    background: #f3f4f6;
+    border-radius: 7px;
     flex-shrink: 0;
 }
 
@@ -217,16 +239,16 @@ body.admin-body {
     justify-content: center !important;
     font-size: 15px;
     flex-shrink: 0;
-    color: #8c8c8c;
+    color: #9ca3af;
 }
 
 /* Sidebar Collapsed State */
 .is-sidebar-collapsed .admin-sider,
 .is-sidebar-collapsed .ant-layout-sider {
-    flex: 0 0 80px !important;
-    width: 80px !important;
-    min-width: 80px !important;
-    max-width: 80px !important;
+    flex: 0 0 72px !important;
+    width: 72px !important;
+    min-width: 72px !important;
+    max-width: 72px !important;
 }
 
 .is-sidebar-collapsed .admin-brand {
@@ -235,6 +257,7 @@ body.admin-body {
 }
 
 .is-sidebar-collapsed .admin-brand-name,
+.is-sidebar-collapsed .admin-brand-copy small,
 .is-sidebar-collapsed .admin-menu .ant-menu-title-text,
 .is-sidebar-collapsed .admin-menu .ant-menu-submenu-arrow,
 .is-sidebar-collapsed .admin-sider-footer-text,
@@ -249,7 +272,10 @@ body.admin-body {
 }
 
 .is-sidebar-collapsed .admin-menu .ant-menu-item > a,
-.is-sidebar-collapsed .admin-menu .ant-menu-submenu-title > span.ant-menu-title-content {
+.is-sidebar-collapsed
+    .admin-menu
+    .ant-menu-submenu-title
+    > span.ant-menu-title-content {
     justify-content: center;
 }
 

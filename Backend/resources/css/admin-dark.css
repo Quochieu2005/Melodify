@@ -39,12 +39,12 @@
 }
 
 [data-admin-theme="dark"] .admin-menu .ant-menu-item-selected {
-    color: #69b1ff;
-    background: #112a45;
+    color: #67d9e2;
+    background: #123438;
 }
 
 [data-admin-theme="dark"] .admin-menu .ant-menu-item-selected a {
-    color: #69b1ff;
+    color: #67d9e2;
 }
 
 [data-admin-theme="dark"] .admin-submenu-list {
@@ -62,7 +62,7 @@
 
 [data-admin-theme="dark"] .admin-icon-btn:hover {
     background: #1f1f1f;
-    color: #69b1ff;
+    color: #67d9e2;
 }
 
 [data-admin-theme="dark"] .admin-header-link {
@@ -71,7 +71,7 @@
 
 [data-admin-theme="dark"] .admin-header-link:hover {
     background: #1f1f1f;
-    color: #69b1ff;
+    color: #67d9e2;
 }
 
 [data-admin-theme="dark"] .admin-search-wrapper {
@@ -108,7 +108,7 @@
 
 [data-admin-theme="dark"] .ant-dropdown-menu-item:hover .admin-dropdown-link {
     background: #2a2a2a;
-    color: #69b1ff;
+    color: #67d9e2;
 }
 
 [data-admin-theme="dark"] .ant-dropdown-menu-item-divider,
@@ -191,7 +191,7 @@
 }
 
 [data-admin-theme="dark"] .admin-theme-option.is-selected {
-    background: #112a45;
+    background: #123438;
 }
 
 /* ==========================================================================
@@ -248,10 +248,10 @@
     /* Reset collapsed state on mobile - always full width */
     .is-sidebar-collapsed .admin-sider,
     .is-sidebar-collapsed .ant-layout-sider {
-        flex: 0 0 256px !important;
-        width: 256px !important;
-        min-width: 256px !important;
-        max-width: 256px !important;
+        flex: 0 0 280px !important;
+        width: 280px !important;
+        min-width: 280px !important;
+        max-width: 280px !important;
     }
 
     .is-sidebar-collapsed .admin-brand-name,
@@ -269,7 +269,10 @@
     }
 
     .is-sidebar-collapsed .admin-menu .ant-menu-item > a,
-    .is-sidebar-collapsed .admin-menu .ant-menu-submenu-title > span.ant-menu-title-content {
+    .is-sidebar-collapsed
+        .admin-menu
+        .ant-menu-submenu-title
+        > span.ant-menu-title-content {
         justify-content: flex-start;
     }
 
@@ -305,7 +308,7 @@
 
     .admin-sidebar-close:hover {
         background: #f5f5f5;
-        color: #1677ff;
+        color: var(--admin-accent);
     }
 
     .admin-header,
