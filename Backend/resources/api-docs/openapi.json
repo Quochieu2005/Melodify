@@ -12,7 +12,11 @@
     { "name": "System", "description": "System and service status" },
     { "name": "Auth", "description": "Authentication endpoints (coming soon)" },
     { "name": "Music", "description": "Music, albums and playlists" },
-    { "name": "Catalog", "description": "Public topics, genres, banners, albums and artists" }
+    { "name": "Topics", "description": "Public topics" },
+    { "name": "Genres", "description": "Public genres" },
+    { "name": "Banners", "description": "Public banners" },
+    { "name": "Albums", "description": "Public albums with artist information" },
+    { "name": "Artists", "description": "Public artists" }
   ],
   "paths": {
     "/api/health": {
@@ -40,7 +44,7 @@
     },
     "/api/v1/topics": {
       "get": {
-        "tags": ["Catalog"],
+        "tags": ["Topics"],
         "summary": "List active topics",
         "parameters": [{ "$ref": "#/components/parameters/PerPage" }, { "$ref": "#/components/parameters/Search" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
@@ -48,63 +52,63 @@
     },
     "/api/v1/topics/{id}": {
       "get": {
-        "tags": ["Catalog"], "summary": "Get an active topic",
+        "tags": ["Topics"], "summary": "Get an active topic",
         "parameters": [{ "$ref": "#/components/parameters/Id" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
     "/api/v1/genres": {
       "get": {
-        "tags": ["Catalog"], "summary": "List active genres",
+        "tags": ["Genres"], "summary": "List active genres",
         "parameters": [{ "$ref": "#/components/parameters/PerPage" }, { "$ref": "#/components/parameters/Search" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
       }
     },
     "/api/v1/genres/{id}": {
       "get": {
-        "tags": ["Catalog"], "summary": "Get an active genre",
+        "tags": ["Genres"], "summary": "Get an active genre",
         "parameters": [{ "$ref": "#/components/parameters/Id" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
     "/api/v1/banners": {
       "get": {
-        "tags": ["Catalog"], "summary": "List active banners",
+        "tags": ["Banners"], "summary": "List active banners",
         "parameters": [{ "$ref": "#/components/parameters/PerPage" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
       }
     },
     "/api/v1/banners/{id}": {
       "get": {
-        "tags": ["Catalog"], "summary": "Get an active banner",
+        "tags": ["Banners"], "summary": "Get an active banner",
         "parameters": [{ "$ref": "#/components/parameters/Id" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
     "/api/v1/albums": {
       "get": {
-        "tags": ["Catalog"], "summary": "List published albums with artist",
+        "tags": ["Albums"], "summary": "List published albums with artist",
         "parameters": [{ "$ref": "#/components/parameters/PerPage" }, { "$ref": "#/components/parameters/Search" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
       }
     },
     "/api/v1/albums/{id}": {
       "get": {
-        "tags": ["Catalog"], "summary": "Get a published album with artist",
+        "tags": ["Albums"], "summary": "Get a published album with artist",
         "parameters": [{ "$ref": "#/components/parameters/Id" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
     "/api/v1/artists": {
       "get": {
-        "tags": ["Catalog"], "summary": "List active artists",
+        "tags": ["Artists"], "summary": "List active artists",
         "parameters": [{ "$ref": "#/components/parameters/PerPage" }, { "$ref": "#/components/parameters/Search" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
       }
     },
     "/api/v1/artists/{id}": {
       "get": {
-        "tags": ["Catalog"], "summary": "Get an active artist",
+        "tags": ["Artists"], "summary": "Get an active artist",
         "parameters": [{ "$ref": "#/components/parameters/Id" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
