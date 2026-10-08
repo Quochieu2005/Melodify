@@ -2,12 +2,16 @@
 
 @section('content')
 <section class="admin-page admin-catalog-page">
+    @php($currentAdmin = auth('admin')->user())
+    @php($canCreate = $currentAdmin?->hasAdminResourcePermission($resource, 'create'))
+    @php($canUpdate = $currentAdmin?->hasAdminResourcePermission($resource, 'update'))
+    @php($canDelete = $currentAdmin?->hasAdminResourcePermission($resource, 'delete'))
     <div class="admin-page-header">
         <div class="admin-page-header-main">
             <h1 class="admin-page-title">Quản lý {{ $resourceTitle }}</h1>
             <p class="admin-page-description">Tạo, chỉnh sửa, sắp xếp và bật/tắt {{ $resourceTitle }} trong hệ thống.</p>
         </div>
-        <a href="{{ route("admin.$resource.create") }}" class="ant-btn ant-btn-primary admin-create-btn"><span aria-hidden="true">+</span> Thêm {{ $resourceTitle }}</a>
+        @if($canCreate)<a href="{{ route("admin.$resource.create") }}" class="ant-btn ant-btn-primary admin-create-btn"><span aria-hidden="true">+</span> Thêm {{ $resourceTitle }}</a>@endif
     </div>
 
     <div class="ant-card admin-table-card">
@@ -38,13 +42,17 @@
                                             <span class="admin-catalog-image-empty">Chưa có ảnh</span>
                                         @endif
                                     @elseif($key === 'status')
-                                        <form action="{{ route("admin.$resource.status", $item->getKey()) }}" method="POST" class="admin-inline-form">
-                                            @csrf @method('PATCH')
-                                            <button type="submit" class="admin-status-toggle {{ $value === 'active' ? 'is-active' : 'is-inactive' }}" title="Chuyển trạng thái">
-                                                <span class="admin-status-toggle-dot" aria-hidden="true"></span>
-                                                {{ $value === 'active' ? 'Hoạt động' : 'Tạm ẩn' }}
-                                            </button>
-                                        </form>
+                                        @if($canUpdate)
+                                            <form action="{{ route("admin.$resource.status", $item->getKey()) }}" method="POST" class="admin-inline-form">
+                                                @csrf @method('PATCH')
+                                                <button type="submit" class="admin-status-toggle {{ $value === 'active' ? 'is-active' : 'is-inactive' }}" title="Chuyển trạng thái">
+                                                    <span class="admin-status-toggle-dot" aria-hidden="true"></span>
+                                                    {{ $value === 'active' ? 'Hoạt động' : 'Tạm ẩn' }}
+                                                </button>
+                                            </form>
+                                        @else
+                                            <span class="ant-tag {{ $value === 'active' ? 'ant-tag-green' : 'ant-tag-default' }}">{{ $value === 'active' ? 'Hoạt động' : 'Tạm ẩn' }}</span>
+                                        @endif
                                     @elseif(is_bool($value))
                                         <span class="ant-tag {{ $value ? 'ant-tag-green' : 'ant-tag-default' }}">{{ $value ? 'Có' : 'Không' }}</span>
                                     @elseif($key === 'visibility')
@@ -55,11 +63,14 @@
                                 </td>
                             @endforeach
                             <td class="admin-table-actions">
-                                <a href="{{ route("admin.$resource.edit", $item->getKey()) }}" class="admin-action-link">Sửa</a>
-                                <form action="{{ route("admin.$resource.destroy", $item->getKey()) }}" method="POST" class="admin-inline-form" data-confirm-delete>
-                                    @csrf @method('DELETE')
-                                    <button type="submit" class="admin-action-link admin-action-danger">Xóa</button>
-                                </form>
+                                @if($canUpdate)<a href="{{ route("admin.$resource.edit", $item->getKey()) }}" class="admin-action-link">Sửa</a>@endif
+                                @if($canDelete)
+                                    <form action="{{ route("admin.$resource.destroy", $item->getKey()) }}" method="POST" class="admin-inline-form" data-confirm-delete>
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="admin-action-link admin-action-danger">Xóa</button>
+                                    </form>
+                                @endif
+                                @if(! $canUpdate && ! $canDelete)<span class="admin-text-muted">—</span>@endif
                             </td>
                         </tr>
                     @empty
@@ -68,7 +79,7 @@
                                 <span class="admin-empty-icon">＋</span>
                                 <strong>Chưa có {{ $resourceTitle }}</strong>
                                 <span>Tạo mục đầu tiên để bắt đầu quản lý.</span>
-                                <a href="{{ route("admin.$resource.create") }}" class="ant-btn">Tạo {{ $resourceTitle }}</a>
+                                @if($canCreate)<a href="{{ route("admin.$resource.create") }}" class="ant-btn">Tạo {{ $resourceTitle }}</a>@endif
                             </td>
                         </tr>
                     @endforelse

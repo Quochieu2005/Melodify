@@ -45,7 +45,28 @@
                     </div>
                 </div>
             </div>
-            <fieldset class="admin-form-group admin-form-span admin-permission-group"><legend class="admin-form-label">Chức năng được phép</legend><p class="admin-field-help">Chỉ áp dụng cho Admin nhỏ. Admin lớn luôn có toàn quyền.</p><div class="admin-permission-options">@foreach($fields['permissions']['options'] ?? [] as $permission => $option)<label class="admin-checkbox-card"><input type="checkbox" name="permissions[]" value="{{ $permission }}" @checked(in_array($permission, old('permissions', $item?->permissions ?? []), true))><span><strong>{{ $option['label'] }}</strong><small>{{ $option['description'] }}</small></span></label>@endforeach</div>@error('permissions')<p class="admin-field-error">{{ $message }}</p>@enderror</fieldset>
+            @php($selectedPermissions = array_values((array) old('permissions', $item?->permissions ?? [])))
+            @php($selectedRole = old('role', $item?->role ?? 'admin'))
+            <fieldset class="admin-form-group admin-form-span admin-permission-group">
+                <legend class="admin-form-label">Chức năng được phép</legend>
+                <p class="admin-field-help">Quyền chung cho phép Thêm, Sửa và Xóa toàn bộ phần Admin, ngoại trừ mục Quản trị viên. Các nhóm quyền cũ bên dưới vẫn hoạt động độc lập.</p>
+                <div class="admin-permission-options">
+                    @if(in_array('banners.manage', $selectedPermissions, true) && $selectedRole !== 'super_admin')
+                        <input type="hidden" name="permissions[]" value="banners.manage">
+                    @endif
+                    @foreach(config('admin-permissions.groups', []) as $permission => $option)
+                        @continue($option['hidden'] ?? false)
+                        <label class="admin-checkbox-card">
+                            <input type="checkbox" name="permissions[]" value="{{ $permission }}"
+                                @checked($selectedRole === 'super_admin' || in_array($permission, $selectedPermissions, true))
+                                @disabled($selectedRole === 'super_admin')>
+                            <span><strong>{{ $option['label'] }}</strong><small>{{ $option['description'] }}</small></span>
+                        </label>
+                    @endforeach
+                </div>
+                @error('permissions')<p class="admin-field-error">{{ $message }}</p>@enderror
+                @error('permissions.*')<p class="admin-field-error">{{ $message }}</p>@enderror
+            </fieldset>
         </div>
         <div class="admin-form-actions admin-resource-form-actions"><a href="{{ route('admin.admins.index') }}" class="ant-btn">Hủy</a><button class="ant-btn ant-btn-primary" type="submit">{{ $isEditing ? 'Lưu thay đổi' : 'Tạo quản trị viên' }}</button></div>
     </form>

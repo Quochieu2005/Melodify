@@ -66,6 +66,8 @@ class AdminResourceRequest extends FormRequest
                 'user_id' => ['nullable', 'string', 'max:64'],
                 'bio' => ['nullable', 'string', 'max:2000', new PlainText()],
                 'avatar_url' => ['nullable', 'url:http,https', 'max:500', new PlainText()],
+                'avatar_file' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=4000,max_height=4000'],
+                'remove_avatar' => ['nullable', 'boolean'],
                 'verified' => ['nullable', 'boolean'],
                 'status' => ['required', 'in:active,inactive,blocked'],
             ],
@@ -111,7 +113,7 @@ class AdminResourceRequest extends FormRequest
                 'slug' => ['nullable', 'alpha_dash', 'max:140', new PlainText(), Rule::unique('admins', 'slug')->ignore($routeId)],
                 'role' => ['required', 'in:super_admin,admin'],
                 'permissions' => ['nullable', 'array'],
-                'permissions.*' => ['string', Rule::in(array_keys(config('admin-permissions.groups', [])))],
+                'permissions.*' => ['string', Rule::in(config('admin-permissions.permission_keys', array_keys(config('admin-permissions.groups', []))))],
                 'status' => ['required', 'in:active,inactive'],
                 'password' => ['nullable', 'string', 'min:8', 'max:72', 'confirmed'],
                 'avatar_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
@@ -130,6 +132,10 @@ class AdminResourceRequest extends FormRequest
         }
 
         $validator->after(function ($validator): void {
+            if ($this->route()?->getName() && str_contains($this->route()->getName(), 'artists') && $this->hasFile('avatar_file') && filled($this->input('avatar_url'))) {
+                $validator->errors()->add('avatar_file', 'Chỉ chọn một cách: tải ảnh lên hoặc nhập URL ảnh đại diện.');
+            }
+
             if ($this->route()?->getName() && str_contains($this->route()->getName(), 'albums') && ! Artist::query()->find($this->input('artist_id'))) {
                 $validator->errors()->add('artist_id', 'Nghệ sĩ đã chọn không tồn tại.');
             }

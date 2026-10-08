@@ -3,6 +3,10 @@
 @section('content')
 <section class="admin-page">
     @php($isSuperAdmin = auth('admin')->user()?->role === 'super_admin')
+    @php($currentAdmin = auth('admin')->user())
+    @php($canCreate = $resource !== 'admins' && $currentAdmin?->hasAdminResourcePermission($resource, 'create'))
+    @php($canUpdate = $resource !== 'admins' && $currentAdmin?->hasAdminResourcePermission($resource, 'update'))
+    @php($canDelete = $resource !== 'admins' && $currentAdmin?->hasAdminResourcePermission($resource, 'delete'))
     <div class="admin-page-header">
         <div class="admin-page-header-main">
             <h1 class="admin-page-title">Quản lý {{ $resourceTitle }}</h1>
@@ -17,7 +21,7 @@
                     </button>
                 </form>
             @endif
-            @if($resource !== 'users' && ($resource !== 'admins' || $isSuperAdmin))
+            @if(($resource !== 'users' && $canCreate) || ($resource === 'admins' && $isSuperAdmin))
                 <a href="{{ route("admin.$resource.create") }}" class="ant-btn ant-btn-primary admin-create-btn"><span aria-hidden="true">+</span> Thêm mới</a>
             @endif
         </div>
@@ -61,6 +65,14 @@
                                                 <span aria-label="Chữ cái đầu tên quản trị viên">{{ mb_strtoupper(mb_substr($item->name ?: 'A', 0, 1)) }}</span>
                                             @endif
                                         </div>
+                                    @elseif(in_array($key, ['avatar_url', 'image_url', 'cover_url'], true))
+                                        @if(filled($value))
+                                            <div class="admin-table-avatar">
+                                                <img src="{{ $value }}" alt="Ảnh {{ data_get($item, 'name', data_get($item, 'title', 'Melodify')) }}" loading="lazy">
+                                            </div>
+                                        @else
+                                            <span class="admin-catalog-image-empty">Chưa có ảnh</span>
+                                        @endif
                                     @elseif($key === 'must_change_password')
                                         <span class="admin-status-indicator is-active" role="status" aria-label="Trạng thái mật khẩu: {{ $value ? 'Chưa đổi' : 'Đã đổi' }}">
                                             <span class="admin-status-toggle-dot" aria-hidden="true"></span>
@@ -85,7 +97,17 @@
                                             <span class="ant-tag {{ $value === 'active' ? 'ant-tag-green' : 'ant-tag-default' }}">{{ $value === 'active' ? 'Hoạt động' : 'Đã tắt' }}</span>
                                         @endif
                                     @elseif($key === 'status')
-                                        <span class="ant-tag {{ in_array($value, ['active', 'published'], true) ? 'ant-tag-green' : 'ant-tag-default' }}">{{ $value ?: '—' }}</span>
+                                        @if($canUpdate && \Illuminate\Support\Facades\Route::has("admin.$resource.status"))
+                                            <form action="{{ route("admin.$resource.status", $item->getKey()) }}" method="POST" class="admin-inline-form">
+                                                @csrf @method('PATCH')
+                                                <button type="submit" class="admin-status-toggle {{ in_array($value, ['active', 'published'], true) ? 'is-active' : 'is-inactive' }}" title="Chuyển trạng thái">
+                                                    <span class="admin-status-toggle-dot" aria-hidden="true"></span>
+                                                    {{ in_array($value, ['active', 'published'], true) ? 'Hoạt động' : 'Tạm ẩn' }}
+                                                </button>
+                                            </form>
+                                        @else
+                                            <span class="ant-tag {{ in_array($value, ['active', 'published'], true) ? 'ant-tag-green' : 'ant-tag-default' }}">{{ $value ?: '—' }}</span>
+                                        @endif
                                     @else
                                         {{ filled($value) ? $value : '—' }}
                                     @endif
@@ -93,11 +115,14 @@
                             @endforeach
                             <td class="admin-table-actions">
                                 @if($resource !== 'admins')
-                                    <a href="{{ route("admin.$resource.edit", $item->getKey()) }}" class="admin-action-link">Sửa</a>
-                                    <form action="{{ route("admin.$resource.destroy", $item->getKey()) }}" method="POST" class="admin-inline-form" data-confirm-delete>
-                                        @csrf @method('DELETE')
-                                        <button type="submit" class="admin-action-link admin-action-danger">Xóa</button>
-                                    </form>
+                                    @if($canUpdate)<a href="{{ route("admin.$resource.edit", $item->getKey()) }}" class="admin-action-link">Sửa</a>@endif
+                                    @if($canDelete)
+                                        <form action="{{ route("admin.$resource.destroy", $item->getKey()) }}" method="POST" class="admin-inline-form" data-confirm-delete>
+                                            @csrf @method('DELETE')
+                                            <button type="submit" class="admin-action-link admin-action-danger">Xóa</button>
+                                        </form>
+                                    @endif
+                                    @if(! $canUpdate && ! $canDelete)<span class="admin-text-muted">—</span>@endif
                                 @elseif((string) $item->getKey() === (string) auth('admin')->id())
                                     <a href="{{ route("admin.$resource.edit", $item->getKey()) }}" class="admin-action-link">Sửa</a>
                                 @elseif($isSuperAdmin && $item->role !== 'super_admin')
@@ -118,7 +143,7 @@
                                 @else
                                     <span>Tạo mục đầu tiên để bắt đầu quản lý dữ liệu.</span>
                                 @endif
-                                @if($resource !== 'users' && ($resource !== 'admins' || $isSuperAdmin))
+                                @if(($resource !== 'users' && $canCreate) || ($resource === 'admins' && $isSuperAdmin))
                                     <a href="{{ route("admin.$resource.create") }}" class="ant-btn">Tạo {{ $resourceTitle }}</a>
                                 @endif
                             </td>

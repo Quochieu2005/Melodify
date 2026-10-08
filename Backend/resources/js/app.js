@@ -213,6 +213,110 @@ document.addEventListener('DOMContentLoaded', () => {
         avatarPreview.append(image);
     });
 
+    const artistAvatarUrl = document.querySelector('[data-artist-avatar-url]');
+    const artistAvatarFile = document.querySelector('[data-artist-avatar-file]');
+    const artistAvatarFileName = document.querySelector('[data-artist-avatar-file-name]');
+    const artistAvatarPreview = document.querySelector('[data-artist-avatar-preview]');
+    const artistNameInput = document.querySelector('#artist-name');
+    const artistNamePreview = document.querySelector('[data-artist-name-preview]');
+
+    if (artistAvatarUrl && artistAvatarFile && artistAvatarPreview) {
+        const fallback = artistAvatarPreview.dataset.fallback || 'N';
+        const renderFallback = () => {
+            artistAvatarPreview.replaceChildren();
+            const fallbackText = document.createElement('span');
+            fallbackText.textContent = fallback;
+            artistAvatarPreview.append(fallbackText);
+        };
+
+        const renderArtistAvatar = () => {
+            const url = artistAvatarUrl.value.trim();
+            if (!url) {
+                renderFallback();
+                return;
+            }
+
+            const image = document.createElement('img');
+            image.alt = 'Ảnh đại diện nghệ sĩ';
+            image.src = url;
+            image.addEventListener('error', renderFallback, { once: true });
+            artistAvatarPreview.replaceChildren(image);
+        };
+
+        artistAvatarUrl.addEventListener('input', () => {
+            if (artistAvatarUrl.value.trim()) {
+                artistAvatarFile.value = '';
+                if (artistAvatarFileName) artistAvatarFileName.textContent = 'Chưa chọn tệp.';
+            }
+            renderArtistAvatar();
+        });
+        artistAvatarUrl.addEventListener('change', renderArtistAvatar);
+        artistAvatarFile.addEventListener('change', () => {
+            const [file] = artistAvatarFile.files || [];
+            if (!file) {
+                if (artistAvatarFileName) artistAvatarFileName.textContent = 'Chưa chọn tệp.';
+                return;
+            }
+
+            artistAvatarUrl.value = '';
+            if (artistAvatarFileName) artistAvatarFileName.textContent = `Đã chọn: ${file.name}`;
+
+            const imageUrl = URL.createObjectURL(file);
+            const image = document.createElement('img');
+            image.alt = 'Ảnh đại diện mới';
+            image.src = imageUrl;
+            image.onload = () => URL.revokeObjectURL(imageUrl);
+            image.addEventListener('error', renderFallback, { once: true });
+            artistAvatarPreview.replaceChildren(image);
+        });
+    }
+
+    artistNameInput?.addEventListener('input', () => {
+        if (artistNamePreview) artistNamePreview.textContent = artistNameInput.value.trim() || 'Tên nghệ sĩ';
+    });
+
+    const topicImageInput = document.querySelector('[data-topic-image-input]');
+    const topicImagePreview = document.querySelector('[data-topic-image-preview]');
+    const topicImageLibrary = document.querySelectorAll('[data-topic-image-library]');
+
+    if (topicImageInput && topicImagePreview) {
+        const renderTopicImage = (imageUrl, caption, temporary = false) => {
+            topicImagePreview.replaceChildren();
+
+            if (!imageUrl) {
+                const empty = document.createElement('span');
+                empty.textContent = 'Chưa có ảnh xem trước';
+                topicImagePreview.append(empty);
+                return;
+            }
+
+            const image = document.createElement('img');
+            image.src = imageUrl;
+            image.alt = 'Ảnh chủ đề xem trước';
+            if (temporary) image.onload = () => URL.revokeObjectURL(imageUrl);
+
+            const label = document.createElement('span');
+            label.textContent = caption;
+            topicImagePreview.append(image, label);
+        };
+
+        topicImageInput.addEventListener('change', () => {
+            const [file] = topicImageInput.files || [];
+            if (!file) return;
+
+            topicImageLibrary.forEach((radio) => {
+                radio.checked = false;
+            });
+            renderTopicImage(URL.createObjectURL(file), `Ảnh mới: ${file.name}`, true);
+        });
+
+        topicImageLibrary.forEach((radio) => {
+            radio.addEventListener('change', () => {
+                if (radio.checked) renderTopicImage(radio.dataset.imageUrl, 'Ảnh đã lưu trong kho');
+            });
+        });
+    }
+
     const bannerInput = document.querySelector('[data-banner-input]');
     const bannerPreview = document.querySelector('[data-banner-preview]');
     const bannerFileName = document.querySelector('[data-banner-file-name]');

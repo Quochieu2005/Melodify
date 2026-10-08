@@ -26,13 +26,21 @@
             @php($currentImageUrl = $item?->image_url)
             <aside class="admin-media-library">
                 <div class="admin-media-library-heading"><div><strong>Ảnh chủ đề</strong><span>Kho Cloudinary: melodify</span></div>@if(filled($currentImageUrl))<span class="ant-tag ant-tag-green">Đang dùng ảnh</span>@endif</div>
-                <label class="admin-media-upload"><input type="file" name="image" accept="image/jpeg,image/png,image/webp"><span class="admin-media-upload-icon">↑</span><span><strong>Tải ảnh mới</strong><small>JPG, PNG hoặc WEBP · tối đa 5MB</small></span></label>
+                <div class="admin-media-preview" data-topic-image-preview>
+                    @if(filled($currentImageUrl))
+                        <img src="{{ $currentImageUrl }}" alt="Ảnh chủ đề hiện tại">
+                        <span>Ảnh hiện tại</span>
+                    @else
+                        <span>Chưa có ảnh xem trước</span>
+                    @endif
+                </div>
+                <label class="admin-media-upload"><input type="file" name="image" accept="image/jpeg,image/png,image/webp" data-topic-image-input><span class="admin-media-upload-icon">↑</span><span><strong>Tải ảnh mới</strong><small>JPG, PNG hoặc WEBP · tối đa 5MB</small></span></label>
                 @error('image')<p class="admin-field-error">{{ $message }}</p>@enderror
                 @error('image_asset_id')<p class="admin-field-error">{{ $message }}</p>@enderror
                 <div class="admin-media-library-title">Chọn ảnh đã lưu</div>
                 <div class="admin-media-grid">
                     @forelse($mediaAssets as $asset)
-                        <label class="admin-media-card"><input type="radio" name="image_asset_id" value="{{ $asset->getKey() }}" @checked((string) old('image_asset_id') === (string) $asset->getKey() || (!old('image_asset_id') && $currentPublicId === $asset->public_id))><img src="{{ $asset->secure_url }}" alt="{{ $asset->original_name ?: 'Ảnh Melodify' }}"><span>{{ \Illuminate\Support\Str::limit($asset->original_name ?: 'Ảnh đã lưu', 22) }}</span></label>
+                        <label class="admin-media-card"><input type="radio" name="image_asset_id" value="{{ $asset->getKey() }}" data-topic-image-library data-image-url="{{ $asset->secure_url }}" @checked((string) old('image_asset_id') === (string) $asset->getKey() || (!old('image_asset_id') && $currentPublicId === $asset->public_id))><img src="{{ $asset->secure_url }}" alt="{{ $asset->original_name ?: 'Ảnh Melodify' }}"><span>{{ \Illuminate\Support\Str::limit($asset->original_name ?: 'Ảnh đã lưu', 22) }}</span></label>
                     @empty
                         <div class="admin-media-empty">Chưa có ảnh trong kho. Hãy tải ảnh đầu tiên.</div>
                     @endforelse

@@ -117,6 +117,7 @@ abstract class MediaCatalogController extends Controller
             $item ? data_get($item, $this->imageUrlField) : null,
             $item ? data_get($item, $this->imagePublicIdField) : null,
             $item === null,
+            $data[$this->slugField] ?? null,
         );
         $data[$this->imageUrlField] = $media['url'];
         $data[$this->imagePublicIdField] = $media['public_id'];

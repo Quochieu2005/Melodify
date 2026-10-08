@@ -41,13 +41,7 @@ class AdminManagementController extends CrudResourceController
         'email' => ['label' => 'Email', 'type' => 'email', 'required' => true],
         'slug' => ['label' => 'Slug', 'help' => 'Để trống để tự tạo theo họ tên; nếu tự nhập thì slug không được trùng.'],
         'role' => ['label' => 'Phân quyền', 'type' => 'select', 'required' => true, 'default' => 'admin', 'help' => 'Admin lớn có toàn quyền; Admin nhỏ không thể quản lý tài khoản quản trị.', 'options' => ['super_admin' => 'Admin lớn', 'admin' => 'Admin nhỏ']],
-        'permissions' => ['label' => 'Chức năng được phép', 'type' => 'checkbox_group', 'help' => 'Chỉ áp dụng cho Admin nhỏ. Admin lớn luôn có toàn quyền.', 'options' => [
-            'content.manage' => ['label' => 'Nội dung âm nhạc', 'description' => 'Bài hát, album, thể loại, playlist và nghệ sĩ.'],
-            'banners.manage' => ['label' => 'Banner', 'description' => 'Tạo, sắp xếp, cập nhật và xóa banner.'],
-            'users.manage' => ['label' => 'Người dùng', 'description' => 'Xem, sửa và khóa tài khoản người dùng đã đăng ký.'],
-            'billing.manage' => ['label' => 'Gói và thanh toán', 'description' => 'Gói đăng ký và lịch sử giao dịch.'],
-            'moderation.manage' => ['label' => 'Kiểm duyệt', 'description' => 'Bình luận và báo cáo vi phạm.'],
-        ]],
+        'permissions' => ['label' => 'Chức năng được phép', 'type' => 'permission_matrix', 'help' => 'Chỉ áp dụng cho Admin nhỏ. Admin lớn luôn có toàn quyền.'],
         'status' => ['label' => 'Trạng thái', 'type' => 'select', 'required' => true, 'default' => 'active', 'options' => ['active' => 'Hoạt động', 'inactive' => 'Tạm khóa']],
     ];
 
@@ -71,7 +65,7 @@ class AdminManagementController extends CrudResourceController
 
         try {
             if ($avatarFile instanceof UploadedFile) {
-                $uploaded = $this->uploadAvatar($cloudinary, $avatarFile);
+                $uploaded = $this->uploadAvatar($cloudinary, $avatarFile, (string) $data['slug']);
                 $data = array_merge($data, $uploaded);
             }
 
@@ -113,7 +107,7 @@ class AdminManagementController extends CrudResourceController
             $data['role'] = 'super_admin';
             $data['status'] = 'active';
             $data['is_active'] = true;
-            $data['permissions'] = array_keys(config('admin-permissions.groups', []));
+            $data['permissions'] = config('admin-permissions.permission_keys', array_keys(config('admin-permissions.groups', [])));
         } else {
             // Self-edit is limited to profile data; never allow role or access escalation.
             $data['role'] = 'admin';
@@ -127,7 +121,7 @@ class AdminManagementController extends CrudResourceController
 
         try {
             if ($avatarFile instanceof UploadedFile) {
-                $uploaded = $this->uploadAvatar($cloudinary, $avatarFile);
+                $uploaded = $this->uploadAvatar($cloudinary, $avatarFile, (string) $data['slug']);
                 $data = array_merge($data, $uploaded);
             } elseif ($removeAvatar) {
                 $data['avatar'] = null;
@@ -302,7 +296,7 @@ class AdminManagementController extends CrudResourceController
             : $slug;
 
         $data['is_active'] = ($data['status'] ?? 'inactive') === 'active';
-        $availablePermissions = array_keys(config('admin-permissions.groups', []));
+        $availablePermissions = config('admin-permissions.permission_keys', array_keys(config('admin-permissions.groups', [])));
 
         $data['permissions'] = $data['role'] === 'super_admin'
             ? $availablePermissions
@@ -335,9 +329,13 @@ class AdminManagementController extends CrudResourceController
     /**
      * @return array{avatar: string, avatar_public_id: string|null}
      */
-    private function uploadAvatar(CloudinaryService $cloudinary, UploadedFile $file): array
+    private function uploadAvatar(CloudinaryService $cloudinary, UploadedFile $file, string $slug): array
     {
-        $uploaded = $cloudinary->uploadImage($file, config('cloudinary.admin_folder', 'admin'));
+        $uploaded = $cloudinary->uploadImage(
+            $file,
+            config('cloudinary.admin_folder', 'admin'),
+            $cloudinary->datedPublicId($slug),
+        );
         $url = $uploaded['secure_url'] ?? $uploaded['url'] ?? null;
 
         if (blank($url)) {

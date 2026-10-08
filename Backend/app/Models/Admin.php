@@ -35,7 +35,61 @@ class Admin extends Authenticatable implements CanResetPasswordContract
 
     public function hasAdminPermission(string $permission): bool
     {
-        return $this->role === 'super_admin' || in_array($permission, $this->permissions ?? [], true);
+        if ($this->role === 'super_admin') {
+            return true;
+        }
+
+        $permissions = array_values((array) ($this->permissions ?? []));
+        if (in_array($permission, $permissions, true)) {
+            return true;
+        }
+
+        if ($permission !== 'admins.manage' && in_array('admin.manage', $permissions, true)) {
+            return true;
+        }
+
+        if (! str_ends_with($permission, '.manage')) {
+            return false;
+        }
+
+        foreach ((array) config('admin-permissions.resource_groups', []) as $resource => $group) {
+            if ($group === $permission && $this->hasAdminResourcePermission($resource, 'view')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function hasAdminResourcePermission(string $resource, string $action): bool
+    {
+        if ($this->role === 'super_admin') {
+            return true;
+        }
+
+        $permissions = array_values((array) ($this->permissions ?? []));
+        $group = config("admin-permissions.resource_groups.{$resource}");
+
+        if ($resource !== 'admins' && in_array('admin.manage', $permissions, true)) {
+            return true;
+        }
+
+        if (in_array("{$resource}.{$action}", $permissions, true)
+            || in_array("{$resource}.manage", $permissions, true)
+            || ($group && in_array($group, $permissions, true))) {
+            return true;
+        }
+
+        if ($action !== 'view') {
+            return false;
+        }
+
+        return collect($permissions)->contains(function (string $permission) use ($resource): bool {
+            [$permissionResource, $permissionAction] = array_pad(explode('.', $permission, 2), 2, null);
+
+            return $permissionResource === $resource
+                && in_array($permissionAction, ['create', 'update', 'delete', 'view', 'manage'], true);
+        });
     }
 
     public function songs()
