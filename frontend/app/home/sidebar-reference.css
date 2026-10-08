@@ -45,7 +45,8 @@ aside:has(> nav[aria-label='Điều hướng chính']) > nav {
   padding: 0 14px !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) nav a {
+aside:has(> nav[aria-label='Điều hướng chính']) nav a,
+aside:has(> nav[aria-label='Điều hướng chính']) nav button {
   min-height: 49px;
   gap: 4px !important;
   border-radius: 999px !important;
@@ -55,25 +56,29 @@ aside:has(> nav[aria-label='Điều hướng chính']) nav a {
   font-weight: 700 !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) nav a[aria-current='page'] {
+aside:has(> nav[aria-label='Điều hướng chính']) nav a[aria-current='page'],
+aside:has(> nav[aria-label='Điều hướng chính']) nav button[aria-current='page'] {
   background: rgba(157, 167, 163, 0.38) !important;
   color: #fff !important;
   box-shadow: none !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) nav a:hover {
+aside:has(> nav[aria-label='Điều hướng chính']) nav a:hover,
+aside:has(> nav[aria-label='Điều hướng chính']) nav button:hover {
   background: transparent !important;
   color: white !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) nav a > span:first-child {
+aside:has(> nav[aria-label='Điều hướng chính']) nav a > span:first-child,
+aside:has(> nav[aria-label='Điều hướng chính']) nav button > span:first-child {
   width: 24px !important;
   height: 24px !important;
   color: inherit;
   font-size: 25px !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) nav a[aria-current='page'] > span:first-child {
+aside:has(> nav[aria-label='Điều hướng chính']) nav a[aria-current='page'] > span:first-child,
+aside:has(> nav[aria-label='Điều hướng chính']) nav button[aria-current='page'] > span:first-child {
   color: #78d7df;
 }
 
@@ -95,7 +100,8 @@ aside:has(> nav[aria-label='Điều hướng chính']) > section > div {
   margin-top: 11px !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) > section a {
+aside:has(> nav[aria-label='Điều hướng chính']) > section a,
+aside:has(> nav[aria-label='Điều hướng chính']) > section button {
   min-height: 49px;
   gap: 8px !important;
   border-radius: 999px !important;
@@ -105,12 +111,14 @@ aside:has(> nav[aria-label='Điều hướng chính']) > section a {
   font-weight: 700 !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) > section a:hover {
+aside:has(> nav[aria-label='Điều hướng chính']) > section a:hover,
+aside:has(> nav[aria-label='Điều hướng chính']) > section button:hover {
   background: transparent !important;
   color: white !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) > section a > span:first-child {
+aside:has(> nav[aria-label='Điều hướng chính']) > section a > span:first-child,
+aside:has(> nav[aria-label='Điều hướng chính']) > section button > span:first-child {
   width: 32px !important;
   height: 32px !important;
   flex: 0 0 32px;

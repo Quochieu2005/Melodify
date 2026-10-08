@@ -1,10 +1,12 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect, useReducer, type ReactNode } from 'react';
 
 import SearchBox from './SearchBox';
 import SettingsMenu from './SettingsMenu';
+import { useLoginModal } from '@/components/auth/LoginModalProvider';
 
 const homeRoute = '/home';
 const roundButtonClass =
@@ -61,6 +63,8 @@ function IconButton({ label, children, onClick, disabled = false }: IconButtonPr
 }
 
 export default function Header() {
+  const router = useRouter();
+  const { openLogin } = useLoginModal();
   const pathname = usePathname();
   const [navigation, dispatch] = useReducer(navigationReducer, {
     entries: [homeRoute],
@@ -107,7 +111,7 @@ export default function Header() {
         <SearchBox />
 
         <div className="ml-auto flex shrink-0 items-center gap-3">
-          <IconButton label="Tải nhạc lên">
+          <IconButton label="Tải nhạc lên" onClick={() => router.push('/upload')}>
             <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-2"><path d="M12 16V3m0 0L7.5 7.5M12 3l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </IconButton>
 
@@ -117,7 +121,7 @@ export default function Header() {
           </button>
 
           <button type="button" className="hidden h-12 cursor-pointer rounded-full bg-[#071817] px-6 text-sm font-bold text-[#ffc36b] outline-none transition-colors hover:bg-black focus-visible:ring-2 focus-visible:ring-cyan-300 2xl:block">Trung tâm VIP</button>
-          <button type="button" className="h-12 cursor-pointer rounded-full bg-[#08c6d9] px-5 text-sm font-bold text-[#07363a] outline-none transition-colors hover:bg-[#22d7e7] focus-visible:ring-2 focus-visible:ring-white">Đăng nhập</button>
+          <button type="button" onClick={openLogin} className="h-12 cursor-pointer rounded-full bg-[#08c6d9] px-5 text-sm font-bold text-[#07363a] outline-none transition-colors hover:bg-[#22d7e7] focus-visible:ring-2 focus-visible:ring-white">Đăng nhập</button>
 
           <SettingsMenu />
         </div>
