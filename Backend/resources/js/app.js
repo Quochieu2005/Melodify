@@ -115,6 +115,56 @@ document.addEventListener('DOMContentLoaded', () => {
         updateBannerSelection();
     }
 
+    const catalogSelectAll = document.querySelector('[data-catalog-select-all]');
+    const catalogSelections = [...document.querySelectorAll('[data-catalog-select]')];
+    const catalogBulkDelete = document.querySelector('[data-catalog-bulk-delete]');
+    const catalogSelectedCount = document.querySelector('[data-catalog-selected-count]');
+
+    if (catalogSelectAll && catalogBulkDelete) {
+        const updateCatalogSelection = () => {
+            const selectedCount = catalogSelections.filter((input) => input.checked).length;
+            catalogBulkDelete.disabled = selectedCount === 0;
+            catalogSelectAll.checked = catalogSelections.length > 0 && selectedCount === catalogSelections.length;
+            catalogSelectAll.indeterminate = selectedCount > 0 && selectedCount < catalogSelections.length;
+            if (catalogSelectedCount) catalogSelectedCount.textContent = `(${selectedCount})`;
+        };
+
+        catalogSelectAll.addEventListener('change', () => {
+            catalogSelections.forEach((input) => {
+                input.checked = catalogSelectAll.checked;
+            });
+            updateCatalogSelection();
+        });
+
+        catalogSelections.forEach((input) => input.addEventListener('change', updateCatalogSelection));
+        updateCatalogSelection();
+    }
+
+    const songSelectAll = document.querySelector('[data-song-select-all]');
+    const songSelections = [...document.querySelectorAll('[data-song-select]')];
+    const songBulkDelete = document.querySelector('[data-song-bulk-delete]');
+    const songSelectedCount = document.querySelector('[data-song-selected-count]');
+
+    if (songSelectAll && songBulkDelete) {
+        const updateSongSelection = () => {
+            const selectedCount = songSelections.filter((input) => input.checked).length;
+            songBulkDelete.disabled = selectedCount === 0;
+            songSelectAll.checked = songSelections.length > 0 && selectedCount === songSelections.length;
+            songSelectAll.indeterminate = selectedCount > 0 && selectedCount < songSelections.length;
+            if (songSelectedCount) songSelectedCount.textContent = `(${selectedCount})`;
+        };
+
+        songSelectAll.addEventListener('change', () => {
+            songSelections.forEach((input) => {
+                input.checked = songSelectAll.checked;
+            });
+            updateSongSelection();
+        });
+
+        songSelections.forEach((input) => input.addEventListener('change', updateSongSelection));
+        updateSongSelection();
+    }
+
     const otpForm = document.querySelector('[data-otp-form]');
     if (otpForm) {
         const otpInput = otpForm.querySelector('#otp-code');
@@ -186,16 +236,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const sortOrderInput = document.querySelector('#banner-sort-order');
-    const selectDefaultSortOrder = () => {
-        if (sortOrderInput?.value === '0') sortOrderInput.select();
-    };
+    document.querySelectorAll('input[type="number"][name="sort_order"]').forEach((sortOrderInput) => {
+        const normalizeSortOrder = () => {
+            if (/^\d+$/.test(sortOrderInput.value)) {
+                sortOrderInput.value = String(Number(sortOrderInput.value));
+            }
+        };
 
-    sortOrderInput?.addEventListener('focus', selectDefaultSortOrder);
-    sortOrderInput?.addEventListener('keydown', (event) => {
-        if (sortOrderInput.value === '0' && /^\d$/.test(event.key)) {
-            sortOrderInput.select();
-        }
+        if (sortOrderInput.value === '0') sortOrderInput.select();
+        sortOrderInput.addEventListener('focus', () => {
+            if (sortOrderInput.value === '0') sortOrderInput.select();
+        });
+        sortOrderInput.addEventListener('keydown', (event) => {
+            if (sortOrderInput.value === '0' && /^\d$/.test(event.key)) {
+                sortOrderInput.select();
+            }
+        });
+        sortOrderInput.addEventListener('input', normalizeSortOrder);
+        sortOrderInput.addEventListener('blur', normalizeSortOrder);
     });
 
     const avatarInput = document.querySelector('[data-avatar-input]');
@@ -316,6 +374,80 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+
+    const playlistImageInput = document.querySelector('[data-playlist-image-input]');
+    const playlistImagePreview = document.querySelector('[data-playlist-image-preview]');
+    const playlistImageLibrary = document.querySelectorAll('[data-playlist-image-library]');
+
+    if (playlistImageInput && playlistImagePreview) {
+        const renderPlaylistImage = (imageUrl, caption, temporary = false) => {
+            playlistImagePreview.replaceChildren();
+
+            if (!imageUrl) {
+                const empty = document.createElement('span');
+                empty.textContent = 'Chưa có ảnh xem trước';
+                playlistImagePreview.append(empty);
+                return;
+            }
+
+            const image = document.createElement('img');
+            image.src = imageUrl;
+            image.alt = 'Ảnh bìa playlist xem trước';
+            if (temporary) image.onload = () => URL.revokeObjectURL(imageUrl);
+
+            const label = document.createElement('span');
+            label.textContent = caption;
+            playlistImagePreview.append(image, label);
+        };
+
+        playlistImageInput.addEventListener('change', () => {
+            const [file] = playlistImageInput.files || [];
+            if (!file) return;
+
+            playlistImageLibrary.forEach((radio) => {
+                radio.checked = false;
+            });
+            renderPlaylistImage(URL.createObjectURL(file), `Ảnh mới: ${file.name}`, true);
+        });
+
+        playlistImageLibrary.forEach((radio) => {
+            radio.addEventListener('change', () => {
+                if (!radio.checked) return;
+
+                playlistImageInput.value = '';
+                renderPlaylistImage(radio.dataset.imageUrl, 'Ảnh đã lưu trong kho');
+            });
+        });
+
+        const selectedLibraryImage = [...playlistImageLibrary].find((radio) => radio.checked);
+        if (selectedLibraryImage) {
+            renderPlaylistImage(selectedLibraryImage.dataset.imageUrl, 'Ảnh đã lưu trong kho');
+        }
+    }
+
+    const topicType = document.querySelector('[data-topic-type]');
+    const topicTypeCustomField = document.querySelector('[data-topic-type-custom-field]');
+    const topicTypeCustom = document.querySelector('[data-topic-type-custom]');
+    const syncTopicTypeCustom = () => {
+        const isCustom = topicType?.value === 'custom';
+        if (topicTypeCustomField) topicTypeCustomField.hidden = !isCustom;
+        if (topicTypeCustom) topicTypeCustom.required = isCustom;
+        if (!isCustom && topicTypeCustom) topicTypeCustom.value = '';
+    };
+    topicType?.addEventListener('change', syncTopicTypeCustom);
+    syncTopicTypeCustom();
+
+    const playlistType = document.querySelector('[data-playlist-type]');
+    const playlistTypeCustomField = document.querySelector('[data-playlist-type-custom-field]');
+    const playlistTypeCustom = document.querySelector('[data-playlist-type-custom]');
+    const syncPlaylistTypeCustom = () => {
+        const isCustom = playlistType?.value === 'custom';
+        if (playlistTypeCustomField) playlistTypeCustomField.hidden = !isCustom;
+        if (playlistTypeCustom) playlistTypeCustom.required = isCustom;
+        if (!isCustom && playlistTypeCustom) playlistTypeCustom.value = '';
+    };
+    playlistType?.addEventListener('change', syncPlaylistTypeCustom);
+    syncPlaylistTypeCustom();
 
     const bannerInput = document.querySelector('[data-banner-input]');
     const bannerPreview = document.querySelector('[data-banner-preview]');
@@ -499,12 +631,15 @@ document.addEventListener('DOMContentLoaded', () => {
             restoreFocusElement = submitter;
             if (form.matches('[data-confirm-delete-all]')) {
                 const totalCount = form.dataset.confirmDeleteCount || 'toàn bộ';
-                if (deleteTitle) deleteTitle.textContent = 'Xóa toàn bộ banner?';
-                if (deleteMessage) deleteMessage.textContent = `Bạn có chắc chắn muốn xóa tất cả ${totalCount} banner không? Dữ liệu đã xóa sẽ không thể khôi phục.`;
+                const resourceLabel = form.dataset.confirmResource || 'banner';
+                if (deleteTitle) deleteTitle.textContent = `Xóa toàn bộ ${resourceLabel}?`;
+                if (deleteMessage) deleteMessage.textContent = `Bạn có chắc chắn muốn xóa tất cả ${totalCount} ${resourceLabel} không? Dữ liệu đã xóa sẽ không thể khôi phục.`;
             } else if (form.matches('[data-confirm-delete-bulk]')) {
-                const selectedCount = document.querySelectorAll('[data-banner-select]:checked').length;
-                if (deleteTitle) deleteTitle.textContent = `Xóa ${selectedCount} banner đã chọn?`;
-                if (deleteMessage) deleteMessage.textContent = `Bạn có chắc chắn muốn xóa ${selectedCount} banner này không? Dữ liệu đã xóa sẽ không thể khôi phục.`;
+                const resourceLabel = form.dataset.confirmResource || 'banner';
+                const countSelector = form.dataset.confirmCountSelector || '[data-banner-select]:checked';
+                const selectedCount = document.querySelectorAll(countSelector).length;
+                if (deleteTitle) deleteTitle.textContent = `Xóa ${selectedCount} ${resourceLabel} đã chọn?`;
+                if (deleteMessage) deleteMessage.textContent = `Bạn có chắc chắn muốn xóa ${selectedCount} ${resourceLabel} này không? Dữ liệu đã xóa sẽ không thể khôi phục.`;
             } else {
                 if (deleteTitle) deleteTitle.textContent = defaultDeleteTitle;
                 if (deleteMessage) deleteMessage.textContent = defaultDeleteMessage;

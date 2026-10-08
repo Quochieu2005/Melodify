@@ -56,7 +56,7 @@
                         <th>Ảnh</th>
                         <th>Thông tin banner</th>
                         <th>URL đích</th>
-                        <th>Thứ tự</th>
+                        <th class="admin-sort-order-column">Thứ tự hiển thị</th>
                         <th>Trạng thái</th>
                         <th class="admin-table-actions">Hành động</th>
                     </tr>
@@ -89,7 +89,7 @@
                                     <span class="admin-text-muted">Không có liên kết</span>
                                 @endif
                             </td>
-                            <td><span class="admin-banner-order">{{ $item->sort_order }}</span></td>
+                            <td class="admin-sort-order-column"><span class="admin-banner-order">{{ $item->sort_order }}</span></td>
                             <td>
                                 <span class="ant-tag {{ $item->status === 'active' ? 'ant-tag-green' : 'ant-tag-default' }}">
                                     {{ $item->status === 'active' ? 'Đang hiển thị' : 'Tạm ẩn' }}

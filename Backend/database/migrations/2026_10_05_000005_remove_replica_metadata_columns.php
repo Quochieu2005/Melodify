@@ -11,7 +11,7 @@ return new class extends Migration
     private const TABLES = [
         'admins', 'users', 'artists', 'artist_followers', 'genres', 'albums',
         'songs', 'song_artists', 'song_genres', 'song_audio_files', 'lyrics',
-        'playlists', 'playlist_songs', 'favorites', 'listening_history', 'devices',
+        'playlists', 'playlist_songs', 'favorites', 'song_shares', 'listening_history', 'devices',
         'song_play_events', 'comments', 'comment_likes', 'notifications',
         'subscription_plans', 'subscriptions', 'payments', 'transactions',
         'payment_details', 'logs', 'reports', 'recommendations',

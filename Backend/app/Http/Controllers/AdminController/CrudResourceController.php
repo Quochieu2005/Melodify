@@ -4,6 +4,7 @@ namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminResourceRequest;
+use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -24,7 +25,7 @@ abstract class CrudResourceController extends Controller
 
     protected string $viewDirectory = 'Admin.crud';
 
-    public function index(): View
+    public function index(?Request $request = null): View
     {
         $items = ($this->model)::query()->latest()->paginate(10);
 
@@ -73,6 +74,52 @@ abstract class CrudResourceController extends Controller
         $item->delete();
 
         return back()->with('success', "Đã xóa {$this->title}.");
+    }
+
+    public function destroyBulk(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:50'],
+            'ids.*' => ['required', 'string', 'max:64', 'distinct'],
+        ], [
+            'ids.required' => "Hãy chọn ít nhất một {$this->title} để xóa.",
+            'ids.array' => 'Danh sách được chọn không hợp lệ.',
+            'ids.min' => "Hãy chọn ít nhất một {$this->title} để xóa.",
+            'ids.max' => 'Bạn chỉ được xóa tối đa 50 mục mỗi lần.',
+            'ids.*.distinct' => 'Các mục được chọn không được trùng lặp.',
+        ]);
+
+        $keyName = (new $this->model())->getKeyName();
+        $items = ($this->model)::query()
+            ->whereIn($keyName, array_values($data['ids']))
+            ->get();
+
+        if ($items->isEmpty()) {
+            return back()->withErrors([
+                'ids' => "Không tìm thấy {$this->title} nào phù hợp để xóa.",
+            ]);
+        }
+
+        foreach ($items as $item) {
+            $item->delete();
+        }
+
+        return back()->with('success', "Đã xóa {$items->count()} {$this->title} đã chọn.");
+    }
+
+    public function destroyAll(): RedirectResponse
+    {
+        $items = ($this->model)::query()->get();
+
+        if ($items->isEmpty()) {
+            return back()->with('warning', "Hiện chưa có {$this->title} nào để xóa.");
+        }
+
+        foreach ($items as $item) {
+            $item->delete();
+        }
+
+        return back()->with('success', "Đã xóa toàn bộ {$items->count()} {$this->title}.");
     }
 
     protected function normalize(array $data, mixed $ignoreId = null): array

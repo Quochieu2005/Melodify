@@ -22,6 +22,7 @@ class Song extends BaseModel
     public function playEvents() { return $this->hasMany(SongPlayEvent::class, 'song_id'); }
     public function comments() { return $this->hasMany(Comment::class, 'song_id'); }
     public function recommendations() { return $this->hasMany(Recommendation::class, 'song_id'); }
+    public function topicLinks() { return $this->hasMany(TopicSong::class, 'song_id'); }
     public function createdByArtist() { return $this->belongsTo(Artist::class, 'created_by_artist_id'); }
     public function createdByAdmin() { return $this->belongsTo(Admin::class, 'created_by_admin_id'); }
 }

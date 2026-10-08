@@ -216,6 +216,34 @@ body.admin-body {
     display: none;
 }
 
+.admin-catalog-sidebar-list {
+    list-style: none;
+    margin: -1px 0 5px 28px;
+    padding: 0 0 0 18px;
+    border-left: 1px solid var(--admin-border);
+}
+
+.admin-catalog-sidebar-list a {
+    border-radius: 6px;
+    color: var(--admin-text-secondary);
+    display: block;
+    font-size: 13px;
+    margin: 2px 0;
+    overflow: hidden;
+    padding: 7px 10px;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+.admin-catalog-sidebar-list a:hover,
+.admin-catalog-sidebar-list a.is-selected {
+    background: var(--admin-accent-soft);
+    color: var(--admin-accent-hover);
+    font-weight: 600;
+}
+
 /* Sidebar Footer */
 .admin-sider-footer {
     display: flex !important;
@@ -261,6 +289,7 @@ body.admin-body {
 .is-sidebar-collapsed .admin-menu .ant-menu-title-text,
 .is-sidebar-collapsed .admin-menu .ant-menu-submenu-arrow,
 .is-sidebar-collapsed .admin-sider-footer-text,
+.is-sidebar-collapsed .admin-catalog-sidebar-list,
 .is-sidebar-collapsed .admin-submenu-list {
     display: none !important;
 }

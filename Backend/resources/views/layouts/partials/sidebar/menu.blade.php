@@ -18,8 +18,8 @@
 
     {{-- Quản lý Nội dung --}}
     @if($currentAdmin?->hasAdminResourcePermission('songs', 'view') || $currentAdmin?->hasAdminResourcePermission('albums', 'view') || $currentAdmin?->hasAdminResourcePermission('topics', 'view') || $currentAdmin?->hasAdminResourcePermission('genres', 'view') || $currentAdmin?->hasAdminResourcePermission('playlists', 'view'))
-    <li class="ant-menu-submenu ant-menu-submenu-inline {{ request()->is('admin/songs*') || request()->is('admin/albums*') || request()->is('admin/topics*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'ant-menu-submenu-open ant-menu-submenu-selected' : '' }}" role="menuitem" data-menu-submenu>
-        <div class="ant-menu-submenu-title" role="button" aria-expanded="{{ request()->is('admin/songs*') || request()->is('admin/albums*') || request()->is('admin/topics*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'true' : 'false' }}" data-submenu-trigger>
+    <li class="ant-menu-submenu ant-menu-submenu-inline {{ request()->is('admin/songs*') || request()->is('admin/lyrics*') || request()->is('admin/analytics/song-views*') || request()->is('admin/albums*') || request()->is('admin/topics*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'ant-menu-submenu-open ant-menu-submenu-selected' : '' }}" role="menuitem" data-menu-submenu>
+        <div class="ant-menu-submenu-title" role="button" aria-expanded="{{ request()->is('admin/songs*') || request()->is('admin/lyrics*') || request()->is('admin/analytics/song-views*') || request()->is('admin/albums*') || request()->is('admin/topics*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'true' : 'false' }}" data-submenu-trigger>
             <span class="ant-menu-title-content">
                 <x-anticon name="customer-service" class="ant-menu-item-icon" />
                 <span class="ant-menu-title-text">Nội dung</span>
@@ -28,10 +28,26 @@
         </div>
         <ul class="ant-menu ant-menu-sub ant-menu-inline admin-submenu-list" role="menu">
             @if($currentAdmin?->hasAdminResourcePermission('songs', 'view'))
-            <li class="ant-menu-item {{ request()->is('admin/songs*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+            <li class="ant-menu-item {{ request()->is('admin/songs*') && !request()->is('admin/songs/*/lyrics') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/songs') }}" class="ant-menu-title-content">
                     <x-anticon name="sound" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Bài hát</span>
+                </a>
+            </li>
+            @endif
+            @if($currentAdmin?->hasAdminResourcePermission('songs', 'view'))
+            <li class="ant-menu-item {{ request()->is('admin/analytics/song-views*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+                <a href="{{ route('admin.analytics.song-views') }}" class="ant-menu-title-content">
+                    <x-anticon name="eye" class="ant-menu-item-icon" />
+                    <span class="ant-menu-title-text">Lượt xem bài hát</span>
+                </a>
+            </li>
+            @endif
+            @if($currentAdmin?->hasAdminResourcePermission('songs', 'view'))
+            <li class="ant-menu-item {{ request()->is('admin/lyrics*') || request()->is('admin/songs/*/lyrics') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+                <a href="{{ route('admin.lyrics.index') }}" class="ant-menu-title-content">
+                    <x-anticon name="file-text" class="ant-menu-item-icon" />
+                    <span class="ant-menu-title-text">Lời bài hát</span>
                 </a>
             </li>
             @endif
@@ -44,12 +60,23 @@
             </li>
             @endif
             @if($currentAdmin?->hasAdminResourcePermission('topics', 'view'))
-            <li class="ant-menu-item {{ request()->is('admin/topics*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+            <li class="ant-menu-item {{ request()->is('admin/topics*') && !request()->filled('type') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/topics') }}" class="ant-menu-title-content">
                     <x-anticon name="appstore" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Chủ đề</span>
                 </a>
             </li>
+            @if(request()->is('admin/topics*'))
+                <ul class="admin-catalog-sidebar-list" aria-label="Nhóm chủ đề">
+                    <li><a href="{{ route('admin.topics.index') }}" class="{{ !request()->filled('type') ? 'is-selected' : '' }}">Tất cả</a></li>
+                    @foreach(collect(config('topics.types', []))->except(['topic', 'custom']) as $value => $label)
+                        <li><a href="{{ route('admin.topics.index', ['type' => $value]) }}" class="{{ request('type') === $value ? 'is-selected' : '' }}">{{ $label }}</a></li>
+                    @endforeach
+                    @foreach($sidebarTopicCustomTypes ?? [] as $customType)
+                        <li><a href="{{ route('admin.topics.index', ['type' => 'custom:'.$customType]) }}" class="{{ request('type') === 'custom:'.$customType ? 'is-selected' : '' }}">{{ $customType }}</a></li>
+                    @endforeach
+                </ul>
+            @endif
             @endif
             @if($currentAdmin?->hasAdminResourcePermission('genres', 'view'))
             <li class="ant-menu-item {{ request()->is('admin/genres*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
@@ -60,12 +87,23 @@
             </li>
             @endif
             @if($currentAdmin?->hasAdminResourcePermission('playlists', 'view'))
-            <li class="ant-menu-item {{ request()->is('admin/playlists*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+            <li class="ant-menu-item {{ request()->is('admin/playlists*') && !request()->filled('type') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/playlists') }}" class="ant-menu-title-content">
                     <x-anticon name="unordered-list" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Playlist</span>
                 </a>
             </li>
+            @if(request()->is('admin/playlists*'))
+                <ul class="admin-catalog-sidebar-list" aria-label="Nhóm playlist">
+                    <li><a href="{{ route('admin.playlists.index') }}" class="{{ !request()->filled('type') ? 'is-selected' : '' }}">Tất cả</a></li>
+                    @foreach(collect(config('playlists.types', []))->except('custom') as $value => $label)
+                        <li><a href="{{ route('admin.playlists.index', ['type' => $value]) }}" class="{{ request('type') === $value ? 'is-selected' : '' }}">{{ $label }}</a></li>
+                    @endforeach
+                    @foreach($sidebarPlaylistCustomTypes ?? [] as $customType)
+                        <li><a href="{{ route('admin.playlists.index', ['type' => 'custom:'.$customType]) }}" class="{{ request('type') === 'custom:'.$customType ? 'is-selected' : '' }}">{{ $customType }}</a></li>
+                    @endforeach
+                </ul>
+            @endif
             @endif
         </ul>
     </li>

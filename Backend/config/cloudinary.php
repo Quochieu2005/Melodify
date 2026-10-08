@@ -8,4 +8,5 @@ return [
     'admin_folder' => env('CLOUDINARY_ADMIN_FOLDER', 'admin'),
     'banner_folder' => env('CLOUDINARY_BANNER_FOLDER', 'banner'),
     'artist_folder' => env('CLOUDINARY_ARTIST_FOLDER', 'melodify/artists'),
+    'audio_folder' => env('CLOUDINARY_AUDIO_FOLDER', 'melodify/audio'),
 ];
