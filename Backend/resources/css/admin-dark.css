@@ -124,6 +124,22 @@
     color: rgba(255, 255, 255, 0.85);
 }
 
+[data-admin-theme="dark"] .notification-item.is-unread .notification-top strong {
+    color: #eef8f7;
+}
+
+[data-admin-theme="dark"] .notification-panel-header button,
+[data-admin-theme="dark"] .notification-panel-footer,
+[data-admin-theme="dark"] .notification-icon,
+[data-admin-theme="dark"] .notification-time,
+[data-admin-theme="dark"] .notification-desc {
+    color: #a9bbb8;
+}
+
+[data-admin-theme="dark"] .notification-unread-dot {
+    background: #35c8d3;
+}
+
 [data-admin-theme="dark"] .notification-item:hover {
     background: #262626;
 }

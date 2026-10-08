@@ -1,0 +1,9 @@
+{
+    "private": true,
+    "scripts": {
+        "dev": "npm --prefix Backend run vite",
+        "vite": "npm --prefix Backend run vite",
+        "build": "npm --prefix Backend run build",
+        "artisan": "php Backend/artisan"
+    }
+}

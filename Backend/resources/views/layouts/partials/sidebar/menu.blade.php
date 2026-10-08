@@ -17,7 +17,7 @@
     </li>
 
     {{-- Quản lý Nội dung --}}
-    @if($currentAdmin?->hasAdminPermission('content.manage'))
+    @if($currentAdmin?->hasAdminResourcePermission('songs', 'view') || $currentAdmin?->hasAdminResourcePermission('albums', 'view') || $currentAdmin?->hasAdminResourcePermission('topics', 'view') || $currentAdmin?->hasAdminResourcePermission('genres', 'view') || $currentAdmin?->hasAdminResourcePermission('playlists', 'view'))
     <li class="ant-menu-submenu ant-menu-submenu-inline {{ request()->is('admin/songs*') || request()->is('admin/albums*') || request()->is('admin/topics*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'ant-menu-submenu-open ant-menu-submenu-selected' : '' }}" role="menuitem" data-menu-submenu>
         <div class="ant-menu-submenu-title" role="button" aria-expanded="{{ request()->is('admin/songs*') || request()->is('admin/albums*') || request()->is('admin/topics*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'true' : 'false' }}" data-submenu-trigger>
             <span class="ant-menu-title-content">
@@ -27,36 +27,46 @@
             <x-anticon name="down" class="ant-menu-submenu-arrow" />
         </div>
         <ul class="ant-menu ant-menu-sub ant-menu-inline admin-submenu-list" role="menu">
+            @if($currentAdmin?->hasAdminResourcePermission('songs', 'view'))
             <li class="ant-menu-item {{ request()->is('admin/songs*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/songs') }}" class="ant-menu-title-content">
                     <x-anticon name="sound" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Bài hát</span>
                 </a>
             </li>
+            @endif
+            @if($currentAdmin?->hasAdminResourcePermission('albums', 'view'))
             <li class="ant-menu-item {{ request()->is('admin/albums*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/albums') }}" class="ant-menu-title-content">
                     <x-anticon name="folder" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Album</span>
                 </a>
             </li>
+            @endif
+            @if($currentAdmin?->hasAdminResourcePermission('topics', 'view'))
             <li class="ant-menu-item {{ request()->is('admin/topics*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/topics') }}" class="ant-menu-title-content">
                     <x-anticon name="appstore" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Chủ đề</span>
                 </a>
             </li>
+            @endif
+            @if($currentAdmin?->hasAdminResourcePermission('genres', 'view'))
             <li class="ant-menu-item {{ request()->is('admin/genres*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/genres') }}" class="ant-menu-title-content">
                     <x-anticon name="tags" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Thể loại</span>
                 </a>
             </li>
+            @endif
+            @if($currentAdmin?->hasAdminResourcePermission('playlists', 'view'))
             <li class="ant-menu-item {{ request()->is('admin/playlists*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/playlists') }}" class="ant-menu-title-content">
                     <x-anticon name="unordered-list" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Playlist</span>
                 </a>
             </li>
+            @endif
         </ul>
     </li>
     @endif
@@ -72,7 +82,7 @@
     @endif
 
     {{-- Nghệ sĩ --}}
-    @if($currentAdmin?->hasAdminPermission('content.manage'))
+    @if($currentAdmin?->hasAdminResourcePermission('artists', 'view'))
     <li class="ant-menu-item {{ request()->is('admin/artists*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
         <a href="{{ url('/admin/artists') }}" class="ant-menu-title-content">
             <x-anticon name="team" class="ant-menu-item-icon" />
@@ -111,18 +121,22 @@
             <x-anticon name="down" class="ant-menu-submenu-arrow" />
         </div>
         <ul class="ant-menu ant-menu-sub ant-menu-inline admin-submenu-list" role="menu">
+            @if($currentAdmin?->hasAdminResourcePermission('subscriptions', 'view'))
             <li class="ant-menu-item {{ request()->is('admin/subscriptions*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/subscriptions') }}" class="ant-menu-title-content">
                     <x-anticon name="credit-card" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Gói đăng ký</span>
                 </a>
             </li>
+            @endif
+            @if($currentAdmin?->hasAdminResourcePermission('payments', 'view'))
             <li class="ant-menu-item {{ request()->is('admin/payments*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/payments') }}" class="ant-menu-title-content">
                     <x-anticon name="file-text" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Lịch sử giao dịch</span>
                 </a>
             </li>
+            @endif
         </ul>
     </li>
     @endif
@@ -138,18 +152,22 @@
             <x-anticon name="down" class="ant-menu-submenu-arrow" />
         </div>
         <ul class="ant-menu ant-menu-sub ant-menu-inline admin-submenu-list" role="menu">
+            @if($currentAdmin?->hasAdminResourcePermission('comments', 'view'))
             <li class="ant-menu-item {{ request()->is('admin/comments*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/comments') }}" class="ant-menu-title-content">
                     <x-anticon name="message" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Bình luận</span>
                 </a>
             </li>
+            @endif
+            @if($currentAdmin?->hasAdminResourcePermission('reports', 'view'))
             <li class="ant-menu-item {{ request()->is('admin/reports*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/reports') }}" class="ant-menu-title-content">
                     <x-anticon name="alert" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Báo cáo vi phạm</span>
                 </a>
             </li>
+            @endif
         </ul>
     </li>
     @endif

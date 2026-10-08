@@ -51,6 +51,7 @@ class BannerController extends Controller
             $uploaded = $cloudinary->uploadImage(
                 $request->file('image'),
                 config('cloudinary.banner_folder', 'banner'),
+                $cloudinary->datedPublicId((string) $data['slug']),
             );
 
             $imageUrl = $uploaded['secure_url'] ?? $uploaded['url'] ?? null;
@@ -97,6 +98,7 @@ class BannerController extends Controller
                 $uploaded = $cloudinary->uploadImage(
                     $request->file('image'),
                     config('cloudinary.banner_folder', 'banner'),
+                    $cloudinary->datedPublicId((string) $data['slug']),
                 );
                 $data['image_url'] = $uploaded['secure_url'] ?? $uploaded['url'] ?? null;
                 $data['image_public_id'] = $uploaded['public_id'] ?? null;

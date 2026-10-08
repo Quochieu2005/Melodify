@@ -54,7 +54,11 @@ class ProfileController extends Controller
 
         try {
             if ($request->hasFile('avatar_file')) {
-                $uploaded = $cloudinary->uploadImage($request->file('avatar_file'), config('cloudinary.admin_folder', 'admin'));
+                $uploaded = $cloudinary->uploadImage(
+                    $request->file('avatar_file'),
+                    config('cloudinary.admin_folder', 'admin'),
+                    $cloudinary->datedPublicId($admin->slug ?: $data['name']),
+                );
             }
 
             $profile = [

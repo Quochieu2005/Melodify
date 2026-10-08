@@ -6,6 +6,7 @@ use App\Models\Admin;
 use App\Models\MediaAsset;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class MediaAssetService
@@ -24,9 +25,15 @@ class MediaAssetService
             ->get();
     }
 
-    public function upload(UploadedFile $file, Admin $admin): MediaAsset
+    public function upload(UploadedFile $file, Admin $admin, ?string $slug = null): MediaAsset
     {
-        $result = app(CloudinaryService::class)->uploadImage($file, $this->folder());
+        $cloudinary = app(CloudinaryService::class);
+        $fileSlug = $slug ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+        $result = $cloudinary->uploadImage(
+            $file,
+            $this->folder(),
+            $cloudinary->datedPublicId(Str::slug($fileSlug)),
+        );
 
         return MediaAsset::query()->updateOrCreate(
             ['public_id' => $result['public_id']],
@@ -47,9 +54,10 @@ class MediaAssetService
         ?string $currentUrl = null,
         ?string $currentPublicId = null,
         bool $required = false,
+        ?string $slug = null,
     ): array {
         if ($request->hasFile('image')) {
-            $asset = $this->upload($request->file('image'), $admin);
+            $asset = $this->upload($request->file('image'), $admin, $slug);
 
             return [
                 'url' => $asset->secure_url,
