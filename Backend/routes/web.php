@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminController\AdminManagementController;
+use App\Http\Controllers\AudioController;
 use App\Http\Controllers\AdminController\AlbumController;
 use App\Http\Controllers\AdminController\ArtistController;
 use App\Http\Controllers\AdminController\AuthController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\AdminController\ProfileController;
 use App\Http\Controllers\AdminController\ReportController;
 use App\Http\Controllers\AdminController\SettingController;
 use App\Http\Controllers\AdminController\SongController;
+use App\Http\Controllers\AdminController\SongViewController;
 use App\Http\Controllers\AdminController\SubscriptionController;
 use App\Http\Controllers\AdminController\TopicController;
 use App\Http\Controllers\AdminController\UserController;
@@ -59,12 +61,29 @@ Route::prefix('admin')->name('admin.')->group(function () {
         });
 
         Route::middleware('admin.permission:content.manage')->group(function () {
+            Route::get('/songs/search-external', [SongController::class, 'searchExternal'])->name('songs.external-search');
+            Route::get('/songs/preview-external', [SongController::class, 'previewExternal'])->name('songs.external-preview');
+            Route::get('/analytics/song-views', [SongViewController::class, 'index'])->name('analytics.song-views');
+            Route::get('/lyrics', [SongViewController::class, 'lyricsIndex'])->name('lyrics.index');
+            Route::get('/songs/{song}/lyrics', [SongViewController::class, 'showLyrics'])->name('songs.lyrics');
+            Route::get('/songs/{song}/audio', [AudioController::class, 'stream'])->name('songs.audio');
+            Route::put('/songs/{song}/lyrics', [SongViewController::class, 'updateLyrics'])->name('songs.lyrics.update');
+            Route::delete('/songs/bulk', [SongController::class, 'destroyBulk'])->name('songs.bulk-destroy');
+            Route::delete('/songs/all', [SongController::class, 'destroyAll'])->name('songs.destroy-all');
             Route::resource('songs', SongController::class)->except('show');
+            Route::delete('/albums/bulk', [AlbumController::class, 'destroyBulk'])->name('albums.bulk-destroy');
+            Route::delete('/albums/all', [AlbumController::class, 'destroyAll'])->name('albums.destroy-all');
             Route::resource('albums', AlbumController::class)->except('show');
+            Route::delete('/topics/bulk', [TopicController::class, 'destroyBulk'])->name('topics.bulk-destroy');
+            Route::delete('/topics/all', [TopicController::class, 'destroyAll'])->name('topics.destroy-all');
             Route::patch('/topics/{topic}/status', [TopicController::class, 'toggleStatus'])->name('topics.status');
             Route::resource('topics', TopicController::class)->except('show');
+            Route::delete('/genres/bulk', [GenreController::class, 'destroyBulk'])->name('genres.bulk-destroy');
+            Route::delete('/genres/all', [GenreController::class, 'destroyAll'])->name('genres.destroy-all');
             Route::patch('/genres/{genre}/status', [GenreController::class, 'toggleStatus'])->name('genres.status');
             Route::resource('genres', GenreController::class)->except('show');
+            Route::delete('/playlists/bulk', [PlaylistController::class, 'destroyBulk'])->name('playlists.bulk-destroy');
+            Route::delete('/playlists/all', [PlaylistController::class, 'destroyAll'])->name('playlists.destroy-all');
             Route::patch('/playlists/{playlist}/status', [PlaylistController::class, 'toggleStatus'])->name('playlists.status');
             Route::resource('playlists', PlaylistController::class)->except('show');
             Route::resource('artists', ArtistController::class)->except('show');

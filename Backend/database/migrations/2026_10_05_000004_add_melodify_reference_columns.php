@@ -24,6 +24,7 @@ return new class extends Migration
         'playlists' => ['user_id' => 'string', 'name' => 'string', 'slug' => 'string', 'description' => 'text', 'cover_url' => 'string', 'is_system' => 'boolean', 'visibility' => 'string', 'created_by_admin_id' => 'string'],
         'playlist_songs' => ['playlist_id' => 'string', 'song_id' => 'string', 'position' => 'integer', 'added_by_user_id' => 'string', 'added_by_admin_id' => 'string'],
         'favorites' => ['user_id' => 'string', 'song_id' => 'string'],
+        'song_shares' => ['song_id' => 'string', 'visitor_id' => 'string', 'source' => 'string'],
         'listening_history' => ['user_id' => 'string', 'song_id' => 'string', 'started_at' => 'datetime', 'last_played_at' => 'datetime', 'play_count' => 'integer', 'total_duration_seconds' => 'integer'],
         'devices' => ['user_id' => 'string', 'device_uuid' => 'string', 'device_name' => 'string', 'device_type' => 'string', 'platform' => 'string', 'app_version' => 'string', 'last_active_at' => 'datetime'],
         'song_play_events' => ['user_id' => 'string', 'song_id' => 'string', 'device_id' => 'string', 'started_at' => 'datetime', 'ended_at' => 'datetime', 'listened_seconds' => 'integer', 'completion_percent' => 'decimal'],

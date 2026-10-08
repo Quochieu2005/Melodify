@@ -112,6 +112,44 @@
         "parameters": [{ "$ref": "#/components/parameters/Id" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
+    },
+    "/api/v1/playlists": {
+      "get": {
+        "tags": ["Music"], "summary": "List public playlists created in Admin",
+        "parameters": [{ "$ref": "#/components/parameters/PerPage" }, { "$ref": "#/components/parameters/Search" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
+      }
+    },
+    "/api/v1/playlists/{id}": {
+      "get": {
+        "tags": ["Music"], "summary": "Get a public Admin playlist with songs",
+        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/v1/songs": {
+      "get": {
+        "tags": ["Music"], "summary": "List published songs",
+        "parameters": [{ "$ref": "#/components/parameters/PerPage" }, { "$ref": "#/components/parameters/Search" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
+      }
+    },
+    "/api/v1/songs/{id}": {
+      "get": {
+        "tags": ["Music"], "summary": "Get a published song with audio and lyrics",
+        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/v1/songs/{id}/lyrics": {
+      "get": {
+        "tags": ["Music"], "summary": "Get lyrics for a published song",
+        "parameters": [
+          { "$ref": "#/components/parameters/Id" },
+          { "name": "language", "in": "query", "schema": { "type": "string", "example": "vi" } }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/LyricsList" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
     }
   },
   "components": {
@@ -168,6 +206,22 @@
           "slug": { "type": "string" }, "image_url": { "type": "string", "nullable": true },
           "cover_url": { "type": "string", "nullable": true }, "avatar_url": { "type": "string", "nullable": true },
           "status": { "type": "string" }
+        }
+      },
+      "LyricsListResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/Lyric" } },
+          "meta": { "type": "object", "properties": { "song_id": { "type": "string" }, "language": { "type": "string", "nullable": true } } }
+        }
+      },
+      "Lyric": {
+        "type": "object",
+        "required": ["id", "song_id", "language", "content", "is_synced"],
+        "properties": {
+          "id": { "type": "string" }, "song_id": { "type": "string" }, "language": { "type": "string" },
+          "content": { "type": "string" }, "is_synced": { "type": "boolean" }
         }
       },
       "HealthResponse": {

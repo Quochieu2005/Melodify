@@ -7,12 +7,26 @@
     @php($canCreate = $resource !== 'admins' && $currentAdmin?->hasAdminResourcePermission($resource, 'create'))
     @php($canUpdate = $resource !== 'admins' && $currentAdmin?->hasAdminResourcePermission($resource, 'update'))
     @php($canDelete = $resource !== 'admins' && $currentAdmin?->hasAdminResourcePermission($resource, 'delete'))
+    @php($supportsBulkDelete = $resource === 'albums')
+    @php($canBulkDelete = $canDelete && $supportsBulkDelete)
     <div class="admin-page-header">
         <div class="admin-page-header-main">
             <h1 class="admin-page-title">Quản lý {{ $resourceTitle }}</h1>
             <p class="admin-page-description">Theo dõi, cập nhật và kiểm soát dữ liệu {{ $resourceTitle }} trong hệ thống.</p>
         </div>
         <div class="admin-page-header-actions">
+            @if($canBulkDelete)
+                <form action="{{ route("admin.$resource.bulk-destroy") }}" method="POST" id="{{ $resource }}-bulk-delete-form" class="admin-bulk-delete-form" data-confirm-delete-bulk data-confirm-resource="{{ $resourceTitle }}" data-confirm-count-selector="[data-catalog-select]:checked">
+                    @csrf @method('DELETE')
+                    <button type="submit" class="ant-btn admin-bulk-delete-btn" data-catalog-bulk-delete disabled>
+                        Xóa đã chọn <span data-catalog-selected-count>(0)</span>
+                    </button>
+                </form>
+                <form action="{{ route("admin.$resource.destroy-all") }}" method="POST" class="admin-bulk-delete-form" data-confirm-delete-all data-confirm-delete-count="{{ $items->total() }}" data-confirm-resource="{{ $resourceTitle }}">
+                    @csrf @method('DELETE')
+                    <button type="submit" class="ant-btn admin-delete-all-btn" @disabled($items->total() === 0)>Xóa toàn bộ</button>
+                </form>
+            @endif
             @if($resource === 'admins' && $isSuperAdmin)
                 <form action="{{ route('admin.admins.credentials.bulk') }}" method="POST" id="admin-bulk-credentials-form" class="admin-bulk-credentials-form">
                     @csrf
@@ -37,6 +51,7 @@
                 <thead class="ant-table-thead">
                     <tr>
                         <th>#</th>
+                        @if($canBulkDelete)<th class="admin-select-column"><input type="checkbox" data-catalog-select-all aria-label="Chọn tất cả {{ $resourceTitle }}"></th>@endif
                         @if($resource === 'admins' && $isSuperAdmin)
                             <th class="admin-select-column"><input type="checkbox" data-admin-select-all aria-label="Chọn tất cả Admin nhỏ"></th>
                         @endif
@@ -48,6 +63,7 @@
                     @forelse($items as $item)
                         <tr>
                             <td>{{ $items->firstItem() + $loop->index }}</td>
+                            @if($canBulkDelete)<td class="admin-select-column"><input type="checkbox" name="ids[]" value="{{ $item->getKey() }}" form="{{ $resource }}-bulk-delete-form" data-catalog-select aria-label="Chọn {{ $resourceTitle }}"></td>@endif
                             @if($resource === 'admins' && $isSuperAdmin)
                                 <td class="admin-select-column">
                                     @php($credentialsSent = filled($item->credentials_sent_at))
@@ -135,7 +151,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ count($columns) + 2 + (($resource === 'admins' && $isSuperAdmin) ? 1 : 0) }}" class="admin-empty-state">
+                            <td colspan="{{ count($columns) + 2 + (($resource === 'admins' && $isSuperAdmin) ? 1 : 0) + ($canBulkDelete ? 1 : 0) }}" class="admin-empty-state">
                                 <span class="admin-empty-icon">＋</span>
                                 <strong>Chưa có {{ $resourceTitle }}</strong>
                                 @if($resource === 'users')

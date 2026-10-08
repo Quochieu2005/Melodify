@@ -35,4 +35,22 @@ return [
         ],
     ],
 
+    'itunes' => [
+        'base_url' => env('ITUNES_BASE_URL', 'https://itunes.apple.com'),
+        'countries' => array_filter(array_map('trim', explode(',', env('ITUNES_COUNTRIES', 'VN,US,CN')))),
+        'timeout' => env('ITUNES_API_TIMEOUT', 10),
+    ],
+
+    'nhaccuatui' => [
+        'graph_base_url' => env('NCT_GRAPH_BASE_URL', 'https://graph.nhaccuatui.com'),
+        'user_agent' => env('NCT_USER_AGENT', 'Melodify/1.0'),
+        'timeout' => env('NCT_API_TIMEOUT', 15),
+    ],
+
+    'lrclib' => [
+        'base_url' => env('LRCLIB_BASE_URL', 'https://lrclib.net'),
+        'user_agent' => env('LRCLIB_USER_AGENT', 'Melodify/1.0 (local development)'),
+        'timeout' => env('LRCLIB_API_TIMEOUT', 10),
+    ],
+
 ];

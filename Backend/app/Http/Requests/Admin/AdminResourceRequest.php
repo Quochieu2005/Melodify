@@ -4,6 +4,9 @@ namespace App\Http\Requests\Admin;
 
 use App\Models\Artist;
 use App\Models\Album;
+use App\Models\Genre;
+use App\Models\Playlist;
+use App\Models\Topic;
 use App\Models\User;
 use App\Rules\PlainText;
 use Illuminate\Foundation\Http\FormRequest;
@@ -46,10 +49,20 @@ class AdminResourceRequest extends FormRequest
             'songs' => [
                 'title' => ['bail', 'required', 'string', 'min:1', 'max:160', new PlainText()],
                 'slug' => ['nullable', 'alpha_dash', 'max:180', new PlainText(), Rule::unique('songs', 'slug')->ignore($routeId)],
+                'cover_url' => ['nullable', 'url:http,https', 'max:500', new PlainText()],
+                'external_id' => ['nullable', 'string', 'regex:/^[A-Za-z0-9]{4,80}$/', new PlainText()],
+                'artist_name' => ['nullable', 'string', 'max:160', new PlainText()],
                 'album_id' => ['nullable', 'string', 'max:64'],
+                'topic_id' => ['nullable', 'string', 'max:64'],
+                'genre_id' => ['nullable', 'string', 'max:64'],
+                'playlist_id' => ['nullable', 'string', 'max:64'],
                 'release_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today'],
                 'duration_seconds' => ['nullable', 'integer', 'min:0', 'max:86400'],
                 'explicit' => ['nullable', 'boolean'],
+                'plain_lyrics' => ['nullable', 'string', 'max:50000', new PlainText()],
+                'synced_lyrics' => ['nullable', 'string', 'max:80000', new PlainText()],
+                'topic_ids' => ['nullable', 'array', 'max:50'],
+                'topic_ids.*' => ['string', 'max:64', 'distinct'],
                 'status' => ['required', 'in:draft,published,blocked'],
             ],
             'albums' => [
@@ -142,6 +155,27 @@ class AdminResourceRequest extends FormRequest
 
             if ($this->route()?->getName() && str_contains($this->route()->getName(), 'songs') && filled($this->input('album_id')) && ! Album::query()->find($this->input('album_id'))) {
                 $validator->errors()->add('album_id', 'Album đã chọn không tồn tại.');
+            }
+
+            if ($this->route()?->getName() && str_contains($this->route()->getName(), 'songs')) {
+                foreach ((array) $this->input('topic_ids', []) as $topicId) {
+                    if (! Topic::query()->find($topicId)) {
+                        $validator->errors()->add('topic_ids', 'Một chủ đề đã chọn không tồn tại.');
+                        break;
+                    }
+                }
+
+                if (filled($this->input('topic_id')) && ! Topic::query()->find($this->input('topic_id'))) {
+                    $validator->errors()->add('topic_id', 'Chủ đề đã chọn không tồn tại.');
+                }
+
+                if (filled($this->input('genre_id')) && ! Genre::query()->find($this->input('genre_id'))) {
+                    $validator->errors()->add('genre_id', 'Thể loại đã chọn không tồn tại.');
+                }
+
+                if (filled($this->input('playlist_id')) && ! Playlist::query()->find($this->input('playlist_id'))) {
+                    $validator->errors()->add('playlist_id', 'Playlist đã chọn không tồn tại.');
+                }
             }
 
             if ($this->route()?->getName() && str_contains($this->route()->getName(), 'artists') && filled($this->input('user_id')) && ! User::query()->find($this->input('user_id'))) {

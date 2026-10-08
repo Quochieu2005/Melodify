@@ -34,6 +34,7 @@ class BannerController extends Controller
 
     public function store(Request $request, CloudinaryService $cloudinary): RedirectResponse
     {
+        $this->normalizeSortOrderInput($request);
         $data = $this->validated($request);
         $formToken = (string) $data['form_token'];
         unset($data['form_token']);
@@ -87,6 +88,7 @@ class BannerController extends Controller
 
     public function update(Request $request, string $slug, CloudinaryService $cloudinary): RedirectResponse
     {
+        $this->normalizeSortOrderInput($request);
         $banner = $this->findBySlug($slug);
         $data = $this->validated($request, $banner);
         unset($data['form_token']);
@@ -197,7 +199,29 @@ class BannerController extends Controller
             'slug' => ['nullable', 'alpha_dash', 'max:120', new PlainText()],
             'image' => [$banner ? 'nullable' : 'required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=6000,max_height=4000'],
             'link_url' => ['nullable', 'string', 'max:500', 'regex:/^(https?:\/\/|\/)[^<>"\']*$/', new PlainText()],
-            'sort_order' => ['bail', 'required', 'integer', 'min:0', 'max:9999'],
+            'sort_order' => [
+                'bail',
+                'required',
+                'integer',
+                'min:0',
+                'max:9999',
+                function (string $attribute, mixed $value, \Closure $fail) use ($banner): void {
+                    $sortOrder = (int) $value;
+                    $hasDuplicate = Banner::query()->get()->contains(function (Banner $existing) use ($banner, $sortOrder): bool {
+                        if ($banner !== null && (string) $existing->getKey() === (string) $banner->getKey()) {
+                            return false;
+                        }
+
+                        $storedSortOrder = $existing->getRawOriginal('sort_order');
+
+                        return is_numeric($storedSortOrder) && (int) $storedSortOrder === $sortOrder;
+                    });
+
+                    if ($hasDuplicate) {
+                        $fail('Thứ tự hiển thị này đã được sử dụng. Vui lòng chọn số khác.');
+                    }
+                },
+            ],
             'status' => ['required', 'in:active,inactive'],
         ], [
             'title.max' => 'Tên banner không được dài hơn 100 ký tự.',
@@ -226,6 +250,15 @@ class BannerController extends Controller
         unset($data['image']);
 
         return $data;
+    }
+
+    private function normalizeSortOrderInput(Request $request): void
+    {
+        $value = trim((string) $request->input('sort_order', ''));
+
+        if ($value !== '' && preg_match('/^\d+$/', $value) === 1) {
+            $request->merge(['sort_order' => (int) $value]);
+        }
     }
 
     private function slugExists(string $slug, ?Banner $banner = null): bool

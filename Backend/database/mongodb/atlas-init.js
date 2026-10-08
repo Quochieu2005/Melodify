@@ -18,6 +18,7 @@ const collections = [
     "playlists",
     "playlist_songs",
     "favorites",
+    "song_shares",
     "listening_history",
     "devices",
     "song_play_events",
@@ -123,6 +124,10 @@ const indexes = {
     favorites: [
         [{ user_id: 1, song_id: 1 }, { unique: true }],
         [{ song_id: 1 }, {}],
+    ],
+    song_shares: [
+        [{ song_id: 1, created_at: -1 }, {}],
+        [{ visitor_id: 1, created_at: -1 }, {}],
     ],
     listening_history: [
         [{ user_id: 1, song_id: 1 }, { unique: true }],

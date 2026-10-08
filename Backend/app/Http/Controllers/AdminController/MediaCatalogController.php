@@ -4,6 +4,7 @@ namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
 use App\Services\MediaAssetService;
+use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -34,7 +35,12 @@ abstract class MediaCatalogController extends Controller
 
     abstract protected function rules(?object $item): array;
 
-    public function index(): View
+    protected function validationMessages(): array
+    {
+        return [];
+    }
+
+    public function index(?Request $request = null): View
     {
         $items = ($this->model)::query()
             ->orderBy('sort_order')
@@ -55,7 +61,8 @@ abstract class MediaCatalogController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $data = $request->validate($this->rules(null));
+        $this->normalizeSortOrderInput($request);
+        $data = $request->validate($this->rules(null), $this->validationMessages());
         $payload = $this->preparePayload($request, $data, null);
         ($this->model)::query()->create($payload);
 
@@ -77,7 +84,8 @@ abstract class MediaCatalogController extends Controller
     public function update(Request $request, string $id): RedirectResponse
     {
         $item = ($this->model)::query()->findOrFail($id);
-        $data = $request->validate($this->rules($item));
+        $this->normalizeSortOrderInput($request);
+        $data = $request->validate($this->rules($item), $this->validationMessages());
         $item->update($this->preparePayload($request, $data, $item));
 
         return redirect()->route("admin.{$this->resource}.index")
@@ -90,6 +98,52 @@ abstract class MediaCatalogController extends Controller
         $item->delete();
 
         return back()->with('success', "Đã xóa {$this->title}. Ảnh vẫn được giữ trong kho ảnh dùng chung.");
+    }
+
+    public function destroyBulk(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:50'],
+            'ids.*' => ['required', 'string', 'max:64', 'distinct'],
+        ], [
+            'ids.required' => "Hãy chọn ít nhất một {$this->title} để xóa.",
+            'ids.array' => 'Danh sách được chọn không hợp lệ.',
+            'ids.min' => "Hãy chọn ít nhất một {$this->title} để xóa.",
+            'ids.max' => 'Bạn chỉ được xóa tối đa 50 mục mỗi lần.',
+            'ids.*.distinct' => 'Các mục được chọn không được trùng lặp.',
+        ]);
+
+        $keyName = (new $this->model())->getKeyName();
+        $items = ($this->model)::query()
+            ->whereIn($keyName, array_values($data['ids']))
+            ->get();
+
+        if ($items->isEmpty()) {
+            return back()->withErrors([
+                'ids' => "Không tìm thấy {$this->title} nào phù hợp để xóa.",
+            ]);
+        }
+
+        foreach ($items as $item) {
+            $item->delete();
+        }
+
+        return back()->with('success', "Đã xóa {$items->count()} {$this->title} đã chọn.");
+    }
+
+    public function destroyAll(): RedirectResponse
+    {
+        $items = ($this->model)::query()->get();
+
+        if ($items->isEmpty()) {
+            return back()->with('warning', "Hiện chưa có {$this->title} nào để xóa.");
+        }
+
+        foreach ($items as $item) {
+            $item->delete();
+        }
+
+        return back()->with('success', "Đã xóa toàn bộ {$items->count()} {$this->title}.");
     }
 
     public function toggleStatus(string $id): RedirectResponse
@@ -125,6 +179,41 @@ abstract class MediaCatalogController extends Controller
         unset($data['image_asset_id'], $data['image']);
 
         return $data;
+    }
+
+    protected function normalizeSortOrderInput(Request $request): void
+    {
+        $value = trim((string) $request->input('sort_order', ''));
+
+        if ($value !== '' && preg_match('/^\d+$/', $value) === 1) {
+            $request->merge(['sort_order' => (int) $value]);
+        }
+    }
+
+    protected function uniqueSortOrderRule(?object $item, ?Closure $scope = null): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail) use ($item, $scope): void {
+            $query = ($this->model)::query();
+
+            if ($scope !== null) {
+                $query = $scope($query);
+            }
+
+            $sortOrder = (int) $value;
+            $hasDuplicate = $query->get()->contains(function (object $record) use ($item, $sortOrder): bool {
+                if ($item !== null && (string) $record->getKey() === (string) $item->getKey()) {
+                    return false;
+                }
+
+                $storedSortOrder = $record->getRawOriginal('sort_order');
+
+                return is_numeric($storedSortOrder) && (int) $storedSortOrder === $sortOrder;
+            });
+
+            if ($hasDuplicate) {
+                $fail('Thứ tự hiển thị này đã được sử dụng. Vui lòng chọn số khác.');
+            }
+        };
     }
 
     protected function normalizePayload(array $data, Request $request): array
