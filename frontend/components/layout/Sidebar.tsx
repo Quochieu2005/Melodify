@@ -1,4 +1,8 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useLoginModal } from '@/components/auth/LoginModalProvider';
 
 const navigation = [
   {
@@ -44,38 +48,52 @@ const navigation = [
 const library = [
   {
     label: 'Bài hát yêu thích',
-    href: '/home#favorites',
+    href: '/favorite',
     icon: (
       <span aria-hidden="true" className="size-7 rounded-[5px] bg-cover bg-center" style={{ backgroundImage: "url('/sidebar-favorites.png')" }} />
     ),
   },
   {
     label: 'Nghe gần đây',
-    href: '/home#recent',
+    href: '/recent',
     icon: (
       <span aria-hidden="true" className="size-7 rounded-[5px] bg-cover bg-center" style={{ backgroundImage: "url('/sidebar-history.png')" }} />
     ),
   },
 ];
 
-function Navigation({ items }: { items: typeof navigation }) {
+function Navigation({ items, onLogin }: { items: typeof navigation; onLogin: () => void }) {
+  const pathname = usePathname();
+
   return (
     <ul className="space-y-1">
       {items.map((item) => (
         <li key={item.label}>
-          <Link
+          {item.label === 'Của tui' ? (
+            <button
+              type="button"
+              onClick={onLogin}
+              className={[
+                'flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-violet-300',
+                'text-[#b8b2ca] hover:bg-white/7 hover:text-white',
+              ].join(' ')}
+            >
+              <span className="grid size-6 place-items-center text-lg">{item.icon}</span>
+              {item.label}
+            </button>
+          ) : <Link
             href={item.href}
-            aria-current={item.active ? 'page' : undefined}
+            aria-current={item.active || pathname === item.href ? 'page' : undefined}
             className={[
               'flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-violet-300',
-              item.active
+              item.active || pathname === item.href
                 ? 'bg-violet-500 text-white shadow-[0_8px_24px_rgba(124,92,255,0.24)]'
                 : 'text-[#b8b2ca] hover:bg-white/7 hover:text-white',
             ].join(' ')}
           >
             <span className="grid size-6 place-items-center text-lg">{item.icon}</span>
             {item.label}
-          </Link>
+          </Link>}
         </li>
       ))}
     </ul>
@@ -83,26 +101,27 @@ function Navigation({ items }: { items: typeof navigation }) {
 }
 
 export default function Sidebar() {
+  const { openLogin } = useLoginModal();
   return (
-    <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-[#151329] text-[#f7f5ff] lg:flex">
+    <aside className="relative z-20 sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-[#151329] text-[#f7f5ff] lg:flex">
       <Link href="/home" className="flex items-center gap-3 px-5 pb-7 pt-6 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-300">
         <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-violet-400 to-fuchsia-500 text-xl shadow-[0_8px_22px_rgba(124,92,255,0.32)]">♫</span>
         <span className="text-xl font-bold tracking-[-0.04em]">Melodify</span>
       </Link>
 
       <nav aria-label="Điều hướng chính" className="px-3">
-        <Navigation items={navigation} />
+        <Navigation items={navigation} onLogin={openLogin} />
       </nav>
 
       <section aria-labelledby="library-title" className="mt-7 px-3">
         <h2 id="library-title" className="px-3 text-xs font-semibold tracking-[0.08em] text-[#8f88a7]">Thư viện</h2>
-        <div className="mt-3"><Navigation items={library} /></div>
+        <div className="mt-3"><Navigation items={library} onLogin={openLogin} /></div>
       </section>
 
       <div className="mt-auto p-5">
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="text-sm leading-5 text-[#d9d5e7]">Đăng nhập để lưu nhạc và đồng bộ thư viện của bạn.</p>
-          <button type="button" className="mt-4 w-full rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#211d3b] outline-none transition-colors hover:bg-violet-100 focus-visible:ring-2 focus-visible:ring-violet-300">Đăng nhập</button>
+          <button type="button" onClick={openLogin} className="mt-4 w-full rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#211d3b] outline-none transition-colors hover:bg-violet-100 focus-visible:ring-2 focus-visible:ring-violet-300">Đăng nhập</button>
         </div>
       </div>
     </aside>
