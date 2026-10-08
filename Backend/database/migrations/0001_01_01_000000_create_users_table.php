@@ -13,10 +13,12 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
+            $table->string('name')->nullable();
+            $table->string('email')->nullable()->unique();
             $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
+            // MySQL mirrors MongoDB users for inspection only; credentials
+            // remain exclusively in MongoDB Atlas.
+            $table->string('password')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });
@@ -29,7 +31,9 @@ return new class extends Migration
 
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
-            $table->foreignId('user_id')->nullable()->index();
+            // Admin/User are stored in MongoDB and use a 24-character ObjectId,
+            // not a numeric SQL foreign key.
+            $table->string('user_id', 64)->nullable()->index();
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
             $table->longText('payload');

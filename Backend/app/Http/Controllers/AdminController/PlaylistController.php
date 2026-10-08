@@ -2,12 +2,68 @@
 
 namespace App\Http\Controllers\AdminController;
 
-use App\Http\Controllers\Controller;
+use App\Models\Playlist;
+use App\Models\User;
+use App\Rules\PlainText;
+use Illuminate\Http\Request;
 
-class PlaylistController extends Controller
+class PlaylistController extends MediaCatalogController
 {
-    public function index()
+    protected string $model = Playlist::class;
+
+    protected string $resource = 'playlists';
+
+    protected string $title = 'playlist';
+
+    protected string $viewDirectory = 'Admin.playlists';
+
+    protected string $imageUrlField = 'cover_url';
+
+    protected string $imagePublicIdField = 'cover_public_id';
+
+    protected array $columns = [
+        'cover_url' => 'Ảnh bìa',
+        'name' => 'Tên playlist',
+        'visibility' => 'Hiển thị',
+        'status' => 'Trạng thái',
+        'is_system' => 'Hệ thống',
+    ];
+
+    protected array $formFields = [
+        'name' => ['label' => 'Tên playlist', 'required' => true],
+        'slug' => ['label' => 'Slug', 'help' => 'Để trống để tự tạo theo tên; slug không được trùng.'],
+        'user_id' => ['label' => 'Chủ sở hữu', 'type' => 'select', 'placeholder' => 'Playlist hệ thống', 'option_model' => User::class, 'option_label' => 'email'],
+        'description' => ['label' => 'Mô tả', 'type' => 'textarea'],
+        'is_system' => ['label' => 'Playlist hệ thống', 'type' => 'checkbox', 'help' => 'Playlist hệ thống không gắn với người dùng cụ thể.'],
+        'visibility' => ['label' => 'Quyền hiển thị', 'type' => 'select', 'required' => true, 'options' => ['public' => 'Công khai', 'private' => 'Riêng tư', 'unlisted' => 'Không công khai']],
+        'sort_order' => ['label' => 'Thứ tự hiển thị', 'type' => 'number', 'default' => 0, 'required' => true],
+        'status' => ['label' => 'Trạng thái', 'type' => 'select', 'required' => true, 'options' => ['active' => 'Hoạt động', 'inactive' => 'Tạm ẩn']],
+    ];
+
+    protected function rules(?object $item): array
     {
-        return view('admin.playlists.index');
+        return [
+            'name' => ['required', 'string', 'max:180', new PlainText()],
+            'slug' => ['nullable', 'string', 'max:220', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', new PlainText()],
+            'user_id' => ['nullable', 'string', 'max:64'],
+            'description' => ['nullable', 'string', 'max:2500', new PlainText()],
+            'is_system' => ['nullable', 'boolean'],
+            'visibility' => ['required', 'in:public,private,unlisted'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],
+            'status' => ['required', 'in:active,inactive'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'image_asset_id' => ['nullable', 'string', 'max:64'],
+        ];
+    }
+
+    protected function normalizePayload(array $data, Request $request): array
+    {
+        $data = parent::normalizePayload($data, $request);
+
+        if ($data['is_system'] ?? false) {
+            $data['user_id'] = null;
+        }
+
+        return $data;
     }
 }

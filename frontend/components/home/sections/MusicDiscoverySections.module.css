@@ -1,0 +1,79 @@
+.section {
+  container-type: inline-size;
+}
+
+.playlistTrack,
+.artistTrack {
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-snap-type: inline mandatory;
+  scrollbar-width: none;
+}
+
+.playlistTrack::-webkit-scrollbar,
+.artistTrack::-webkit-scrollbar {
+  display: none;
+}
+
+.playlistTrack {
+  gap: 16px;
+}
+
+.artistTrack {
+  gap: 20px;
+}
+
+.playlistCard {
+  flex: 0 0 82%;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.artistCard {
+  flex: 0 0 88%;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+@container (min-width: 560px) {
+  .playlistTrack {
+    gap: 16px;
+  }
+
+  .playlistCard {
+    flex-basis: calc((100% - 16px) / 2);
+  }
+
+  .artistCard {
+    flex-basis: calc((100% - 20px) / 2);
+  }
+}
+
+@container (min-width: 900px) {
+  .playlistTrack {
+    gap: 20px;
+  }
+
+  .playlistCard {
+    flex-basis: calc((100% - 40px) / 3);
+  }
+}
+
+@container (min-width: 1220px) {
+  .artistCard {
+    flex-basis: calc((100% - 60px) / 4);
+  }
+}
+
+@container (min-width: 1450px) {
+  .playlistCard {
+    flex-basis: calc((100% - 80px) / 5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coverImage {
+    transition: none !important;
+  }
+}
