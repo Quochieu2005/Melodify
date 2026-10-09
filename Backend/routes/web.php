@@ -60,7 +60,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::middleware('admin.permission:banners.manage')->group(function () {
             Route::delete('/banners/bulk', [BannerController::class, 'destroyBulk'])->name('banners.bulk-destroy');
             Route::delete('/banners/all', [BannerController::class, 'destroyAll'])->name('banners.destroy-all');
-            Route::resource('banners', BannerController::class)->except('show');
+            Route::resource('banners', BannerController::class);
         });
 
         Route::middleware('admin.permission:content.manage')->group(function () {
@@ -76,19 +76,19 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::resource('songs', SongController::class)->except('show');
             Route::delete('/albums/bulk', [AlbumController::class, 'destroyBulk'])->name('albums.bulk-destroy');
             Route::delete('/albums/all', [AlbumController::class, 'destroyAll'])->name('albums.destroy-all');
-            Route::resource('albums', AlbumController::class)->except('show');
+            Route::resource('albums', AlbumController::class);
             Route::delete('/topics/bulk', [TopicController::class, 'destroyBulk'])->name('topics.bulk-destroy');
             Route::delete('/topics/all', [TopicController::class, 'destroyAll'])->name('topics.destroy-all');
             Route::patch('/topics/{topic}/status', [TopicController::class, 'toggleStatus'])->name('topics.status');
-            Route::resource('topics', TopicController::class)->except('show');
+            Route::resource('topics', TopicController::class);
             Route::delete('/genres/bulk', [GenreController::class, 'destroyBulk'])->name('genres.bulk-destroy');
             Route::delete('/genres/all', [GenreController::class, 'destroyAll'])->name('genres.destroy-all');
             Route::patch('/genres/{genre}/status', [GenreController::class, 'toggleStatus'])->name('genres.status');
-            Route::resource('genres', GenreController::class)->except('show');
+            Route::resource('genres', GenreController::class);
             Route::delete('/playlists/bulk', [PlaylistController::class, 'destroyBulk'])->name('playlists.bulk-destroy');
             Route::delete('/playlists/all', [PlaylistController::class, 'destroyAll'])->name('playlists.destroy-all');
             Route::patch('/playlists/{playlist}/status', [PlaylistController::class, 'toggleStatus'])->name('playlists.status');
-            Route::resource('playlists', PlaylistController::class)->except('show');
+            Route::resource('playlists', PlaylistController::class);
             Route::resource('artists', ArtistController::class)->except('show');
         });
 

@@ -103,6 +103,7 @@
                                 </span>
                             </td>
                             <td class="admin-table-actions">
+                                <a href="{{ route('admin.banners.show', $item->slug) }}" class="admin-action-link">Xem</a>
                                 @if($canUpdate)<a href="{{ route('admin.banners.edit', $item->slug) }}" class="admin-action-link">Sửa</a>@endif
                                 @if($canDelete)
                                     <form action="{{ route('admin.banners.destroy', $item->slug) }}" method="POST" class="admin-inline-form" data-confirm-delete>

@@ -11,6 +11,7 @@ export default defineConfig({
                 'resources/css/admin-form-enhancements.css',
                 'resources/js/app.js',
                 'resources/js/admin-form-enhancements.js',
+                'resources/js/admin-navigation.js',
             ],
             refresh: true,
             fonts: [

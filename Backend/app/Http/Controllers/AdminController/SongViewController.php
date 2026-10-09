@@ -14,6 +14,7 @@ use App\Models\SongShare;
 use App\Rules\PlainText;
 use App\Services\CloudinaryService;
 use App\Services\Music\NhacCuaTuiClient;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -39,7 +40,10 @@ class SongViewController extends Controller
             });
         }
 
-        $songs = $songQuery->limit(500)->get();
+        $songs = $songQuery
+            ->orderBy('title')
+            ->paginate(20)
+            ->withQueryString();
         $songIds = $songs->map(fn (Song $song): string => (string) $song->getKey())->values()->all();
         $lyricsBySong = $songIds === []
             ? collect()
@@ -53,8 +57,8 @@ class SongViewController extends Controller
                 ->get()
                 ->keyBy(fn (SongAudioFile $audio): string => (string) $audio->song_id);
 
-        $items = $songs
-            ->map(function (Song $song) use ($lyricsBySong, $audioBySong): array {
+        $items = $songs->setCollection(
+            $songs->getCollection()->map(function (Song $song) use ($lyricsBySong, $audioBySong): array {
                 $songId = (string) $song->getKey();
                 $lyric = $lyricsBySong->get($songId);
                 $audio = $audioBySong->get($songId);
@@ -68,8 +72,7 @@ class SongViewController extends Controller
                     'has_audio' => $audio !== null || filled($song->preview_url),
                 ];
             })
-            ->sort(fn (array $left, array $right): int => strcasecmp((string) $left['song']->title, (string) $right['song']->title))
-            ->values();
+        );
 
         return view('Admin.songs.lyrics-index', [
             'items' => $items,
@@ -263,7 +266,7 @@ class SongViewController extends Controller
             });
         }
 
-        $songs = $songQuery->limit(500)->get();
+        $songs = $songQuery->get();
         $songIds = $songs->map(fn (Song $song): string => (string) $song->getKey())->values()->all();
 
         // Fetch the page relations and counters in batches. This replaces the
@@ -310,7 +313,7 @@ class SongViewController extends Controller
             ? collect()
             : $sharesQuery->get(['song_id'])->groupBy(fn ($share): string => (string) $share->song_id)->map(fn ($shares): int => $shares->count());
 
-        $items = $songs
+        $allItems = $songs
             ->map(function (Song $song) use ($artists, $artistLinksBySong, $lyricsBySong, $fullAudioBySong, $viewsBySong, $favoritesBySong, $sharesBySong): array {
                 $songId = (string) $song->getKey();
                 $artistLink = $artistLinksBySong->get($songId);
@@ -339,6 +342,15 @@ class SongViewController extends Controller
             })
             ->values();
 
+        $page = LengthAwarePaginator::resolveCurrentPage();
+        $items = new LengthAwarePaginator(
+            $allItems->forPage($page, 20)->values(),
+            $allItems->count(),
+            20,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
+
         return view('Admin.analytics.song-views', [
             'items' => $items,
             'search' => $search,
@@ -349,11 +361,11 @@ class SongViewController extends Controller
                 'favorites' => 'lượt yêu thích',
                 'shares' => 'lượt chia sẻ',
             ][$sort],
-            'totalViews' => $items->sum('views'),
-            'totalFavorites' => $items->sum('favorites'),
-            'totalShares' => $items->sum('shares'),
-            'songsWithViews' => $items->where('views', '>', 0)->count(),
-            'songsWithLyrics' => $items->where('has_lyrics', true)->count(),
+            'totalViews' => $allItems->sum('views'),
+            'totalFavorites' => $allItems->sum('favorites'),
+            'totalShares' => $allItems->sum('shares'),
+            'songsWithViews' => $allItems->where('views', '>', 0)->count(),
+            'songsWithLyrics' => $allItems->where('has_lyrics', true)->count(),
         ]);
     }
 }

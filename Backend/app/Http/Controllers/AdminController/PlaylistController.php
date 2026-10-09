@@ -129,6 +129,33 @@ class PlaylistController extends MediaCatalogController
         ]));
     }
 
+    public function show(string $id): View
+    {
+        $item = Playlist::query()->findOrFail($id);
+        $links = PlaylistSong::query()
+            ->where('playlist_id', (string) $item->getKey())
+            ->orderBy('position')
+            ->paginate(20)
+            ->withQueryString();
+        $songIds = $links->getCollection()->pluck('song_id')->map(fn ($id): string => (string) $id)->all();
+        $songMap = $songIds === []
+            ? collect()
+            : Song::query()->whereIn((new Song())->getKeyName(), $songIds)->get()->keyBy(fn (Song $song): string => (string) $song->getKey());
+        $songs = $links->setCollection(
+            $links->getCollection()
+                ->map(fn (PlaylistSong $link) => $songMap->get((string) $link->song_id))
+                ->filter()
+                ->values()
+        );
+
+        return view('Admin.catalog.show', [
+            'item' => $item,
+            'resource' => $this->resource,
+            'resourceTitle' => $this->title,
+            'songs' => $songs,
+        ]);
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $this->normalizeSortOrderInput($request);

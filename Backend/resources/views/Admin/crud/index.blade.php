@@ -144,6 +144,7 @@
                             @endforeach
                             <td class="admin-table-actions">
                                 @if($resource !== 'admins')
+                                    @if(in_array($resource, ['albums', 'genres', 'topics', 'playlists'], true))<a href="{{ route("admin.$resource.show", $item->getKey()) }}" class="admin-action-link">Xem</a>@endif
                                     @if($canUpdate)<a href="{{ route("admin.$resource.edit", $item->getKey()) }}" class="admin-action-link">Sửa</a>@endif
                                     @if($canDelete)
                                         <form action="{{ route("admin.$resource.destroy", $item->getKey()) }}" method="POST" class="admin-inline-form" data-confirm-delete>

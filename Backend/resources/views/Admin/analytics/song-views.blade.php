@@ -38,7 +38,7 @@
 
     <div class="ant-card admin-table-card">
         <div class="admin-table-toolbar">
-            <div><strong>Bảng xếp hạng {{ $sortLabel }}</strong><span>{{ $items->count() }} bài hát</span></div>
+            <div><strong>Bảng xếp hạng {{ $sortLabel }}</strong><span>{{ $items->total() }} bài hát</span></div>
             <form method="GET" action="{{ route('admin.analytics.song-views') }}" class="admin-topic-filters">
                 <label class="admin-topic-search">
                     <x-anticon name="search" aria-hidden="true" />
@@ -77,7 +77,7 @@
                         @php($song = $item['song'])
                         @php($seconds = (int) ($song->duration_seconds ?? 0))
                         <tr>
-                            <td><strong>{{ $index + 1 }}</strong></td>
+                            <td><strong>{{ ($items->firstItem() ?? 1) + $index }}</strong></td>
                             <td>
                                 <div class="admin-table-avatar admin-song-cover">
                                     @if(filled($song->cover_url))
@@ -104,6 +104,7 @@
                 </tbody>
             </table>
         </div>
+        @if($items->hasPages())<div class="admin-pagination">{{ $items->links() }}</div>@endif
     </div>
 </section>
 @endsection

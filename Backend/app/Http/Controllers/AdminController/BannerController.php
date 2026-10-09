@@ -107,6 +107,19 @@ class BannerController extends Controller
         ]);
     }
 
+    public function show(string $slug): View
+    {
+        $item = $this->findBySlug($slug);
+
+        return view('Admin.banners.show', [
+            'item' => $item,
+            'artists' => $this->relatedNames(Artist::class, $item->artist_ids ?? []),
+            'genres' => $this->relatedNames(Genre::class, $item->genre_ids ?? []),
+            'topics' => $this->relatedNames(Topic::class, $item->topic_ids ?? []),
+            'playlists' => $this->relatedNames(Playlist::class, $item->playlist_ids ?? []),
+        ]);
+    }
+
     public function update(Request $request, string $slug): RedirectResponse
     {
         $this->normalizeSortOrderInput($request);
@@ -148,6 +161,30 @@ class BannerController extends Controller
     private function findBySlug(string $slug): Banner
     {
         return Banner::query()->where('slug', $slug)->firstOrFail();
+    }
+
+    /** @return \Illuminate\Support\Collection<int, string> */
+    private function relatedNames(string $model, mixed $ids): \Illuminate\Support\Collection
+    {
+        $ids = collect(is_array($ids) ? $ids : [])
+            ->filter(fn ($id): bool => filled($id))
+            ->map(fn ($id): string => (string) $id)
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        $instance = new $model();
+
+        $nameField = 'name';
+
+        return $model::query()
+            ->whereIn($instance->getKeyName(), $ids->all())
+            ->orderBy($nameField)
+            ->get()
+            ->map(fn ($item): string => (string) data_get($item, $nameField))
+            ->values();
     }
 
     public function destroyBulk(Request $request): RedirectResponse
