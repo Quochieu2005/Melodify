@@ -11,6 +11,19 @@ use Illuminate\Validation\ValidationException;
 
 class MediaAssetService
 {
+    public static function thumbnailUrl(?string $url, int $width = 160, int $height = 160): ?string
+    {
+        if (blank($url) || ! str_contains($url, 'res.cloudinary.com/') || ! str_contains($url, '/upload/')) {
+            return $url;
+        }
+
+        return str_replace(
+            '/upload/',
+            "/upload/f_auto,q_auto,c_fill,w_{$width},h_{$height}/",
+            $url,
+        );
+    }
+
     public function folder(): string
     {
         return trim((string) config('cloudinary.folder', 'melodify'), '/');
@@ -68,7 +81,8 @@ class MediaAssetService
         if ($request->filled('image_asset_id')) {
             $asset = MediaAsset::query()
                 ->where('folder', $this->folder())
-                ->find($request->input('image_asset_id'));
+                ->whereKey((string) $request->input('image_asset_id'))
+                ->first();
 
             if (! $asset) {
                 throw ValidationException::withMessages([

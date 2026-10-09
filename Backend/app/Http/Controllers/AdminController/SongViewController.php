@@ -39,17 +39,25 @@ class SongViewController extends Controller
             });
         }
 
-        $items = $songQuery
-            ->limit(500)
-            ->get()
-            ->map(function (Song $song): array {
+        $songs = $songQuery->limit(500)->get();
+        $songIds = $songs->map(fn (Song $song): string => (string) $song->getKey())->values()->all();
+        $lyricsBySong = $songIds === []
+            ? collect()
+            : Lyric::query()->whereIn('song_id', $songIds)->get()->keyBy(fn (Lyric $lyric): string => (string) $lyric->song_id);
+        $audioBySong = $songIds === []
+            ? collect()
+            : SongAudioFile::query()
+                ->whereIn('song_id', $songIds)
+                ->where('file_type', 'full')
+                ->where('status', 'active')
+                ->get()
+                ->keyBy(fn (SongAudioFile $audio): string => (string) $audio->song_id);
+
+        $items = $songs
+            ->map(function (Song $song) use ($lyricsBySong, $audioBySong): array {
                 $songId = (string) $song->getKey();
-                $lyric = Lyric::query()->where('song_id', $songId)->first();
-                $audio = SongAudioFile::query()
-                    ->where('song_id', $songId)
-                    ->where('file_type', 'full')
-                    ->where('status', 'active')
-                    ->first();
+                $lyric = $lyricsBySong->get($songId);
+                $audio = $audioBySong->get($songId);
 
                 return [
                     'song' => $song,
@@ -255,35 +263,66 @@ class SongViewController extends Controller
             });
         }
 
-        $items = $songQuery
-            ->limit(500)
-            ->get()
-            ->map(function (Song $song) use ($from): array {
-                $songId = (string) $song->getKey();
-                $artistLink = SongArtist::query()->where('song_id', $songId)->first();
-                $artist = $artistLink ? Artist::query()->find($artistLink->artist_id) : null;
-                $views = SongPlayEvent::query()->where('song_id', $songId);
-                $favorites = Favorite::query()->where('song_id', $songId);
-                $shares = SongShare::query()->where('song_id', $songId);
-                $lyric = Lyric::query()->where('song_id', $songId)->first();
-                $hasFullAudio = SongAudioFile::query()
-                    ->where('song_id', $songId)
-                    ->where('file_type', 'full')
-                    ->where('status', 'active')
-                    ->exists();
+        $songs = $songQuery->limit(500)->get();
+        $songIds = $songs->map(fn (Song $song): string => (string) $song->getKey())->values()->all();
 
-                if ($from !== null) {
-                    $views->where('started_at', '>=', $from);
-                    $favorites->where('created_at', '>=', $from);
-                    $shares->where('created_at', '>=', $from);
-                }
+        // Fetch the page relations and counters in batches. This replaces the
+        // previous six-to-seven queries per song with a fixed number of queries.
+        $artistLinksBySong = $songIds === []
+            ? collect()
+            : SongArtist::query()
+                ->whereIn('song_id', $songIds)
+                ->orderBy('artist_role')
+                ->get()
+                ->groupBy(fn (SongArtist $link): string => (string) $link->song_id)
+                ->map(fn ($links): SongArtist => $links->first());
+        $artistIds = $artistLinksBySong->pluck('artist_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all();
+        $artists = $artistIds === []
+            ? collect()
+            : Artist::query()->whereIn('_id', $artistIds)->get()->keyBy(fn (Artist $artist): string => (string) $artist->getKey());
+        $lyricsBySong = $songIds === []
+            ? collect()
+            : Lyric::query()->whereIn('song_id', $songIds)->get()->keyBy(fn (Lyric $lyric): string => (string) $lyric->song_id);
+        $fullAudioBySong = $songIds === []
+            ? collect()
+            : SongAudioFile::query()
+                ->whereIn('song_id', $songIds)
+                ->where('file_type', 'full')
+                ->where('status', 'active')
+                ->get()
+                ->keyBy(fn (SongAudioFile $audio): string => (string) $audio->song_id);
+
+        $viewsQuery = $songIds === [] ? null : SongPlayEvent::query()->whereIn('song_id', $songIds);
+        $favoritesQuery = $songIds === [] ? null : Favorite::query()->whereIn('song_id', $songIds);
+        $sharesQuery = $songIds === [] ? null : SongShare::query()->whereIn('song_id', $songIds);
+        if ($from !== null) {
+            $viewsQuery?->where('started_at', '>=', $from);
+            $favoritesQuery?->where('created_at', '>=', $from);
+            $sharesQuery?->where('created_at', '>=', $from);
+        }
+        $viewsBySong = $viewsQuery === null
+            ? collect()
+            : $viewsQuery->get(['song_id'])->groupBy(fn ($event): string => (string) $event->song_id)->map(fn ($events): int => $events->count());
+        $favoritesBySong = $favoritesQuery === null
+            ? collect()
+            : $favoritesQuery->get(['song_id'])->groupBy(fn ($favorite): string => (string) $favorite->song_id)->map(fn ($favorites): int => $favorites->count());
+        $sharesBySong = $sharesQuery === null
+            ? collect()
+            : $sharesQuery->get(['song_id'])->groupBy(fn ($share): string => (string) $share->song_id)->map(fn ($shares): int => $shares->count());
+
+        $items = $songs
+            ->map(function (Song $song) use ($artists, $artistLinksBySong, $lyricsBySong, $fullAudioBySong, $viewsBySong, $favoritesBySong, $sharesBySong): array {
+                $songId = (string) $song->getKey();
+                $artistLink = $artistLinksBySong->get($songId);
+                $lyric = $lyricsBySong->get($songId);
+                $hasFullAudio = $fullAudioBySong->has($songId);
 
                 return [
                     'song' => $song,
-                    'artist' => $song->artist_name ?: $artist?->name,
-                    'views' => $views->count(),
-                    'favorites' => $favorites->count(),
-                    'shares' => $shares->count(),
+                    'artist' => $song->artist_name ?: $artists->get((string) ($artistLink?->artist_id))?->name,
+                    'views' => $viewsBySong->get($songId, 0),
+                    'favorites' => $favoritesBySong->get($songId, 0),
+                    'shares' => $sharesBySong->get($songId, 0),
                     'has_lyrics' => $lyric !== null,
                     'has_plain_lyrics' => filled($lyric?->plain_lyrics) || (blank($lyric?->synced_lyrics) && filled($lyric?->content)),
                     'has_synced_lyrics' => filled($lyric?->synced_lyrics),

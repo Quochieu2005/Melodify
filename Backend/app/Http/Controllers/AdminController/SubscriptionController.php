@@ -55,14 +55,16 @@ class SubscriptionController extends CrudResourceController
         }
 
         $items = $query->latest()->paginate(10)->withQueryString();
-        $subscriberCounts = [];
-
-        foreach ($items as $plan) {
-            $subscriberCounts[(string) $plan->getKey()] = Subscription::query()
-                ->where('plan_id', (string) $plan->getKey())
+        $planIds = $items->getCollection()->map(fn (SubscriptionPlan $plan): string => (string) $plan->getKey())->values()->all();
+        $subscriberCounts = $planIds === []
+            ? []
+            : Subscription::query()
+                ->whereIn('plan_id', $planIds)
                 ->where('status', 'active')
-                ->count();
-        }
+                ->get(['plan_id'])
+                ->groupBy(fn (Subscription $subscription): string => (string) $subscription->plan_id)
+                ->map(fn ($subscriptions): int => $subscriptions->count())
+                ->all();
 
         return view('Admin.subscriptions.index', $this->viewData(compact('items', 'subscriberCounts', 'search')));
     }

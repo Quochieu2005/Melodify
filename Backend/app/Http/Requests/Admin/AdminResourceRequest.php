@@ -68,9 +68,13 @@ class AdminResourceRequest extends FormRequest
             'albums' => [
                 'title' => ['bail', 'required', 'string', 'min:1', 'max:160', new PlainText()],
                 'slug' => ['nullable', 'alpha_dash', 'max:180', new PlainText(), Rule::unique('albums', 'slug')->ignore($routeId)],
-                'artist_id' => ['required', 'string', 'max:64'],
+                'artist_ids' => ['required', 'array', 'min:1', 'max:50'],
+                'artist_ids.*' => ['required', 'string', 'max:64', 'distinct'],
+                'song_ids' => ['nullable', 'array', 'max:500'],
+                'song_ids.*' => ['required', 'string', 'max:64', 'distinct'],
                 'release_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today'],
-                'cover_url' => ['nullable', 'url:http,https', 'max:500', new PlainText()],
+                'image' => [$this->isMethod('post') ? 'required_without:image_asset_id' : 'nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=4000,max_height=4000'],
+                'image_asset_id' => [$this->isMethod('post') ? 'required_without:image' : 'nullable', 'string', 'alpha_dash', 'max:64'],
                 'status' => ['required', 'in:draft,published,blocked'],
             ],
             'artists' => [
@@ -151,8 +155,20 @@ class AdminResourceRequest extends FormRequest
                 $validator->errors()->add('avatar_file', 'Chỉ chọn một cách: tải ảnh lên hoặc nhập URL ảnh đại diện.');
             }
 
-            if ($this->route()?->getName() && str_contains($this->route()->getName(), 'albums') && ! Artist::query()->find($this->input('artist_id'))) {
-                $validator->errors()->add('artist_id', 'Nghệ sĩ đã chọn không tồn tại.');
+            if ($this->route()?->getName() && str_contains($this->route()->getName(), 'albums')) {
+                foreach ((array) $this->input('artist_ids', []) as $artistId) {
+                    if (! Artist::query()->find($artistId)) {
+                        $validator->errors()->add('artist_ids', 'Một nghệ sĩ đã chọn không tồn tại.');
+                        break;
+                    }
+                }
+
+                foreach ((array) $this->input('song_ids', []) as $songId) {
+                    if (! \App\Models\Song::query()->find($songId)) {
+                        $validator->errors()->add('song_ids', 'Một bài hát đã chọn không tồn tại.');
+                        break;
+                    }
+                }
             }
 
             if ($this->route()?->getName() && str_contains($this->route()->getName(), 'songs') && filled($this->input('album_id')) && ! Album::query()->find($this->input('album_id'))) {

@@ -93,7 +93,7 @@ class TopicController extends MediaCatalogController
             'type_custom' => ['nullable', 'required_if:type,custom', 'string', 'min:1', 'max:80', new PlainText()],
             'slug' => ['nullable', 'alpha_dash', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', new PlainText()],
             'description' => ['nullable', 'string', 'max:2000', new PlainText()],
-            'sort_order' => ['required', 'integer', 'min:0', 'max:9999', $this->uniqueSortOrderRule($item)],
+            'sort_order' => ['required', 'integer', 'min:0', 'max:9999'],
             'status' => ['required', 'in:active,inactive'],
             'image' => [$item === null ? 'required_without:image_asset_id' : 'nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=4000,max_height=4000'],
             'image_asset_id' => [$item === null ? 'required_without:image' : 'nullable', 'string', 'alpha_dash', 'max:64'],

@@ -21,6 +21,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -67,12 +68,7 @@ class SongController extends CrudResourceController
         }
 
         $items = $query->latest()->paginate(10)->withQueryString();
-        $rows = $items->getCollection()
-            ->map(fn (Song $song): array => [
-                'song' => $song,
-                ...$this->indexRelations($song),
-            ])
-            ->values();
+        $rows = $this->indexRelationsFor($items->getCollection());
 
         return view('Admin.songs.index', $this->viewData(compact('items', 'rows', 'search')));
     }
@@ -285,24 +281,73 @@ class SongController extends CrudResourceController
         return Playlist::query()->where('status', 'active')->orderBy('name')->get();
     }
 
-    private function indexRelations(Song $song): array
+    private function indexRelationsFor(Collection $songs): Collection
     {
-        $songId = (string) $song->getKey();
-        $artistLink = SongArtist::query()
-            ->where('song_id', $songId)
-            ->orderBy('artist_role')
-            ->first();
-        $genreIds = SongGenre::query()->where('song_id', $songId)->pluck('genre_id');
-        $topicIds = TopicSong::query()->where('song_id', $songId)->orderBy('position')->pluck('topic_id');
-        $playlistIds = PlaylistSong::query()->where('song_id', $songId)->orderBy('position')->pluck('playlist_id');
+        $songIds = $songs->map(fn (Song $song): string => (string) $song->getKey())->values()->all();
+        if ($songIds === []) {
+            return collect();
+        }
 
-        return [
-            'artist' => $song->artist_name ?: ($artistLink ? Artist::query()->find($artistLink->artist_id)?->name : null),
-            'album' => filled($song->album_id) ? Album::query()->find($song->album_id)?->title : null,
-            'genre' => $genreIds->map(fn ($id) => Genre::query()->find($id)?->name)->filter()->implode(', '),
-            'topic' => $topicIds->map(fn ($id) => Topic::query()->find($id)?->name)->filter()->implode(', '),
-            'playlist' => $playlistIds->map(fn ($id) => Playlist::query()->find($id)?->name)->filter()->implode(', '),
-        ];
+        // Resolve all relations for the current page in batches. The previous
+        // row-by-row lookups caused dozens of Mongo round trips for ten songs.
+        $artistLinksBySong = SongArtist::query()
+            ->whereIn('song_id', $songIds)
+            ->orderBy('artist_role')
+            ->get()
+            ->groupBy(fn (SongArtist $link): string => (string) $link->song_id)
+            ->map(fn (Collection $links): SongArtist => $links->first());
+        $artistIds = $artistLinksBySong->pluck('artist_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all();
+        $artists = $artistIds === []
+            ? collect()
+            : Artist::query()->whereIn('_id', $artistIds)->get()->keyBy(fn (Artist $artist): string => (string) $artist->getKey());
+
+        $albumIds = $songs->pluck('album_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all();
+        $albums = $albumIds === []
+            ? collect()
+            : Album::query()->whereIn('_id', $albumIds)->get()->keyBy(fn (Album $album): string => (string) $album->getKey());
+
+        $genreLinksBySong = SongGenre::query()
+            ->whereIn('song_id', $songIds)
+            ->get()
+            ->groupBy(fn (SongGenre $link): string => (string) $link->song_id);
+        $genreIds = $genreLinksBySong->flatten(1)->pluck('genre_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all();
+        $genres = $genreIds === []
+            ? collect()
+            : Genre::query()->whereIn('_id', $genreIds)->get()->keyBy(fn (Genre $genre): string => (string) $genre->getKey());
+
+        $topicLinksBySong = TopicSong::query()
+            ->whereIn('song_id', $songIds)
+            ->orderBy('position')
+            ->get()
+            ->groupBy(fn (TopicSong $link): string => (string) $link->song_id);
+        $topicIds = $topicLinksBySong->flatten(1)->pluck('topic_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all();
+        $topics = $topicIds === []
+            ? collect()
+            : Topic::query()->whereIn('_id', $topicIds)->get()->keyBy(fn (Topic $topic): string => (string) $topic->getKey());
+
+        $playlistLinksBySong = PlaylistSong::query()
+            ->whereIn('song_id', $songIds)
+            ->orderBy('position')
+            ->get()
+            ->groupBy(fn (PlaylistSong $link): string => (string) $link->song_id);
+        $playlistIds = $playlistLinksBySong->flatten(1)->pluck('playlist_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all();
+        $playlists = $playlistIds === []
+            ? collect()
+            : Playlist::query()->whereIn('_id', $playlistIds)->get()->keyBy(fn (Playlist $playlist): string => (string) $playlist->getKey());
+
+        return $songs->map(function (Song $song) use ($artistLinksBySong, $artists, $albums, $genreLinksBySong, $genres, $topicLinksBySong, $topics, $playlistLinksBySong, $playlists): array {
+            $songId = (string) $song->getKey();
+            $artistLink = $artistLinksBySong->get($songId);
+
+            return [
+                'song' => $song,
+                'artist' => $song->artist_name ?: $artists->get((string) ($artistLink?->artist_id))?->name,
+                'album' => filled($song->album_id) ? $albums->get((string) $song->album_id)?->title : null,
+                'genre' => $genreLinksBySong->get($songId, collect())->map(fn (SongGenre $link) => $genres->get((string) $link->genre_id)?->name)->filter()->implode(', '),
+                'topic' => $topicLinksBySong->get($songId, collect())->map(fn (TopicSong $link) => $topics->get((string) $link->topic_id)?->name)->filter()->implode(', '),
+                'playlist' => $playlistLinksBySong->get($songId, collect())->map(fn (PlaylistSong $link) => $playlists->get((string) $link->playlist_id)?->name)->filter()->implode(', '),
+            ];
+        })->values();
     }
 
     private function syncTopics(Song $song, mixed $topicId): void

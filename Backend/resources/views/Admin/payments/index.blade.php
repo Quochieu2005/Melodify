@@ -11,7 +11,7 @@
 
     <div class="admin-stats-row">
         <div class="ant-card admin-stat-card"><div class="ant-card-body"><div class="admin-stat-label">Tổng giao dịch</div><div class="admin-stat-value">{{ $payments->total() }}</div><div class="admin-stat-help">Bản ghi trong payments</div></div></div>
-        <div class="ant-card admin-stat-card"><div class="ant-card-body"><div class="admin-stat-label">Thanh toán thành công</div><div class="admin-stat-value">{{ $successfulPayments->count() }}</div><div class="admin-stat-help">Trạng thái paid / success / completed</div></div></div>
+        <div class="ant-card admin-stat-card"><div class="ant-card-body"><div class="admin-stat-label">Thanh toán thành công</div><div class="admin-stat-value">{{ $successfulPaymentCount }}</div><div class="admin-stat-help">Trạng thái paid / success / completed</div></div></div>
         <div class="ant-card admin-stat-card"><div class="ant-card-body"><div class="admin-stat-label">Doanh thu đã ghi nhận</div><div class="admin-stat-value">{{ number_format($totalAmount, 0, ',', '.') }}₫</div><div class="admin-stat-help">Tổng amount từ payments</div></div></div>
         <div class="ant-card admin-stat-card"><div class="ant-card-body"><div class="admin-stat-label">Đang xử lý</div><div class="admin-stat-value">{{ $pendingCount }}</div><div class="admin-stat-help">Cần kiểm tra thêm</div></div></div>
     </div>

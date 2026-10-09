@@ -64,11 +64,14 @@ class PaymentController extends Controller
             ->paginate(15)
             ->withQueryString();
         $successStatuses = ['success', 'paid', 'completed'];
-        $successfulPayments = Payment::query()->whereIn('status', $successStatuses)->get();
+        $successfulPayments = Payment::query()
+            ->whereIn('status', $successStatuses)
+            ->get(['amount']);
+        $successfulPaymentCount = $successfulPayments->count();
         $totalAmount = (float) $successfulPayments->sum(fn ($payment) => (float) ($payment->amount ?? 0));
         $pendingCount = Payment::query()->whereIn('status', ['pending', 'processing'])->count();
 
-        return view('Admin.payments.index', compact('payments', 'successfulPayments', 'totalAmount', 'pendingCount', 'search'));
+        return view('Admin.payments.index', compact('payments', 'successfulPaymentCount', 'totalAmount', 'pendingCount', 'search'));
     }
 
     public function show(string $id): View

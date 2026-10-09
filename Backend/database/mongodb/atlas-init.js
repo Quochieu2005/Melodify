@@ -102,15 +102,21 @@ const indexes = {
     ],
     song_artists: [
         [{ song_id: 1, artist_id: 1, artist_role: 1 }, { unique: true }],
+        [{ song_id: 1, artist_role: 1 }, {}],
         [{ artist_id: 1 }, {}],
     ],
     song_genres: [
         [{ song_id: 1, genre_id: 1 }, { unique: true }],
+        [{ song_id: 1 }, {}],
         [{ genre_id: 1 }, {}],
     ],
+    topic_songs: [
+        [{ topic_id: 1, song_id: 1 }, { unique: true }],
+        [{ song_id: 1, position: 1 }, {}],
+        [{ topic_id: 1, position: 1 }, {}],
+    ],
     song_audio_files: [
-        [{ song_id: 1 }, {}],
-        [{ status: 1 }, {}],
+        [{ song_id: 1, file_type: 1, status: 1 }, {}],
     ],
     lyrics: [[{ song_id: 1, language: 1 }, { unique: true }]],
     playlists: [
@@ -128,11 +134,12 @@ const indexes = {
     playlist_songs: [
         [{ playlist_id: 1, song_id: 1 }, { unique: true }],
         [{ song_id: 1 }, {}],
+        [{ song_id: 1, position: 1 }, {}],
         [{ playlist_id: 1, position: 1 }, {}],
     ],
     favorites: [
         [{ user_id: 1, song_id: 1 }, { unique: true }],
-        [{ song_id: 1 }, {}],
+        [{ song_id: 1, created_at: -1 }, {}],
     ],
     song_shares: [
         [{ song_id: 1, created_at: -1 }, {}],
@@ -150,6 +157,7 @@ const indexes = {
         [{ user_id: 1 }, {}],
         [{ song_id: 1 }, {}],
         [{ song_id: 1, started_at: -1 }, {}],
+        [{ started_at: -1 }, {}],
     ],
     comments: [
         [{ song_id: 1 }, {}],
@@ -170,13 +178,14 @@ const indexes = {
     ],
     subscriptions: [
         [{ user_id: 1, status: 1 }, {}],
-        [{ plan_id: 1 }, {}],
+        [{ plan_id: 1, status: 1 }, {}],
         [{ end_date: 1 }, {}],
     ],
     payments: [
         [{ payment_code: 1 }, { unique: true }],
         [{ user_id: 1 }, {}],
         [{ status: 1 }, {}],
+        [{ status: 1, paid_at: -1 }, {}],
     ],
     transactions: [
         [{ transaction_code: 1 }, { unique: true }],
