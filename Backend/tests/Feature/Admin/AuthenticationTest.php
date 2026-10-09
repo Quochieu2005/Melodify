@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Models\Admin;
+use Illuminate\Support\Facades\Config;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -25,5 +27,28 @@ class AuthenticationTest extends TestCase
     {
         $this->post(route('admin.login.store'), [])
             ->assertSessionHasErrors(['email', 'password']);
+    }
+
+    public function test_logging_out_revokes_api_docs_access(): void
+    {
+        Config::set('app.api_docs_enabled', true);
+
+        $admin = new Admin([
+            'name' => 'Test Admin',
+            'email' => 'test-admin@example.com',
+            'role' => 'admin',
+            'status' => 'active',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($admin, 'admin')
+            ->get(route('api.docs'))
+            ->assertOk();
+
+        $this->post(route('admin.logout'))
+            ->assertRedirect(route('admin.login'));
+
+        $this->get(route('api.docs'))
+            ->assertUnauthorized();
     }
 }

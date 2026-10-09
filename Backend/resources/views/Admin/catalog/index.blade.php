@@ -33,21 +33,17 @@
     <div class="ant-card admin-table-card">
         <div class="admin-table-toolbar">
             <div><strong>Danh sách {{ $resourceTitle }}</strong><span>{{ $items->total() }} mục</span></div>
-            @if(in_array($resource, ['topics', 'playlists'], true))
-                <form method="GET" action="{{ route("admin.$resource.index") }}" class="admin-topic-filters">
-                    <label class="admin-topic-search">
-                        <x-anticon name="search" aria-hidden="true" />
-                        <input type="search" name="q" value="{{ $search ?? '' }}" maxlength="100" placeholder="Tìm tên, slug, nhóm..." aria-label="Tìm kiếm {{ $resourceTitle }}">
-                    </label>
-                    @if(filled($typeFilter ?? null))<input type="hidden" name="type" value="{{ $typeFilter }}">@endif
-                    <button type="submit" class="ant-btn">Tìm kiếm</button>
-                    @if(filled($search ?? null) || filled($typeFilter ?? null))
-                        <a href="{{ route("admin.$resource.index") }}" class="admin-action-link">Xóa lọc</a>
-                    @endif
-                </form>
-            @else
-                <span class="admin-table-hint">Ảnh được lưu trong kho Cloudinary folder melodify</span>
-            @endif
+            <form method="GET" action="{{ route("admin.$resource.index") }}" class="admin-table-filter-form">
+                <label class="admin-table-search">
+                    <x-anticon name="search" aria-hidden="true" />
+                    <input type="search" name="q" value="{{ $search ?? '' }}" maxlength="100" placeholder="Tìm tên, slug, mô tả..." aria-label="Tìm kiếm {{ $resourceTitle }}">
+                </label>
+                @if(filled($typeFilter ?? null))<input type="hidden" name="type" value="{{ $typeFilter }}">@endif
+                <button type="submit" class="ant-btn">Tìm kiếm</button>
+                @if(filled($search ?? null) || filled($typeFilter ?? null))
+                    <a href="{{ route("admin.$resource.index") }}" class="admin-action-link">Xóa lọc</a>
+                @endif
+            </form>
         </div>
         <div class="admin-table-scroll">
             <table class="ant-table admin-data-table admin-catalog-table">

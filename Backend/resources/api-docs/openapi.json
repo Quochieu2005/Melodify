@@ -50,10 +50,10 @@
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
       }
     },
-    "/api/v1/topics/{id}": {
+    "/api/v1/topics/{slug}": {
       "get": {
         "tags": ["Topics"], "summary": "Get an active topic",
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "parameters": [{ "$ref": "#/components/parameters/SlugOrId" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
@@ -64,10 +64,10 @@
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
       }
     },
-    "/api/v1/genres/{id}": {
+    "/api/v1/genres/{slug}": {
       "get": {
         "tags": ["Genres"], "summary": "Get an active genre",
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "parameters": [{ "$ref": "#/components/parameters/SlugOrId" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
@@ -78,10 +78,10 @@
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
       }
     },
-    "/api/v1/banners/{id}": {
+    "/api/v1/banners/{slug}": {
       "get": {
         "tags": ["Banners"], "summary": "Get an active banner",
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "parameters": [{ "$ref": "#/components/parameters/SlugOrId" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
@@ -92,10 +92,10 @@
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
       }
     },
-    "/api/v1/albums/{id}": {
+    "/api/v1/albums/{slug}": {
       "get": {
         "tags": ["Albums"], "summary": "Get a published album with artist",
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "parameters": [{ "$ref": "#/components/parameters/SlugOrId" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
@@ -106,10 +106,10 @@
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
       }
     },
-    "/api/v1/artists/{id}": {
+    "/api/v1/artists/{slug}": {
       "get": {
         "tags": ["Artists"], "summary": "Get an active artist",
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "parameters": [{ "$ref": "#/components/parameters/SlugOrId" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
@@ -120,10 +120,10 @@
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
       }
     },
-    "/api/v1/playlists/{id}": {
+    "/api/v1/playlists/{slug}": {
       "get": {
         "tags": ["Music"], "summary": "Get a public Admin playlist with songs",
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "parameters": [{ "$ref": "#/components/parameters/SlugOrId" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
@@ -134,18 +134,18 @@
         "responses": { "200": { "$ref": "#/components/responses/CatalogList" } }
       }
     },
-    "/api/v1/songs/{id}": {
+    "/api/v1/songs/{slug}": {
       "get": {
         "tags": ["Music"], "summary": "Get a published song with audio and lyrics",
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "parameters": [{ "$ref": "#/components/parameters/SlugOrId" }],
         "responses": { "200": { "$ref": "#/components/responses/CatalogItem" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
-    "/api/v1/songs/{id}/lyrics": {
+    "/api/v1/songs/{slug}/lyrics": {
       "get": {
         "tags": ["Music"], "summary": "Get lyrics for a published song",
         "parameters": [
-          { "$ref": "#/components/parameters/Id" },
+          { "$ref": "#/components/parameters/SlugOrId" },
           { "name": "language", "in": "query", "schema": { "type": "string", "example": "vi" } }
         ],
         "responses": { "200": { "$ref": "#/components/responses/LyricsList" }, "404": { "$ref": "#/components/responses/NotFound" } }
@@ -162,7 +162,13 @@
       }
     },
     "parameters": {
-      "Id": { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+      "SlugOrId": {
+        "name": "slug",
+        "in": "path",
+        "required": true,
+        "description": "Ưu tiên slug. Nếu không tìm thấy slug, có thể dùng id.",
+        "schema": { "type": "string" }
+      },
       "PerPage": { "name": "per_page", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } },
       "Search": { "name": "q", "in": "query", "schema": { "type": "string" } }
     },

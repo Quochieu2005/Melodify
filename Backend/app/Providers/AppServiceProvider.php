@@ -2,8 +2,11 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use App\Models\Topic;
 use App\Models\Playlist;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
@@ -24,6 +27,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Event::listen(Login::class, function (Login $event): void {
+            if ($event->guard !== 'web' || ! $event->user instanceof User) {
+                return;
+            }
+
+            $event->user->forceFill(['last_login_at' => now()])->saveQuietly();
+        });
+
         /*
          * Render terminates TLS at its proxy and forwards the request to
          * Apache over HTTP. Force generated links and Vite assets to HTTPS

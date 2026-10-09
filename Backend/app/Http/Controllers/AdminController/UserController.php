@@ -14,7 +14,9 @@ class UserController extends CrudResourceController
 
     protected string $viewDirectory = 'Admin.users';
 
-    protected array $columns = ['name' => 'Họ tên', 'email' => 'Email', 'phone' => 'Điện thoại', 'status' => 'Trạng thái'];
+    protected array $columns = ['avatar_url' => 'Ảnh', 'name' => 'Họ tên', 'username' => 'Username', 'email' => 'Email', 'phone' => 'Điện thoại', 'created_at' => 'Ngày tham gia', 'is_premium' => 'Premium', 'last_login_at' => 'Đăng nhập lần cuối', 'status' => 'Trạng thái'];
+
+    protected array $searchable = ['name', 'username', 'email', 'phone', 'slug'];
 
     protected array $fields = [
         'name' => ['label' => 'Họ tên', 'required' => true],
@@ -22,8 +24,17 @@ class UserController extends CrudResourceController
         'username' => ['label' => 'Tên đăng nhập'],
         'slug' => ['label' => 'Slug', 'required' => true],
         'phone' => ['label' => 'Số điện thoại'],
+        'is_premium' => ['label' => 'Premium / VIP', 'type' => 'checkbox'],
         'password' => ['label' => 'Mật khẩu', 'type' => 'password', 'help' => 'Để trống khi sửa nếu không muốn đổi mật khẩu.'],
         'password_confirmation' => ['label' => 'Xác nhận mật khẩu', 'type' => 'password'],
         'status' => ['label' => 'Trạng thái', 'type' => 'select', 'required' => true, 'options' => ['active' => 'Hoạt động', 'blocked' => 'Đã khóa']],
     ];
+
+    protected function normalize(array $data, mixed $ignoreId = null): array
+    {
+        $data = parent::normalize($data, $ignoreId);
+        $data['is_premium'] = request()->boolean('is_premium') ? 1 : 0;
+
+        return $data;
+    }
 }

@@ -12,7 +12,17 @@
         </div>
     </div>
     <div class="admin-table-card ant-card">
-        <div class="admin-table-toolbar"><div><strong>Bình luận</strong><span>{{ $comments->total() }} mục</span></div></div>
+        <div class="admin-table-toolbar">
+            <div><strong>Bình luận</strong><span>{{ $comments->total() }} mục</span></div>
+            <form method="GET" action="{{ route('admin.comments.index') }}" class="admin-table-filter-form">
+                <label class="admin-table-search">
+                    <x-anticon name="search" aria-hidden="true" />
+                    <input type="search" name="q" value="{{ $search ?? '' }}" maxlength="100" placeholder="Tìm nội dung, người dùng, bài hát..." aria-label="Tìm kiếm bình luận">
+                </label>
+                <button type="submit" class="ant-btn">Tìm kiếm</button>
+                @if(filled($search ?? null))<a href="{{ route('admin.comments.index') }}" class="admin-action-link">Xóa lọc</a>@endif
+            </form>
+        </div>
             <div class="admin-table-scroll">
                 <table class="ant-table admin-data-table">
                     <thead class="ant-table-thead">

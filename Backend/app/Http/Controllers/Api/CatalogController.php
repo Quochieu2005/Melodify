@@ -38,9 +38,9 @@ class CatalogController extends Controller
         return $this->collection($request, Topic::class, ['active'], fn (Topic $topic): array => $this->topicData($topic));
     }
 
-    public function topic(string $id): JsonResponse
+    public function topic(string $slug): JsonResponse
     {
-        return $this->show(Topic::class, $id, ['active'], fn (Topic $topic): array => $this->topicData($topic, true));
+        return $this->show(Topic::class, $slug, ['active'], fn (Topic $topic): array => $this->topicData($topic, true));
     }
 
     public function genres(Request $request): JsonResponse
@@ -48,9 +48,9 @@ class CatalogController extends Controller
         return $this->collection($request, Genre::class, ['active'], fn (Genre $genre): array => $this->genreData($genre));
     }
 
-    public function genre(string $id): JsonResponse
+    public function genre(string $slug): JsonResponse
     {
-        return $this->show(Genre::class, $id, ['active'], fn (Genre $genre): array => $this->genreData($genre, true));
+        return $this->show(Genre::class, $slug, ['active'], fn (Genre $genre): array => $this->genreData($genre, true));
     }
 
     public function banners(Request $request): JsonResponse
@@ -58,9 +58,9 @@ class CatalogController extends Controller
         return $this->collection($request, Banner::class, ['active'], fn (Banner $banner): array => $this->bannerData($banner), 'title');
     }
 
-    public function banner(string $id): JsonResponse
+    public function banner(string $slug): JsonResponse
     {
-        return $this->show(Banner::class, $id, ['active'], fn (Banner $banner): array => $this->bannerData($banner));
+        return $this->show(Banner::class, $slug, ['active'], fn (Banner $banner): array => $this->bannerData($banner));
     }
 
     public function albums(Request $request): JsonResponse
@@ -68,9 +68,9 @@ class CatalogController extends Controller
         return $this->collection($request, Album::class, ['published'], fn (Album $album): array => $this->albumData($album), 'title');
     }
 
-    public function album(string $id): JsonResponse
+    public function album(string $slug): JsonResponse
     {
-        return $this->show(Album::class, $id, ['published'], fn (Album $album): array => $this->albumData($album, true));
+        return $this->show(Album::class, $slug, ['published'], fn (Album $album): array => $this->albumData($album, true));
     }
 
     public function artists(Request $request): JsonResponse
@@ -78,9 +78,9 @@ class CatalogController extends Controller
         return $this->collection($request, Artist::class, ['active'], fn (Artist $artist): array => $this->artistData($artist));
     }
 
-    public function artist(string $id): JsonResponse
+    public function artist(string $slug): JsonResponse
     {
-        return $this->show(Artist::class, $id, ['active'], fn (Artist $artist): array => $this->artistData($artist));
+        return $this->show(Artist::class, $slug, ['active'], fn (Artist $artist): array => $this->artistData($artist));
     }
 
     public function playlists(Request $request): JsonResponse
@@ -95,11 +95,11 @@ class CatalogController extends Controller
         );
     }
 
-    public function playlist(string $id): JsonResponse
+    public function playlist(string $slug): JsonResponse
     {
         return $this->show(
             Playlist::class,
-            $id,
+            $slug,
             ['active'],
             fn (Playlist $playlist): array => $this->playlistData($playlist, true),
             fn ($query) => $query->whereIn('visibility', ['public', 'unlisted']),
@@ -191,9 +191,9 @@ class CatalogController extends Controller
         ]);
     }
 
-    public function recordSongView(string $id, Request $request): JsonResponse
+    public function recordSongView(string $slug, Request $request): JsonResponse
     {
-        $song = $this->localSongById($id);
+        $song = $this->localSongById($slug);
 
         abort_unless($song, 404, 'Bài hát chưa được lưu trong kho nhạc.');
 
@@ -226,9 +226,9 @@ class CatalogController extends Controller
         ]);
     }
 
-    public function toggleSongFavorite(string $id, Request $request): JsonResponse
+    public function toggleSongFavorite(string $slug, Request $request): JsonResponse
     {
-        $song = $this->localSongById($id);
+        $song = $this->localSongById($slug);
 
         abort_unless($song, 404, 'Bài hát chưa được lưu trong kho nhạc.');
 
@@ -258,9 +258,9 @@ class CatalogController extends Controller
         ]);
     }
 
-    public function recordSongShare(string $id, Request $request): JsonResponse
+    public function recordSongShare(string $slug, Request $request): JsonResponse
     {
-        $song = $this->localSongById($id);
+        $song = $this->localSongById($slug);
 
         abort_unless($song, 404, 'Bài hát chưa được lưu trong kho nhạc.');
 
@@ -282,16 +282,16 @@ class CatalogController extends Controller
         ]);
     }
 
-    public function song(string $id): JsonResponse
+    public function song(string $slug): JsonResponse
     {
-        $localSong = $this->localSongById($id);
+        $localSong = $this->localSongById($slug);
 
         if ($localSong) {
             return response()->json(['data' => $this->localSongData($localSong, true, true)]);
         }
 
         try {
-            $track = $this->nhaccuatui->getSong($id);
+            $track = $this->nhaccuatui->getSong($slug);
 
             return response()->json(['data' => $this->nctTrackData($track)]);
         } catch (RuntimeException $exception) {
@@ -299,9 +299,9 @@ class CatalogController extends Controller
         }
     }
 
-    public function lyrics(string $id, Request $request): JsonResponse
+    public function lyrics(string $slug, Request $request): JsonResponse
     {
-        $localSong = $this->localSongById($id);
+        $localSong = $this->localSongById($slug);
 
         if ($localSong) {
             return response()->json([
@@ -315,8 +315,8 @@ class CatalogController extends Controller
         }
 
         try {
-            $track = $this->nhaccuatui->getSong($id);
-            $lyrics = $this->nhaccuatui->getLyrics($id, $track);
+            $track = $this->nhaccuatui->getSong($slug);
+            $lyrics = $this->nhaccuatui->getLyrics($slug, $track);
 
             if (! $lyrics) {
                 $lyrics = $this->lyricsClient->find(
@@ -330,7 +330,7 @@ class CatalogController extends Controller
             return response()->json([
                 'data' => $this->lyricsData($track, $lyrics),
                 'meta' => [
-                    'song_id' => $id,
+                    'song_id' => $slug,
                     'language' => $request->input('language'),
                     'source' => $lyrics['source'] ?? 'NhacCuaTui',
                 ],
@@ -370,7 +370,7 @@ class CatalogController extends Controller
         ]);
     }
 
-    private function show(string $model, string $id, array $statuses, callable $transform, ?Closure $scope = null): JsonResponse
+    private function show(string $model, string $slug, array $statuses, callable $transform, ?Closure $scope = null): JsonResponse
     {
         $query = $model::query()->whereIn('status', $statuses);
 
@@ -378,7 +378,17 @@ class CatalogController extends Controller
             $query = $scope($query);
         }
 
-        $item = $query->findOrFail($id);
+        $item = (clone $query)->where('slug', $slug)->first();
+
+        if (! $item) {
+            try {
+                $item = (clone $query)->find($slug);
+            } catch (\Throwable) {
+                $item = null;
+            }
+        }
+
+        abort_unless($item, 404);
 
         return response()->json(['data' => $transform($item)]);
     }
@@ -570,13 +580,21 @@ class CatalogController extends Controller
         ]];
     }
 
-    private function localSongById(string $id): ?Song
+    private function localSongById(string $slug): ?Song
     {
-        $song = Song::query()->find($id);
+        $song = Song::query()->where('slug', $slug)->first();
+
+        if (! $song) {
+            try {
+                $song = Song::query()->find($slug);
+            } catch (\Throwable) {
+                $song = null;
+            }
+        }
 
         return $song ?: Song::query()
             ->whereIn('external_source', ['nhaccuatui', 'itunes'])
-            ->where('external_id', $id)
+            ->where('external_id', $slug)
             ->first();
     }
 
@@ -625,7 +643,7 @@ class CatalogController extends Controller
 
         $audioUrl = $audio?->file_url;
         if ($song->external_source === 'nhaccuatui' || $audio?->source === 'nhaccuatui') {
-            $audioUrl = route('api.v1.songs.audio', ['song' => $song->getKey()]);
+            $audioUrl = route('api.v1.songs.audio', ['slug' => $song->slug ?: $song->getKey()]);
         }
 
         $data = [

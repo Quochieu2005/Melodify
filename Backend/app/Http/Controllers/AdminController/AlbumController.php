@@ -17,6 +17,10 @@ class AlbumController extends CrudResourceController
 
     protected array $columns = ['title' => 'Tên album', 'artist.name' => 'Nghệ sĩ', 'release_date' => 'Ngày phát hành', 'status' => 'Trạng thái'];
 
+    protected array $searchable = ['title', 'slug'];
+
+    protected array $indexWith = ['artist'];
+
     protected array $fields = [
         'title' => ['label' => 'Tên album', 'required' => true],
         'slug' => ['label' => 'Slug', 'required' => true],

@@ -16,6 +16,10 @@ class User extends Authenticatable
 
     protected $guarded = [];
 
+    protected $attributes = [
+        'is_premium' => 0,
+    ];
+
     /**
      * Get the attributes that should be cast.
      *
@@ -26,6 +30,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_premium' => 'integer',
             'date_of_birth' => 'date',
             'last_login_at' => 'datetime',
             'created_at' => 'datetime',

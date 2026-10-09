@@ -1,0 +1,55 @@
+/* Billing pages: compact Ant Design-inspired details for payment reconciliation. */
+.admin-stat-help {
+    margin-top: 8px;
+    color: var(--admin-text-muted);
+    font-size: 12px;
+}
+
+.admin-detail-card {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.admin-detail-list {
+    display: grid;
+    gap: 0;
+    margin: 0;
+}
+
+.admin-detail-list > div {
+    display: grid;
+    grid-template-columns: minmax(120px, 34%) 1fr;
+    gap: 16px;
+    padding: 13px 20px;
+    border-bottom: 1px solid var(--admin-border);
+}
+
+.admin-detail-list > div:last-child {
+    border-bottom: 0;
+}
+
+.admin-detail-list dt {
+    color: var(--admin-text-muted);
+    font-size: 13px;
+}
+
+.admin-detail-list dd {
+    min-width: 0;
+    margin: 0;
+    color: var(--admin-text);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.admin-table-card code,
+.admin-detail-card code {
+    color: var(--admin-accent);
+    font-size: 12px;
+}
+
+@media (max-width: 767px) {
+    .admin-detail-list > div {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+}

@@ -17,14 +17,32 @@ use Throwable;
 
 class BannerController extends Controller
 {
-    public function index(): View
+    public function index(?Request $request = null): View
     {
-        $items = Banner::query()
+        $request ??= request();
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+        ]);
+        $search = trim((string) ($filters['q'] ?? ''));
+        $query = Banner::query();
+
+        if ($search !== '') {
+            $query->where(function ($nestedQuery) use ($search): void {
+                $nestedQuery
+                    ->where('title', 'like', "%{$search}%")
+                    ->orWhere('slug', 'like', "%{$search}%")
+                    ->orWhere('link_url', 'like', "%{$search}%")
+                    ->orWhere('status', 'like', "%{$search}%");
+            });
+        }
+
+        $items = $query
             ->orderBy('sort_order')
             ->orderByDesc('created_at')
-            ->paginate(12);
+            ->paginate(12)
+            ->withQueryString();
 
-        return view('Admin.banners.index', compact('items'));
+        return view('Admin.banners.index', compact('items', 'search'));
     }
 
     public function create(): View
