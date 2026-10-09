@@ -1,6 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\CatalogController;
+use App\Http\Controllers\Api\PasswordAuthController;
+use App\Http\Controllers\Api\PhoneAuthController;
+use App\Http\Controllers\Api\QrAuthController;
+use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\AudioController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -48,6 +52,41 @@ Route::get('/health', function () {
 });
 
 Route::prefix('v1')->name('api.v1.')->group(function () {
+    Route::post('/auth/social', [SocialAuthController::class, 'login'])->name('auth.social');
+    Route::post('/auth/login', [PasswordAuthController::class, 'login'])->name('auth.login');
+    Route::post('/auth/password/forgot', [PasswordAuthController::class, 'requestPasswordReset'])
+        ->middleware('throttle:5,1')
+        ->name('auth.password.forgot');
+    Route::post('/auth/password/verify-otp', [PasswordAuthController::class, 'verifyPasswordResetOtp'])
+        ->middleware('throttle:10,1')
+        ->name('auth.password.verify-otp');
+    Route::post('/auth/password/reset', [PasswordAuthController::class, 'resetPassword'])
+        ->middleware('throttle:5,1')
+        ->name('auth.password.reset');
+    Route::post('/auth/{provider}', [SocialAuthController::class, 'login'])
+        ->whereIn('provider', ['google', 'facebook'])
+        ->name('auth.provider');
+    Route::post('/auth/phone/request-otp', [PhoneAuthController::class, 'requestOtp'])
+        ->middleware('throttle:5,1')
+        ->name('auth.phone.request-otp');
+    Route::post('/auth/phone/verify', [PhoneAuthController::class, 'verify'])
+        ->middleware('throttle:10,1')
+        ->name('auth.phone.verify');
+    Route::post('/auth/qr/start', [QrAuthController::class, 'start'])
+        ->middleware('throttle:20,1')
+        ->name('auth.qr.start');
+    Route::get('/auth/qr/{sessionId}/status', [QrAuthController::class, 'status'])
+        ->middleware('throttle:60,1')
+        ->name('auth.qr.status');
+
+    Route::middleware('api.user')->group(function () {
+        Route::get('/auth/me', [SocialAuthController::class, 'me'])->name('auth.me');
+        Route::post('/auth/logout', [SocialAuthController::class, 'logout'])->name('auth.logout');
+        Route::post('/auth/qr/scan', [QrAuthController::class, 'scan'])
+            ->middleware('throttle:20,1')
+            ->name('auth.qr.scan');
+    });
+
     Route::get('/topics', [CatalogController::class, 'topics'])->name('topics.index');
     Route::get('/topics/{slug}', [CatalogController::class, 'topic'])->name('topics.show');
     Route::get('/genres', [CatalogController::class, 'genres'])->name('genres.index');

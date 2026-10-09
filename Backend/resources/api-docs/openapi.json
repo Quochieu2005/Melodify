@@ -10,7 +10,7 @@
   ],
   "tags": [
     { "name": "System", "description": "System and service status" },
-    { "name": "Auth", "description": "Authentication endpoints (coming soon)" },
+    { "name": "Auth", "description": "User authentication with password, Google, Facebook and QR code" },
     { "name": "Music", "description": "Music, albums and playlists" },
     { "name": "Topics", "description": "Public topics" },
     { "name": "Genres", "description": "Public genres" },
@@ -40,6 +40,181 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/auth/social": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Login with a Google or Facebook access token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SocialLoginRequest" },
+              "examples": {
+                "google": { "value": { "provider": "google", "access_token": "GOOGLE_ACCESS_TOKEN", "device_name": "web" } },
+                "facebook": { "value": { "provider": "facebook", "access_token": "FACEBOOK_ACCESS_TOKEN", "device_name": "web" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Login successful", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthResponse" } } } },
+          "409": { "description": "Provider is linked to another user" },
+          "422": { "description": "Invalid provider or access token" }
+        }
+      }
+    },
+    "/api/v1/auth/{provider}": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Login with a provider-specific access token",
+        "parameters": [{ "name": "provider", "in": "path", "required": true, "schema": { "type": "string", "enum": ["google", "facebook"] } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SocialProviderTokenRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Login successful", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthResponse" } } } },
+          "422": { "description": "Invalid provider or access token" }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Login with email or username and password",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordLoginRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Login successful", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthResponse" } } } },
+          "401": { "description": "Invalid credentials" },
+          "403": { "description": "Account is inactive or blocked" }
+        }
+      }
+    },
+    "/api/v1/auth/password/forgot": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Request a password reset OTP by email",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordForgotRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Generic response to avoid account enumeration" },
+          "429": { "description": "Too many requests" },
+          "503": { "description": "Email provider is unavailable" }
+        }
+      }
+    },
+    "/api/v1/auth/password/verify-otp": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Verify the password reset OTP",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordOtpRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "OTP verified and reset token issued" },
+          "422": { "description": "Invalid, expired or overused OTP" }
+        }
+      }
+    },
+    "/api/v1/auth/password/reset": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Set a new password with a verified reset token",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordResetRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Password reset successful" },
+          "422": { "description": "Invalid reset token or password" },
+          "403": { "description": "Account is inactive or blocked" }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get the authenticated user",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Authenticated user", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } }, "401": { "description": "Unauthenticated" } }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Revoke the current API token",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Logged out" }, "401": { "description": "Unauthenticated" } }
+      }
+    },
+    "/api/v1/auth/phone/request-otp": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Send a phone login OTP",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PhoneRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "OTP sent" },
+          "429": { "description": "Resend rate limit" },
+          "503": { "description": "SMS provider is not configured" }
+        }
+      }
+    },
+    "/api/v1/auth/phone/verify": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Verify phone OTP and issue an API token",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PhoneVerifyRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Login successful", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthResponse" } } } },
+          "422": { "description": "Invalid or expired OTP" }
+        }
+      }
+    },
+    "/api/v1/auth/qr/start": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Create a short-lived QR login session",
+        "requestBody": {
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeviceNameRequest" } } }
+        },
+        "responses": { "200": { "description": "QR session created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QrStartResponse" } } } } }
+      }
+    },
+    "/api/v1/auth/qr/scan": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Approve a QR login from an authenticated device",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QrScanRequest" } } }
+        },
+        "responses": { "200": { "description": "QR login approved" }, "401": { "description": "Unauthenticated" }, "422": { "description": "Invalid or expired QR" } }
+      }
+    },
+    "/api/v1/auth/qr/{sessionId}/status": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Poll a QR login session",
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "poll_token", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "QR status or issued token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QrStatusResponse" } } } }, "404": { "description": "QR session not found" } }
       }
     },
     "/api/v1/topics": {
@@ -157,8 +332,8 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT",
-        "description": "Nhập access token theo dạng: Bearer {token}"
+        "bearerFormat": "opaque",
+        "description": "Nhập token API Melodify theo dạng: Bearer {token}"
       }
     },
     "parameters": {
@@ -184,6 +359,137 @@
       "NotFound": { "description": "Item was not found or is inactive" }
     },
     "schemas": {
+      "DeviceNameRequest": {
+        "type": "object",
+        "properties": {
+          "device_name": { "type": "string", "nullable": true, "example": "web" },
+          "remember": { "type": "boolean", "default": false }
+        }
+      },
+      "PasswordLoginRequest": {
+        "type": "object",
+        "required": ["identifier", "password"],
+        "properties": {
+          "identifier": { "type": "string", "description": "Email hoặc username" },
+          "password": { "type": "string", "format": "password" },
+          "remember": { "type": "boolean", "default": false },
+          "device_name": { "type": "string", "nullable": true, "example": "web" }
+        }
+      },
+      "PasswordForgotRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": { "email": { "type": "string", "format": "email" } }
+      },
+      "PasswordOtpRequest": {
+        "type": "object",
+        "required": ["email", "code"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "code": { "type": "string", "example": "123456" }
+        }
+      },
+      "PasswordResetRequest": {
+        "type": "object",
+        "required": ["email", "reset_token", "password", "password_confirmation"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "reset_token": { "type": "string" },
+          "password": { "type": "string", "format": "password", "minLength": 8 },
+          "password_confirmation": { "type": "string", "format": "password" }
+        }
+      },
+      "PhoneRequest": {
+        "type": "object",
+        "required": ["phone"],
+        "properties": { "phone": { "type": "string", "example": "+84901234567" } }
+      },
+      "PhoneVerifyRequest": {
+        "type": "object",
+        "required": ["phone", "code"],
+        "properties": {
+          "phone": { "type": "string", "example": "+84901234567" },
+          "code": { "type": "string", "example": "123456" },
+          "remember": { "type": "boolean", "default": false },
+          "device_name": { "type": "string", "nullable": true, "example": "web" }
+        }
+      },
+      "QrScanRequest": {
+        "type": "object",
+        "properties": {
+          "qr_payload": { "type": "string", "nullable": true, "description": "Chuỗi đọc được từ QR melodify://..." },
+          "qr_token": { "type": "string", "nullable": true }
+        }
+      },
+      "QrStartResponse": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string", "format": "uuid" },
+          "qr_payload": { "type": "string" },
+          "poll_token": { "type": "string" },
+          "status": { "type": "string", "example": "pending" },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "poll_interval_seconds": { "type": "integer", "example": 2 }
+        }
+      },
+      "QrStatusResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["pending", "approved", "completed", "expired"] },
+          "token": { "type": "string", "nullable": true },
+          "token_type": { "type": "string", "nullable": true },
+          "expires_at": { "type": "string", "format": "date-time", "nullable": true },
+          "user": { "$ref": "#/components/schemas/User" }
+        }
+      },
+      "SocialLoginRequest": {
+        "type": "object",
+        "required": ["provider", "access_token"],
+        "properties": {
+          "provider": { "type": "string", "enum": ["google", "facebook"] },
+          "access_token": { "type": "string", "description": "Access token do Google hoặc Facebook cấp" },
+          "remember": { "type": "boolean", "default": false },
+          "device_name": { "type": "string", "nullable": true, "example": "web" }
+        }
+      },
+      "SocialProviderTokenRequest": {
+        "type": "object",
+        "required": ["access_token"],
+        "properties": {
+          "access_token": { "type": "string", "description": "Access token do provider cấp" },
+          "remember": { "type": "boolean", "default": false },
+          "device_name": { "type": "string", "nullable": true, "example": "web" }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "token": { "type": "string" },
+          "token_type": { "type": "string", "example": "Bearer" },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "remembered": { "type": "boolean", "nullable": true },
+          "user": { "$ref": "#/components/schemas/User" }
+        }
+      },
+      "UserResponse": {
+        "type": "object",
+        "properties": { "user": { "$ref": "#/components/schemas/User" } }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string", "nullable": true },
+          "username": { "type": "string", "nullable": true },
+          "email": { "type": "string", "format": "email", "nullable": true },
+          "phone": { "type": "string", "nullable": true },
+          "avatar_url": { "type": "string", "nullable": true },
+          "is_premium": { "type": "integer", "enum": [0, 1] },
+          "last_login_at": { "type": "string", "format": "date-time", "nullable": true },
+          "last_login_method": { "type": "string", "nullable": true, "enum": ["password", "google", "facebook", "qr", "phone"] }
+        }
+      },
       "CatalogListResponse": {
         "type": "object",
         "required": ["data", "meta"],

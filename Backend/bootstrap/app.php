@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureAdminIdleSession;
 use App\Http\Middleware\EnsureAdminPermission;
 use App\Http\Middleware\EnsureSuperAdmin;
+use App\Http\Middleware\AuthenticateApiUser;
 use App\Http\Middleware\RecordAdminActivity;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -23,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
+            'api.user' => AuthenticateApiUser::class,
             'admin.idle' => EnsureAdminIdleSession::class,
             'admin.permission' => EnsureAdminPermission::class,
             'admin.super' => EnsureSuperAdmin::class,

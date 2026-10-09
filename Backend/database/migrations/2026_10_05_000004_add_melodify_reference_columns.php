@@ -10,7 +10,7 @@ return new class extends Migration
 
     /** @var array<string, array<string, string>> */
     private const COLUMNS = [
-        'users' => ['username' => 'string', 'slug' => 'string', 'phone' => 'string', 'avatar_url' => 'string', 'date_of_birth' => 'date', 'gender' => 'string', 'status' => 'string', 'last_login_at' => 'datetime'],
+        'users' => ['username' => 'string', 'slug' => 'string', 'phone' => 'string', 'avatar_url' => 'string', 'date_of_birth' => 'date', 'gender' => 'string', 'status' => 'string', 'last_login_at' => 'datetime', 'last_login_method' => 'string'],
         'admins' => ['name' => 'string', 'email' => 'string', 'slug' => 'string', 'avatar' => 'string', 'role' => 'string', 'status' => 'string', 'is_active' => 'boolean'],
         'artists' => ['user_id' => 'string', 'name' => 'string', 'slug' => 'string', 'bio' => 'text', 'avatar_url' => 'string', 'verified' => 'boolean', 'status' => 'string'],
         'artist_followers' => ['user_id' => 'string', 'artist_id' => 'string'],

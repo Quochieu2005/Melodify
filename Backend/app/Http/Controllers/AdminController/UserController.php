@@ -14,7 +14,7 @@ class UserController extends CrudResourceController
 
     protected string $viewDirectory = 'Admin.users';
 
-    protected array $columns = ['avatar_url' => 'Ảnh', 'name' => 'Họ tên', 'username' => 'Username', 'email' => 'Email', 'phone' => 'Điện thoại', 'created_at' => 'Ngày tham gia', 'is_premium' => 'Premium', 'last_login_at' => 'Đăng nhập lần cuối', 'status' => 'Trạng thái'];
+    protected array $columns = ['avatar_url' => 'Ảnh', 'name' => 'Họ tên', 'username' => 'Username', 'email' => 'Email', 'phone' => 'Điện thoại', 'created_at' => 'Ngày tham gia', 'is_premium' => 'Premium', 'last_login_at' => 'Đăng nhập lần cuối', 'last_login_method' => 'Cách đăng nhập gần nhất', 'status' => 'Trạng thái'];
 
     protected array $searchable = ['name', 'username', 'email', 'phone', 'slug'];
 

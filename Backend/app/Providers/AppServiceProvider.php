@@ -34,7 +34,10 @@ class AppServiceProvider extends ServiceProvider
                 return;
             }
 
-            $event->user->forceFill(['last_login_at' => now()])->saveQuietly();
+            $event->user->forceFill([
+                'last_login_at' => now(),
+                'last_login_method' => 'password',
+            ])->saveQuietly();
         });
 
         /*

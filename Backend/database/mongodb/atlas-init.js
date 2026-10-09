@@ -31,6 +31,8 @@ const collections = [
     "payments",
     "transactions",
     "payment_details",
+    "user_api_tokens",
+    "phone_login_challenges",
     "logs",
     "reports",
     "recommendations",
@@ -60,8 +62,9 @@ const indexes = {
     ],
     users: [
         [{ slug: 1 }, { unique: true }],
-        [{ email: 1 }, { unique: true }],
+        [{ email: 1 }, { unique: true, sparse: true }],
         [{ username: 1 }, { unique: true, sparse: true }],
+        [{ phone: 1 }, { unique: true, sparse: true }],
         [{ is_premium: 1 }, {}],
         [{ status: 1 }, {}],
     ],
@@ -184,6 +187,15 @@ const indexes = {
         [{ payment_id: 1 }, {}],
         [{ plan_id: 1 }, {}],
     ],
+    user_api_tokens: [
+        [{ token_hash: 1 }, { unique: true }],
+        [{ user_id: 1 }, {}],
+        [{ expires_at: 1 }, {}],
+    ],
+    phone_login_challenges: [
+        [{ phone: 1, created_at: -1 }, {}],
+        [{ expires_at: 1 }, {}],
+    ],
     logs: [
         [{ user_id: 1 }, {}],
         [{ admin_id: 1 }, {}],
@@ -201,6 +213,12 @@ const indexes = {
         [{ expires_at: 1 }, {}],
     ],
 };
+
+try {
+    db.getCollection("users").dropIndex("email_1");
+} catch (error) {
+    // The index may not exist on a fresh database.
+}
 
 Object.entries(indexes).forEach(([name, collectionIndexes]) => {
     collectionIndexes.forEach(([keys, options]) =>
