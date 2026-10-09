@@ -16,10 +16,12 @@
     </div>
 
     <div class="admin-header-right">
-        <a href="{{ url('/api/docs') }}" class="ant-btn admin-api-docs-btn" target="_blank" rel="noopener">
-            <x-anticon name="file-text" />
-            <span>API Docs</span>
-        </a>
+        @if (auth('admin')->check())
+            <a href="{{ route('api.docs') }}" class="ant-btn admin-api-docs-btn" target="_blank" rel="noopener">
+                <x-anticon name="file-text" />
+                <span>API Docs</span>
+            </a>
+        @endif
 
         @include('layouts.partials.header.theme-toggle')
 

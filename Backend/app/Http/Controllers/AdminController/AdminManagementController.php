@@ -36,6 +36,8 @@ class AdminManagementController extends CrudResourceController
         'must_change_password' => 'Mật khẩu',
     ];
 
+    protected array $searchable = ['name', 'email', 'slug', 'role', 'status'];
+
     protected array $fields = [
         'name' => ['label' => 'Họ tên', 'required' => true],
         'email' => ['label' => 'Email', 'type' => 'email', 'required' => true],

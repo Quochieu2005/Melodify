@@ -57,6 +57,7 @@ const indexes = {
         [{ slug: 1 }, { unique: true }],
         [{ email: 1 }, { unique: true }],
         [{ username: 1 }, { unique: true, sparse: true }],
+        [{ is_premium: 1 }, {}],
         [{ status: 1 }, {}],
     ],
     artists: [

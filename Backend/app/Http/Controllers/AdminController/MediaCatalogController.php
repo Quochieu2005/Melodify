@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
+use App\Rules\PlainText;
 use App\Services\MediaAssetService;
 use Closure;
 use Illuminate\Http\RedirectResponse;
@@ -42,12 +43,30 @@ abstract class MediaCatalogController extends Controller
 
     public function index(?Request $request = null): View
     {
-        $items = ($this->model)::query()
+        $request ??= request();
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+        ]);
+        $search = trim((string) ($filters['q'] ?? ''));
+        $query = ($this->model)::query();
+
+        if ($search !== '') {
+            $query->where(function ($nestedQuery) use ($search): void {
+                $nestedQuery
+                    ->where($this->nameField, 'like', "%{$search}%")
+                    ->orWhere($this->slugField, 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhere('type_custom', 'like', "%{$search}%");
+            });
+        }
+
+        $items = $query
             ->orderBy('sort_order')
             ->latest()
-            ->paginate(12);
+            ->paginate(12)
+            ->withQueryString();
 
-        return view('Admin.catalog.index', $this->viewData(compact('items')));
+        return view('Admin.catalog.index', $this->viewData(compact('items', 'search')));
     }
 
     public function create(): View

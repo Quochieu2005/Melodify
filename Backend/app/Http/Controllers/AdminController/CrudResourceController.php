@@ -4,6 +4,7 @@ namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminResourceRequest;
+use App\Rules\PlainText;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Hash;
@@ -23,13 +24,42 @@ abstract class CrudResourceController extends Controller
 
     protected array $columns = [];
 
+    /** @var array<int, string> */
+    protected array $searchable = [];
+
+    /** @var array<int, string> */
+    protected array $indexWith = [];
+
     protected string $viewDirectory = 'Admin.crud';
 
     public function index(?Request $request = null): View
     {
-        $items = ($this->model)::query()->latest()->paginate(10);
+        $request ??= request();
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+        ]);
+        $search = trim((string) ($filters['q'] ?? ''));
+        $query = ($this->model)::query();
 
-        return view('Admin.crud.index', $this->viewData(compact('items')));
+        if ($this->indexWith !== []) {
+            $query->with($this->indexWith);
+        }
+
+        if ($search !== '' && $this->searchable !== []) {
+            $query->where(function ($nestedQuery) use ($search): void {
+                foreach ($this->searchable as $index => $field) {
+                    $method = $index === 0 ? 'where' : 'orWhere';
+                    $nestedQuery->{$method}($field, 'like', "%{$search}%");
+                }
+            });
+        }
+
+        $items = $query->latest()->paginate(10)->withQueryString();
+        $view = view()->exists("{$this->viewDirectory}.index")
+            ? "{$this->viewDirectory}.index"
+            : 'Admin.crud.index';
+
+        return view($view, $this->viewData(compact('items', 'search')));
     }
 
     public function create(): View
@@ -200,6 +230,7 @@ abstract class CrudResourceController extends Controller
             'resourceTitle' => $this->title,
             'fields' => $this->fields,
             'columns' => $this->columns,
+            'searchable' => $this->searchable,
         ], $data);
     }
 }

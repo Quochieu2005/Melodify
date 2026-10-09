@@ -46,7 +46,14 @@
                 <strong>Danh sách banner</strong>
                 <span>{{ $items->total() }} banner</span>
             </div>
-            <span class="admin-table-hint">Banner có thứ tự nhỏ hơn sẽ hiển thị trước.</span>
+            <form method="GET" action="{{ route('admin.banners.index') }}" class="admin-table-filter-form">
+                <label class="admin-table-search">
+                    <x-anticon name="search" aria-hidden="true" />
+                    <input type="search" name="q" value="{{ $search ?? '' }}" maxlength="100" placeholder="Tìm tiêu đề, slug, URL..." aria-label="Tìm kiếm banner">
+                </label>
+                <button type="submit" class="ant-btn">Tìm kiếm</button>
+                @if(filled($search ?? null))<a href="{{ route('admin.banners.index') }}" class="admin-action-link">Xóa lọc</a>@endif
+            </form>
         </div>
         <div class="admin-table-scroll">
             <table class="ant-table admin-data-table admin-banner-table">

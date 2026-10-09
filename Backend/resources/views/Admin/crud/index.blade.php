@@ -44,7 +44,20 @@
     <div class="ant-card admin-table-card">
         <div class="admin-table-toolbar">
             <div><strong>Danh sách {{ $resourceTitle }}</strong><span>{{ $items->total() }} mục</span></div>
-            <span class="admin-table-hint">Cuộn ngang để xem thêm trên màn hình nhỏ</span>
+            @if(count($searchable ?? []) > 0)
+                <form method="GET" action="{{ route("admin.$resource.index") }}" class="admin-table-filter-form">
+                    <label class="admin-table-search">
+                        <x-anticon name="search" aria-hidden="true" />
+                        <input type="search" name="q" value="{{ $search ?? '' }}" maxlength="100" placeholder="Tìm tên, slug..." aria-label="Tìm kiếm {{ $resourceTitle }}">
+                    </label>
+                    <button type="submit" class="ant-btn">Tìm kiếm</button>
+                    @if(filled($search ?? null))
+                        <a href="{{ route("admin.$resource.index") }}" class="admin-action-link">Xóa lọc</a>
+                    @endif
+                </form>
+            @else
+                <span class="admin-table-hint">Cuộn ngang để xem thêm trên màn hình nhỏ</span>
+            @endif
         </div>
         <div class="admin-table-scroll">
             <table class="ant-table admin-data-table">

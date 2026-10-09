@@ -27,6 +27,8 @@ class ArtistController extends CrudResourceController
         'status' => 'Trạng thái',
     ];
 
+    protected array $searchable = ['name', 'slug', 'bio'];
+
     protected array $fields = [
         'name' => ['label' => 'Tên nghệ sĩ', 'required' => true],
         'slug' => ['label' => 'Slug', 'required' => true],

@@ -96,6 +96,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::middleware('admin.permission:billing.manage')->group(function () {
             Route::resource('subscriptions', SubscriptionController::class)->except('show');
             Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+            Route::get('/payments/{payment}', [PaymentController::class, 'show'])->name('payments.show');
         });
 
         Route::middleware('admin.permission:moderation.manage')->group(function () {

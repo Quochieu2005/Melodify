@@ -10,9 +10,19 @@ use Throwable;
 
 class AudioController extends Controller
 {
-    public function stream(string $id, Request $request, NhacCuaTuiClient $nhaccuatui)
+    public function stream(string $slug, Request $request, NhacCuaTuiClient $nhaccuatui)
     {
-        $song = Song::query()->findOrFail($id);
+        $song = Song::query()->where('slug', $slug)->first();
+
+        if (! $song) {
+            try {
+                $song = Song::query()->find($slug);
+            } catch (Throwable) {
+                $song = null;
+            }
+        }
+
+        abort_unless($song, 404);
         $audio = $this->refreshAudio($song, $nhaccuatui);
 
         abort_if(blank($audio?->file_url), 404, 'Bài hát chưa có audio.');

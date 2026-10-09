@@ -44,7 +44,7 @@ class InitializeMongoDb extends Command
         $indexes = [
             'admins' => [[['slug' => 1], ['unique' => true]], [['email' => 1], ['unique' => true]]],
             'banners' => [[['slug' => 1], ['unique' => true]], [['sort_order' => 1], []], [['status' => 1], []]],
-            'users' => [[['slug' => 1], ['unique' => true]], [['email' => 1], ['unique' => true]], [['username' => 1], ['unique' => true, 'sparse' => true]]],
+            'users' => [[['slug' => 1], ['unique' => true]], [['email' => 1], ['unique' => true]], [['username' => 1], ['unique' => true, 'sparse' => true]], [['is_premium' => 1], []]],
             'artists' => [[['slug' => 1], ['unique' => true]], [['user_id' => 1], ['unique' => true, 'sparse' => true]]],
             'genres' => [[['slug' => 1], ['unique' => true]], [['name' => 1], ['unique' => true]]],
             'topics' => [[['slug' => 1], ['unique' => true]], [['sort_order' => 1], []], [['status' => 1], []]],
