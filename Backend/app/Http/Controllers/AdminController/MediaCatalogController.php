@@ -40,6 +40,18 @@ abstract class MediaCatalogController extends Controller
         return [];
     }
 
+    /** @return array<string, mixed> */
+    protected function supplementalFormData(?object $item): array
+    {
+        return [];
+    }
+
+    /** @param array<string, mixed> $data */
+    protected function afterPersist(object $item, array $data): void
+    {
+        // Resources without side relations do not need post-save work.
+    }
+
     public function index(?Request $request = null): View
     {
         $request ??= request();
@@ -74,6 +86,7 @@ abstract class MediaCatalogController extends Controller
             'item' => null,
             'fields' => $this->resolvedFields(),
             'mediaAssets' => app(MediaAssetService::class)->latest(),
+            ...$this->supplementalFormData(null),
         ]));
     }
 
@@ -82,7 +95,8 @@ abstract class MediaCatalogController extends Controller
         $this->normalizeSortOrderInput($request);
         $data = $request->validate($this->rules(null), $this->validationMessages());
         $payload = $this->preparePayload($request, $data, null);
-        ($this->model)::query()->create($payload);
+        $item = ($this->model)::query()->create($payload);
+        $this->afterPersist($item, $data);
 
         return redirect()->route("admin.{$this->resource}.index")
             ->with('success', "Đã tạo {$this->title} thành công.");
@@ -96,6 +110,7 @@ abstract class MediaCatalogController extends Controller
             'item' => $item,
             'fields' => $this->resolvedFields(),
             'mediaAssets' => app(MediaAssetService::class)->latest(),
+            ...$this->supplementalFormData($item),
         ]));
     }
 
@@ -105,6 +120,7 @@ abstract class MediaCatalogController extends Controller
         $this->normalizeSortOrderInput($request);
         $data = $request->validate($this->rules($item), $this->validationMessages());
         $item->update($this->preparePayload($request, $data, $item));
+        $this->afterPersist($item, $data);
 
         return redirect()->route("admin.{$this->resource}.index")
             ->with('success', "Đã cập nhật {$this->title}.");

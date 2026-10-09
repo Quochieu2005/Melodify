@@ -49,6 +49,24 @@ class AlbumController extends CrudResourceController
         ]));
     }
 
+    public function show(string $id): View
+    {
+        $album = Album::query()->findOrFail($id);
+        $artistIds = $this->selectedArtists($album);
+
+        return view('Admin.albums.show', [
+            'album' => $album,
+            'artists' => $artistIds === []
+                ? collect()
+                : Artist::query()->whereIn((new Artist())->getKeyName(), $artistIds)->orderBy('name')->get(),
+            'songs' => Song::query()
+                ->where('album_id', (string) $album->getKey())
+                ->orderBy('title')
+                ->paginate(20)
+                ->withQueryString(),
+        ]);
+    }
+
     public function store(AdminResourceRequest $request): RedirectResponse
     {
         $data = $request->validated();

@@ -99,6 +99,8 @@
                                 </td>
                             @endforeach
                             <td class="admin-table-actions">
+                                @php($canShow = in_array($resource, ['topics', 'genres', 'playlists'], true))
+                                @if($canShow)<a href="{{ route("admin.$resource.show", $item->getKey()) }}" class="admin-action-link">Xem</a>@endif
                                 @if($canUpdate)<a href="{{ route("admin.$resource.edit", $item->getKey()) }}" class="admin-action-link">Sửa</a>@endif
                                 @if($canDelete)
                                     <form action="{{ route("admin.$resource.destroy", $item->getKey()) }}" method="POST" class="admin-inline-form" data-confirm-delete>
@@ -106,7 +108,7 @@
                                         <button type="submit" class="admin-action-link admin-action-danger">Xóa</button>
                                     </form>
                                 @endif
-                                @if(! $canUpdate && ! $canDelete)<span class="admin-text-muted">—</span>@endif
+                                @if(! $canShow && ! $canUpdate && ! $canDelete)<span class="admin-text-muted">—</span>@endif
                             </td>
                         </tr>
                     @empty

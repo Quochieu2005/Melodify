@@ -16,12 +16,12 @@
             <strong>Chọn bài hát để mở màn hình karaoke</strong>
             <p>Trong màn hình tiếp theo, bấm Phát để kiểm tra từng câu lời có chạy đúng thời gian hay không.</p>
         </div>
-        <span class="admin-lyrics-library-count">{{ $items->count() }} bài hát</span>
+        <span class="admin-lyrics-library-count">{{ $items->total() }} bài hát</span>
     </div>
 
     <div class="ant-card admin-table-card">
         <div class="admin-table-toolbar">
-            <div><strong>Danh sách lời bài hát</strong><span>{{ $items->count() }} bài hát</span></div>
+            <div><strong>Danh sách lời bài hát</strong><span>{{ $items->total() }} bài hát</span></div>
             <form method="GET" action="{{ route('admin.lyrics.index') }}" class="admin-topic-filters">
                 <label class="admin-topic-search">
                     <x-anticon name="search" aria-hidden="true" />
@@ -76,6 +76,7 @@
                 </tbody>
             </table>
         </div>
+        @if($items->hasPages())<div class="admin-pagination">{{ $items->links() }}</div>@endif
     </div>
 </section>
 @endsection

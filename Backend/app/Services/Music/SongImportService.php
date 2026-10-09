@@ -5,6 +5,7 @@ namespace App\Services\Music;
 use App\Models\Artist;
 use App\Models\Lyric;
 use App\Models\Song;
+use App\Models\SongArtist;
 use App\Models\SongAudioFile;
 use App\Services\CloudinaryService;
 use Illuminate\Support\Facades\Http;
@@ -25,7 +26,8 @@ class SongImportService
     {
         $track = $this->nhaccuatui->getSong($songId);
         $externalId = (string) ($track['trackId'] ?? $songId);
-        $artist = $this->syncArtist($track, $admin);
+        $artistNames = $this->artistNames((string) ($track['artistName'] ?? ''));
+        $artists = $this->syncArtists($track, $artistNames, $admin);
 
         $song = Song::query()
             ->where('external_source', 'nhaccuatui')
@@ -58,11 +60,15 @@ class SongImportService
         $song->status = $song->status ?: 'published';
         $song->save();
 
-        if ($artist) {
-            $song->artistCredits()->updateOrCreate(
-                ['artist_id' => (string) $artist->getKey()],
-                ['artist_role' => 'primary'],
-            );
+        if ($artists !== []) {
+            $song->artistCredits()->delete();
+
+            foreach ($artists as $position => $artist) {
+                $song->artistCredits()->updateOrCreate(
+                    ['artist_id' => (string) $artist->getKey()],
+                    ['artist_role' => $position === 0 ? 'primary' : 'featured'],
+                );
+            }
         }
 
         $this->syncAudioFile($song, $track);
@@ -71,40 +77,132 @@ class SongImportService
         return $song->fresh();
     }
 
-    private function syncArtist(array $track, ?object $admin): ?Artist
+    /** @param array<int, string> $names
+     *  @return array<int, Artist>
+     */
+    private function syncArtists(array $track, array $names, ?object $admin): array
     {
         $source = $this->source($track);
-        $externalId = (string) ($track['artistId'] ?? '');
-        $name = trim((string) ($track['artistName'] ?? ''));
+        $canUseExternalId = count($names) === 1;
+        $artists = [];
 
-        if ($name === '') {
-            return null;
-        }
+        foreach ($names as $name) {
+            $externalId = $canUseExternalId ? (string) ($track['artistId'] ?? '') : '';
+            $artist = $externalId !== ''
+                ? Artist::query()->where('external_source', $source)->where('external_id', $externalId)->first()
+                : null;
+            $artist ??= $this->findArtistByName($name);
 
-        $artist = $externalId !== ''
-            ? Artist::query()->where('external_source', $source)->where('external_id', $externalId)->first()
-            : null;
-
-        if (! $artist) {
-            $artist = Artist::query()->where('slug', Str::slug($name))->first();
-        }
-
-        if (! $artist) {
-            $artist = new Artist();
-            $artist->slug = $this->uniqueSlug(Artist::class, Str::slug($name), null);
-            if ($admin) {
-                $artist->created_by_admin_id = (string) $admin->getKey();
+            if (! $artist) {
+                $artist = new Artist();
+                $artist->name = $name;
+                $artist->slug = $this->uniqueSlug(Artist::class, Str::slug($name), null);
+                if ($admin) {
+                    $artist->created_by_admin_id = (string) $admin->getKey();
+                }
             }
+
+            $artist->status = $artist->status ?: 'active';
+            if ($externalId !== '' && blank($artist->external_id)) {
+                $artist->external_source = $source;
+                $artist->external_id = $externalId;
+            }
+            $artist->save();
+
+            if ($canUseExternalId) {
+                $this->syncArtistAvatar($artist, $track);
+            }
+
+            $artists[] = $artist;
         }
 
-        $artist->name = $name;
-        $artist->external_source = $source;
-        $artist->external_id = $externalId ?: null;
-        $artist->status = $artist->status ?: 'active';
-        $artist->save();
-        $this->syncArtistAvatar($artist, $track);
+        return $artists;
+    }
 
-        return $artist;
+    /** @return array<int, string> */
+    public function artistNames(string $artistName): array
+    {
+        $artistName = trim(preg_replace('/\s+/', ' ', $artistName) ?? '');
+        if ($artistName === '') {
+            return [];
+        }
+
+        $parts = preg_split('/\s*(?:,|&|\/|\bfeat\.?\s*|\bft\.?\s*|\bfeaturing\s+|\bvà\s+|\band\s+)\s*/iu', $artistName) ?: [];
+
+        return collect($parts)
+            ->map(fn ($name): string => trim($name))
+            ->filter()
+            ->unique(fn (string $name): string => $this->artistKey($name))
+            ->values()
+            ->all();
+    }
+
+    public function repairArtistCatalog(?object $admin = null): array
+    {
+        $stats = ['split' => 0, 'merged' => 0, 'credits' => 0];
+
+        foreach (Artist::query()->get() as $combinedArtist) {
+            $names = $this->artistNames((string) $combinedArtist->name);
+            if (count($names) < 2) {
+                continue;
+            }
+
+            $artists = $this->syncArtists(['source' => (string) $combinedArtist->external_source], $names, $admin);
+            $credits = SongArtist::query()->where('artist_id', (string) $combinedArtist->getKey())->get();
+            foreach ($credits as $credit) {
+                foreach ($artists as $position => $artist) {
+                    SongArtist::query()->updateOrCreate(
+                        ['song_id' => (string) $credit->song_id, 'artist_id' => (string) $artist->getKey()],
+                        ['artist_role' => $position === 0 ? 'primary' : 'featured'],
+                    );
+                    $stats['credits']++;
+                }
+                $credit->delete();
+            }
+
+            $combinedArtist->delete();
+            $stats['split']++;
+        }
+
+        Artist::query()->get()
+            ->groupBy(fn (Artist $artist): string => $this->artistKey((string) $artist->name))
+            ->each(function ($artists) use (&$stats): void {
+                if ($artists->count() < 2) {
+                    return;
+                }
+
+                $primary = $artists->sortByDesc(fn (Artist $artist): int => (int) filled($artist->avatar_url) + (int) (bool) $artist->verified)->first();
+                foreach ($artists->where($primary->getKeyName(), '!=', $primary->getKey()) as $duplicate) {
+                    foreach (SongArtist::query()->where('artist_id', (string) $duplicate->getKey())->get() as $credit) {
+                        $existing = SongArtist::query()->where('song_id', (string) $credit->song_id)->where('artist_id', (string) $primary->getKey())->first();
+                        if ($existing) {
+                            $credit->delete();
+                        } else {
+                            $credit->artist_id = (string) $primary->getKey();
+                            $credit->save();
+                        }
+                        $stats['credits']++;
+                    }
+                    $duplicate->delete();
+                    $stats['merged']++;
+                }
+            });
+
+        return $stats;
+    }
+
+    private function findArtistByName(string $name): ?Artist
+    {
+        $key = $this->artistKey($name);
+
+        return Artist::query()->get()->first(
+            fn (Artist $artist): bool => $this->artistKey((string) $artist->name) === $key,
+        );
+    }
+
+    private function artistKey(string $name): string
+    {
+        return Str::lower(preg_replace('/[^a-z0-9]+/', '', Str::ascii($name)) ?? '');
     }
 
     private function syncArtistAvatar(Artist $artist, array $track): void
