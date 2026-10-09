@@ -4,6 +4,7 @@ db = db.getSiblingDB("melodify");
 
 const collections = [
     "admins",
+    "admin_notifications",
     "banners",
     "users",
     "artists",
@@ -47,6 +48,10 @@ const indexes = {
         [{ slug: 1 }, { unique: true }],
         [{ email: 1 }, { unique: true }],
         [{ status: 1 }, {}],
+    ],
+    admin_notifications: [
+        [{ admin_id: 1, is_read: 1 }, {}],
+        [{ created_at: -1 }, {}],
     ],
     banners: [
         [{ slug: 1 }, { unique: true }],

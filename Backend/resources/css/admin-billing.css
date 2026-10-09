@@ -47,9 +47,33 @@
     font-size: 12px;
 }
 
+.admin-code-input-row {
+    align-items: stretch;
+    display: flex;
+    gap: 8px;
+}
+
+.admin-code-input-row .admin-form-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.admin-code-input-row button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
 @media (max-width: 767px) {
     .admin-detail-list > div {
         grid-template-columns: 1fr;
         gap: 4px;
+    }
+
+    .admin-code-input-row {
+        flex-direction: column;
+    }
+
+    .admin-code-input-row button {
+        width: 100%;
     }
 }

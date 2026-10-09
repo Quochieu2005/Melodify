@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminController\AdminManagementController;
+use App\Http\Controllers\AdminController\AdminNotificationController;
 use App\Http\Controllers\AudioController;
 use App\Http\Controllers\AdminController\AlbumController;
 use App\Http\Controllers\AdminController\ArtistController;
@@ -42,6 +43,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware(['auth:admin', 'admin.idle', 'admin.audit'])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
         Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
+        Route::get('/notifications', [AdminNotificationController::class, 'index'])->name('notifications.index');
+        Route::patch('/notifications/read-all', [AdminNotificationController::class, 'markAllRead'])->name('notifications.read-all');
         Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
         Route::get('/account-settings', [ProfileController::class, 'settings'])->name('profile.settings');

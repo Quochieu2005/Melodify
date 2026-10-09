@@ -1,3 +1,5 @@
+import './admin-subscriptions.js';
+
 /**
  * Melodify Admin Interface - Ant Design Vanilla JS Controllers
  */

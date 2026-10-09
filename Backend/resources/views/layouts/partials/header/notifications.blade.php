@@ -9,7 +9,7 @@
     >
         <span class="ant-badge admin-badge-container">
             <x-anticon name="bell" />
-            <sup class="ant-badge-dot admin-notification-dot"></sup>
+            @if(($headerUnreadCount ?? 0) > 0)<sup class="ant-badge-dot admin-notification-dot"></sup>@endif
         </span>
     </button>
 
@@ -17,51 +17,32 @@
         <div class="notification-panel">
             <div class="notification-panel-header">
                 <strong>Thông báo</strong>
-                <button type="button" class="admin-mark-read-btn" data-mark-all-read>Đánh dấu đã đọc</button>
+                @if(($headerUnreadCount ?? 0) > 0)
+                    <form method="POST" action="{{ route('admin.notifications.read-all') }}" class="admin-mark-read-form">
+                        @csrf
+                        @method('PATCH')
+                        <button type="submit" class="admin-mark-read-btn" data-mark-all-read>Đánh dấu đã đọc</button>
+                    </form>
+                @else
+                    <span class="admin-notification-read-label">Đã đọc hết</span>
+                @endif
             </div>
             <div class="notification-list">
-                <button type="button" class="notification-item is-unread">
-                    <span class="notification-icon">
-                        <x-anticon name="sound" />
-                    </span>
-                    <span class="notification-body">
-                        <span class="notification-top">
-                            <strong>3 bài hát mới</strong>
-                            <small class="notification-time">10 phút trước</small>
+                @forelse(($headerNotifications ?? []) as $notification)
+                    @php($icon = match($notification->type) { 'song' => 'sound', 'user' => 'user', 'payment' => 'credit-card', default => 'setting' })
+                    <a href="{{ filled($notification->action_url) ? url($notification->action_url) : route('admin.notifications.index') }}" class="notification-item {{ $notification->is_read ? '' : 'is-unread' }}">
+                        <span class="notification-icon"><x-anticon :name="$icon" /></span>
+                        <span class="notification-body">
+                            <span class="notification-top"><strong>{{ $notification->title }}</strong><small class="notification-time">{{ $notification->created_at?->diffForHumans() ?? '—' }}</small></span>
+                            <small class="notification-desc">{{ $notification->body }}</small>
                         </span>
-                        <small class="notification-desc">Đang chờ bạn duyệt vào kho nhạc</small>
-                    </span>
-                    <span class="notification-unread-dot"></span>
-                </button>
-
-                <button type="button" class="notification-item is-unread">
-                    <span class="notification-icon">
-                        <x-anticon name="user" />
-                    </span>
-                    <span class="notification-body">
-                        <span class="notification-top">
-                            <strong>Người dùng mới đăng ký</strong>
-                            <small class="notification-time">1 giờ trước</small>
-                        </span>
-                        <small class="notification-desc">Có hoạt động mới trong hệ thống</small>
-                    </span>
-                    <span class="notification-unread-dot"></span>
-                </button>
-
-                <button type="button" class="notification-item">
-                    <span class="notification-icon">
-                        <x-anticon name="setting" />
-                    </span>
-                    <span class="notification-body">
-                        <span class="notification-top">
-                            <strong>Hệ thống ổn định</strong>
-                            <small class="notification-time">Hôm qua</small>
-                        </span>
-                        <small class="notification-desc">Tất cả dịch vụ đang hoạt động bình thường</small>
-                    </span>
-                </button>
+                        @unless($notification->is_read)<span class="notification-unread-dot"></span>@endunless
+                    </a>
+                @empty
+                    <div class="admin-notification-empty">Chưa có thông báo mới.</div>
+                @endforelse
             </div>
-            <a href="#" class="notification-panel-footer">Xem tất cả thông báo</a>
+            <a href="{{ route('admin.notifications.index') }}" class="notification-panel-footer">Xem tất cả thông báo</a>
         </div>
     </div>
 </div>

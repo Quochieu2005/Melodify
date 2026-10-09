@@ -16,6 +16,13 @@
         </a>
     </li>
 
+    <li class="ant-menu-item {{ request()->is('admin/notifications*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+        <a href="{{ route('admin.notifications.index') }}" class="ant-menu-title-content">
+            <x-anticon name="bell" class="ant-menu-item-icon" />
+            <span class="ant-menu-title-text">Thông báo</span>
+        </a>
+    </li>
+
     {{-- Quản lý Nội dung --}}
     @if($currentAdmin?->hasAdminResourcePermission('songs', 'view') || $currentAdmin?->hasAdminResourcePermission('albums', 'view') || $currentAdmin?->hasAdminResourcePermission('topics', 'view') || $currentAdmin?->hasAdminResourcePermission('genres', 'view') || $currentAdmin?->hasAdminResourcePermission('playlists', 'view'))
     <li class="ant-menu-submenu ant-menu-submenu-inline {{ request()->is('admin/songs*') || request()->is('admin/lyrics*') || request()->is('admin/analytics/song-views*') || request()->is('admin/albums*') || request()->is('admin/topics*') || request()->is('admin/genres*') || request()->is('admin/playlists*') ? 'ant-menu-submenu-open ant-menu-submenu-selected' : '' }}" role="menuitem" data-menu-submenu>
