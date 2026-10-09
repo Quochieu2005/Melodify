@@ -5,7 +5,6 @@ namespace App\Http\Controllers\AdminController;
 use App\Http\Controllers\Controller;
 use App\Rules\PlainText;
 use App\Services\MediaAssetService;
-use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -207,32 +206,6 @@ abstract class MediaCatalogController extends Controller
         if ($value !== '' && preg_match('/^\d+$/', $value) === 1) {
             $request->merge(['sort_order' => (int) $value]);
         }
-    }
-
-    protected function uniqueSortOrderRule(?object $item, ?Closure $scope = null): Closure
-    {
-        return function (string $attribute, mixed $value, Closure $fail) use ($item, $scope): void {
-            $query = ($this->model)::query();
-
-            if ($scope !== null) {
-                $query = $scope($query);
-            }
-
-            $sortOrder = (int) $value;
-            $hasDuplicate = $query->get()->contains(function (object $record) use ($item, $sortOrder): bool {
-                if ($item !== null && (string) $record->getKey() === (string) $item->getKey()) {
-                    return false;
-                }
-
-                $storedSortOrder = $record->getRawOriginal('sort_order');
-
-                return is_numeric($storedSortOrder) && (int) $storedSortOrder === $sortOrder;
-            });
-
-            if ($hasDuplicate) {
-                $fail('Thứ tự hiển thị này đã được sử dụng. Vui lòng chọn số khác.');
-            }
-        };
     }
 
     protected function normalizePayload(array $data, Request $request): array

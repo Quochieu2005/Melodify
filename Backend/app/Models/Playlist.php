@@ -6,7 +6,13 @@ class Playlist extends BaseModel
 {
     protected $collection = 'playlists';
 
-    protected $casts = ['is_system' => 'boolean', 'sort_order' => 'integer'];
+    protected $casts = [
+        'is_system' => 'boolean',
+        'sort_order' => 'integer',
+        'artist_ids' => 'array',
+        'genre_ids' => 'array',
+        'topic_ids' => 'array',
+    ];
 
     public function user() { return $this->belongsTo(User::class, 'user_id'); }
     public function songs() { return $this->hasMany(PlaylistSong::class, 'playlist_id'); }

@@ -8,6 +8,7 @@ use App\Models\Playlist;
 use App\Models\AdminNotification;
 use App\Services\AdminNotificationService;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\URL;
@@ -52,15 +53,20 @@ class AppServiceProvider extends ServiceProvider
         View::composer('layouts.partials.sidebar.menu', function ($view): void {
             $loadCustomTypes = static function (string $model) {
                 try {
-                    return $model::query()
-                        ->where('type', 'custom')
-                        ->get()
-                        ->pluck('type_custom')
-                        ->map(fn ($type): string => trim((string) $type))
-                        ->filter()
-                        ->unique()
-                        ->sort()
-                        ->values();
+                    return collect(Cache::remember(
+                        'sidebar-custom-types:'.md5($model),
+                        now()->addMinutes(5),
+                        fn (): array => $model::query()
+                            ->where('type', 'custom')
+                            ->get()
+                            ->pluck('type_custom')
+                            ->map(fn ($type): string => trim((string) $type))
+                            ->filter()
+                            ->unique()
+                            ->sort()
+                            ->values()
+                            ->all(),
+                    ));
                 } catch (Throwable) {
                     // Sidebar vẫn hiển thị được nếu kho dữ liệu tạm thời không kết nối.
                     return collect();
@@ -83,8 +89,23 @@ class AppServiceProvider extends ServiceProvider
             }
 
             try {
-                app(AdminNotificationService::class)->syncFor($admin);
                 $adminId = (string) $admin->getKey();
+                // Notification definitions are snapshots, not request data.
+                // Avoid rebuilding them on every page navigation while still
+                // refreshing often enough for the admin header.
+                Cache::remember(
+                    "admin-notifications-sync:{$adminId}",
+                    now()->addSeconds(30),
+                    function () use ($admin): bool {
+                        app(AdminNotificationService::class)->syncFor($admin);
+
+                        return true;
+                    },
+                );
+                // Keep the short-lived sync cache above, but query the models
+                // directly here. Eloquent models must not be serialized into
+                // the database cache store because they can come back as
+                // strings when serializable classes are disabled.
                 $notifications = AdminNotification::query()
                     ->where('admin_id', $adminId)
                     ->latest()

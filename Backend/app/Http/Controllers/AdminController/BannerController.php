@@ -3,13 +3,16 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
+use App\Models\Artist;
 use App\Models\Banner;
+use App\Models\Genre;
+use App\Models\Playlist;
+use App\Models\Topic;
 use App\Rules\PlainText;
-use App\Services\CloudinaryService;
+use App\Services\MediaAssetService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -47,10 +50,14 @@ class BannerController extends Controller
 
     public function create(): View
     {
-        return view('Admin.banners.create', ['item' => null]);
+        return view('Admin.banners.create', [
+            'item' => null,
+            ...$this->formOptions(),
+            'mediaAssets' => app(MediaAssetService::class)->latest(),
+        ]);
     }
 
-    public function store(Request $request, CloudinaryService $cloudinary): RedirectResponse
+    public function store(Request $request): RedirectResponse
     {
         $this->normalizeSortOrderInput($request);
         $data = $this->validated($request);
@@ -64,29 +71,23 @@ class BannerController extends Controller
             ]);
         }
 
-        $uploaded = null;
-
         try {
-            $uploaded = $cloudinary->uploadImage(
-                $request->file('image'),
-                config('cloudinary.banner_folder', 'banner'),
-                $cloudinary->datedPublicId((string) $data['slug']),
+            $media = app(MediaAssetService::class)->resolve(
+                $request,
+                $request->user('admin'),
+                null,
+                null,
+                true,
+                $data['slug'],
             );
-
-            $imageUrl = $uploaded['secure_url'] ?? $uploaded['url'] ?? null;
-
-            if (blank($imageUrl)) {
-                throw new \RuntimeException('Cloudinary không trả về URL ảnh banner.');
-            }
 
             Banner::query()->create([
                 ...$data,
-                'image_url' => $imageUrl,
-                'image_public_id' => $uploaded['public_id'] ?? null,
+                'image_url' => $media['url'],
+                'image_public_id' => $media['public_id'],
             ]);
         } catch (Throwable $exception) {
             Cache::forget($requestKey);
-            $this->cleanupUploadedImage($cloudinary, $uploaded['public_id'] ?? null);
             report($exception);
 
             return back()
@@ -101,36 +102,31 @@ class BannerController extends Controller
     {
         return view('Admin.banners.edit', [
             'item' => $this->findBySlug($slug),
+            ...$this->formOptions(),
+            'mediaAssets' => app(MediaAssetService::class)->latest(),
         ]);
     }
 
-    public function update(Request $request, string $slug, CloudinaryService $cloudinary): RedirectResponse
+    public function update(Request $request, string $slug): RedirectResponse
     {
         $this->normalizeSortOrderInput($request);
         $banner = $this->findBySlug($slug);
         $data = $this->validated($request, $banner);
         unset($data['form_token']);
-        $oldPublicId = $banner->image_public_id;
-        $uploaded = null;
-
         try {
-            if ($request->hasFile('image')) {
-                $uploaded = $cloudinary->uploadImage(
-                    $request->file('image'),
-                    config('cloudinary.banner_folder', 'banner'),
-                    $cloudinary->datedPublicId((string) $data['slug']),
-                );
-                $data['image_url'] = $uploaded['secure_url'] ?? $uploaded['url'] ?? null;
-                $data['image_public_id'] = $uploaded['public_id'] ?? null;
-            }
+            $media = app(MediaAssetService::class)->resolve(
+                $request,
+                $request->user('admin'),
+                $banner->image_url,
+                $banner->image_public_id,
+                false,
+                $data['slug'],
+            );
+            $data['image_url'] = $media['url'];
+            $data['image_public_id'] = $media['public_id'];
 
             $banner->forceFill($data)->save();
-
-            if ($uploaded && $oldPublicId && $oldPublicId !== ($data['image_public_id'] ?? null)) {
-                $this->cleanupUploadedImage($cloudinary, $oldPublicId);
-            }
         } catch (Throwable $exception) {
-            $this->cleanupUploadedImage($cloudinary, $uploaded['public_id'] ?? null);
             report($exception);
 
             return back()
@@ -141,14 +137,12 @@ class BannerController extends Controller
         return redirect()->route('admin.banners.index')->with('success', 'Đã cập nhật banner.');
     }
 
-    public function destroy(string $slug, CloudinaryService $cloudinary): RedirectResponse
+    public function destroy(string $slug): RedirectResponse
     {
         $banner = $this->findBySlug($slug);
-        $publicId = $banner->image_public_id;
         $banner->delete();
-        $this->cleanupUploadedImage($cloudinary, $publicId);
 
-        return back()->with('success', 'Đã xóa banner.');
+        return back()->with('success', 'Đã xóa banner. Ảnh được giữ lại trong kho dùng chung.');
     }
 
     private function findBySlug(string $slug): Banner
@@ -156,7 +150,7 @@ class BannerController extends Controller
         return Banner::query()->where('slug', $slug)->firstOrFail();
     }
 
-    public function destroyBulk(Request $request, CloudinaryService $cloudinary): RedirectResponse
+    public function destroyBulk(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'banner_ids' => ['required', 'array', 'min:1', 'max:50'],
@@ -181,15 +175,13 @@ class BannerController extends Controller
         }
 
         foreach ($banners as $banner) {
-            $publicId = $banner->image_public_id;
             $banner->delete();
-            $this->cleanupUploadedImage($cloudinary, $publicId);
         }
 
         return back()->with('success', "Đã xóa {$banners->count()} banner đã chọn.");
     }
 
-    public function destroyAll(CloudinaryService $cloudinary): RedirectResponse
+    public function destroyAll(): RedirectResponse
     {
         $banners = Banner::query()->get();
 
@@ -198,9 +190,7 @@ class BannerController extends Controller
         }
 
         foreach ($banners as $banner) {
-            $publicId = $banner->image_public_id;
             $banner->delete();
-            $this->cleanupUploadedImage($cloudinary, $publicId);
         }
 
         return back()->with('success', "Đã xóa toàn bộ {$banners->count()} banner.");
@@ -215,7 +205,8 @@ class BannerController extends Controller
             'form_token' => [$banner ? 'nullable' : 'required', 'string', 'uuid'],
             'title' => ['bail', 'required', 'string', 'min:1', 'max:100', new PlainText()],
             'slug' => ['nullable', 'alpha_dash', 'max:120', new PlainText()],
-            'image' => [$banner ? 'nullable' : 'required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=6000,max_height=4000'],
+            'image' => [$banner ? 'nullable' : 'required_without:image_asset_id', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=6000,max_height=4000'],
+            'image_asset_id' => [$banner ? 'nullable' : 'required_without:image', 'string', 'alpha_dash', 'max:64'],
             'link_url' => ['nullable', 'string', 'max:500', 'regex:/^(https?:\/\/|\/)[^<>"\']*$/', new PlainText()],
             'sort_order' => [
                 'bail',
@@ -223,24 +214,16 @@ class BannerController extends Controller
                 'integer',
                 'min:0',
                 'max:9999',
-                function (string $attribute, mixed $value, \Closure $fail) use ($banner): void {
-                    $sortOrder = (int) $value;
-                    $hasDuplicate = Banner::query()->get()->contains(function (Banner $existing) use ($banner, $sortOrder): bool {
-                        if ($banner !== null && (string) $existing->getKey() === (string) $banner->getKey()) {
-                            return false;
-                        }
-
-                        $storedSortOrder = $existing->getRawOriginal('sort_order');
-
-                        return is_numeric($storedSortOrder) && (int) $storedSortOrder === $sortOrder;
-                    });
-
-                    if ($hasDuplicate) {
-                        $fail('Thứ tự hiển thị này đã được sử dụng. Vui lòng chọn số khác.');
-                    }
-                },
             ],
             'status' => ['required', 'in:active,inactive'],
+            'artist_ids' => ['nullable', 'array', 'max:50'],
+            'artist_ids.*' => ['required', 'string', 'max:64', 'distinct'],
+            'genre_ids' => ['nullable', 'array', 'max:50'],
+            'genre_ids.*' => ['required', 'string', 'max:64', 'distinct'],
+            'topic_ids' => ['nullable', 'array', 'max:50'],
+            'topic_ids.*' => ['required', 'string', 'max:64', 'distinct'],
+            'playlist_ids' => ['nullable', 'array', 'max:50'],
+            'playlist_ids.*' => ['required', 'string', 'max:64', 'distinct'],
         ], [
             'title.max' => 'Tên banner không được dài hơn 100 ký tự.',
             'slug.max' => 'Slug không được dài hơn 120 ký tự.',
@@ -265,7 +248,12 @@ class BannerController extends Controller
             ? $this->uniqueSlug($slug, $banner)
             : $slug;
 
-        unset($data['image']);
+        foreach (['artist_ids', 'genre_ids', 'topic_ids', 'playlist_ids'] as $field) {
+            $data[$field] = array_values(array_unique(array_map('strval', $data[$field] ?? [])));
+        }
+
+        $this->validateRelationIds($data);
+        unset($data['image'], $data['image_asset_id']);
 
         return $data;
     }
@@ -276,6 +264,38 @@ class BannerController extends Controller
 
         if ($value !== '' && preg_match('/^\d+$/', $value) === 1) {
             $request->merge(['sort_order' => (int) $value]);
+        }
+    }
+
+    /** @return array{artists: mixed, genres: mixed, topics: mixed, playlists: mixed} */
+    private function formOptions(): array
+    {
+        return [
+            'artists' => Artist::query()->orderBy('name')->limit(300)->get(),
+            'genres' => Genre::query()->orderBy('name')->limit(300)->get(),
+            'topics' => Topic::query()->orderBy('name')->limit(300)->get(),
+            'playlists' => Playlist::query()->orderBy('name')->limit(300)->get(),
+        ];
+    }
+
+    /** @param array<string, mixed> $data */
+    private function validateRelationIds(array $data): void
+    {
+        $relations = [
+            'artist_ids' => [Artist::class, 'nghệ sĩ'],
+            'genre_ids' => [Genre::class, 'thể loại'],
+            'topic_ids' => [Topic::class, 'chủ đề'],
+            'playlist_ids' => [Playlist::class, 'playlist'],
+        ];
+
+        foreach ($relations as $field => [$model, $label]) {
+            foreach ((array) ($data[$field] ?? []) as $id) {
+                if (! $model::query()->find($id)) {
+                    throw ValidationException::withMessages([
+                        $field => "Một {$label} đã chọn không còn tồn tại.",
+                    ]);
+                }
+            }
         }
     }
 
@@ -300,19 +320,4 @@ class BannerController extends Controller
         return $slug;
     }
 
-    private function cleanupUploadedImage(CloudinaryService $cloudinary, ?string $publicId): void
-    {
-        if (blank($publicId)) {
-            return;
-        }
-
-        try {
-            $cloudinary->deleteImage($publicId);
-        } catch (Throwable $exception) {
-            Log::warning('Cloudinary banner cleanup failed.', [
-                'public_id' => $publicId,
-                'exception' => $exception,
-            ]);
-        }
-    }
 }

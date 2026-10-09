@@ -19,7 +19,7 @@
             document.documentElement.style.colorScheme = effectiveTheme;
         })();
     </script>
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @vite(['resources/css/app.css', 'resources/css/admin-form-enhancements.css', 'resources/js/app.js', 'resources/js/admin-form-enhancements.js'])
 </head>
 
 <body class="admin-body" data-admin-idle-timeout="3600" data-admin-logout-url="{{ route('admin.logout') }}">

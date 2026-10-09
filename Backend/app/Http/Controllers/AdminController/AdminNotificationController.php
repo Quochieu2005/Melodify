@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AdminNotification;
 use App\Services\AdminNotificationService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 class AdminNotificationController extends Controller
@@ -13,11 +14,20 @@ class AdminNotificationController extends Controller
     public function index(AdminNotificationService $notificationService): View
     {
         $admin = auth('admin')->user();
-        $notificationService->syncFor($admin);
-        $query = AdminNotification::query()->where('admin_id', (string) $admin->getKey());
+        $adminId = (string) $admin->getKey();
+        Cache::remember(
+            "admin-notifications-sync:{$adminId}",
+            now()->addSeconds(30),
+            function () use ($notificationService, $admin): bool {
+                $notificationService->syncFor($admin);
+
+                return true;
+            },
+        );
+        $query = AdminNotification::query()->where('admin_id', $adminId);
         $notifications = $query->latest()->paginate(20)->withQueryString();
         $unreadCount = AdminNotification::query()
-            ->where('admin_id', (string) $admin->getKey())
+            ->where('admin_id', $adminId)
             ->where('is_read', false)
             ->count();
 

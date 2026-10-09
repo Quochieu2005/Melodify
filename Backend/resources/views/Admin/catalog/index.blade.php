@@ -65,7 +65,7 @@
                                 <td>
                                     @if($key === $imageUrlField)
                                         @if(filled($value))
-                                            <img src="{{ $value }}" alt="" class="admin-catalog-thumb">
+                                            <img src="{{ $value }}" alt="" class="admin-catalog-thumb" loading="lazy" decoding="async" width="56" height="56">
                                         @else
                                             <span class="admin-catalog-image-empty">Chưa có ảnh</span>
                                         @endif

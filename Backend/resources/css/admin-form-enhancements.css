@@ -1,0 +1,92 @@
+/* Kept separate from app.css: admin-specific form behaviours and responsive pickers. */
+.admin-selection-panel {
+    background: var(--admin-surface, #fff);
+    border: 1px solid var(--admin-border, #d9e1e8);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.admin-selection-panel.is-invalid {
+    border-color: var(--ant-color-error, #ff4d4f);
+}
+
+.admin-selection-search {
+    border: 0;
+    border-bottom: 1px solid var(--admin-border, #d9e1e8);
+    border-radius: 0;
+    box-shadow: none;
+    margin: 0;
+    width: 100%;
+}
+
+.admin-selection-search:focus {
+    box-shadow: inset 0 -1px 0 var(--admin-accent, #13b8c8);
+}
+
+.admin-selection-list {
+    max-height: 248px;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+.admin-selection-panel-compact .admin-selection-list {
+    max-height: 188px;
+}
+
+.admin-selection-option {
+    align-items: center;
+    border-bottom: 1px solid var(--admin-border, #edf1f5);
+    cursor: pointer;
+    display: flex;
+    gap: 10px;
+    min-height: 50px;
+    padding: 8px 11px;
+}
+
+.admin-selection-option:last-child { border-bottom: 0; }
+.admin-selection-option:hover { background: var(--admin-accent-soft, #edfafd); }
+.admin-selection-option:has(input:checked) { background: var(--admin-accent-soft, #edfafd); }
+
+.admin-selection-option input {
+    accent-color: var(--admin-accent, #13b8c8);
+    block-size: 16px;
+    flex: 0 0 auto;
+    inline-size: 16px;
+    margin: 0;
+}
+
+.admin-selection-option span { min-width: 0; }
+.admin-selection-option strong,
+.admin-selection-option small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-selection-option strong { color: var(--admin-text, #14213d); font-size: 13px; }
+.admin-selection-option small { color: var(--admin-text-muted, #758396); font-size: 12px; margin-top: 2px; }
+.admin-selection-empty { color: var(--admin-text-muted, #758396); font-size: 13px; padding: 18px 12px; text-align: center; }
+
+.admin-media-library[data-media-picker] .admin-media-card.is-selected {
+    border-color: var(--admin-accent, #13b8c8);
+    box-shadow: 0 0 0 2px var(--admin-accent-soft, #e2f7f9);
+}
+
+.admin-media-library[data-media-picker] .admin-media-card.is-selected::after {
+    align-items: center;
+    background: var(--admin-accent, #13b8c8);
+    border-radius: 50%;
+    color: #fff;
+    content: '✓';
+    display: flex;
+    font-size: 11px;
+    font-weight: 800;
+    height: 20px;
+    justify-content: center;
+    position: absolute;
+    right: 5px;
+    top: 5px;
+    width: 20px;
+}
+
+.admin-media-library[data-media-picker] .admin-media-preview { display: block; }
+
+@media (max-width: 680px) {
+    .admin-selection-list { max-height: 210px; }
+    .admin-selection-option { min-height: 54px; }
+}
