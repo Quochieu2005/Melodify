@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Models\User;
 use App\Models\Topic;
 use App\Models\Playlist;
+use App\Models\AdminNotification;
+use App\Services\AdminNotificationService;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -65,6 +67,38 @@ class AppServiceProvider extends ServiceProvider
             $view->with([
                 'sidebarTopicCustomTypes' => $loadCustomTypes(Topic::class),
                 'sidebarPlaylistCustomTypes' => $loadCustomTypes(Playlist::class),
+            ]);
+        });
+
+        View::composer('layouts.partials.header.notifications', function ($view): void {
+            $admin = auth('admin')->user();
+
+            if ($admin === null) {
+                $view->with(['headerNotifications' => collect(), 'headerUnreadCount' => 0]);
+
+                return;
+            }
+
+            try {
+                app(AdminNotificationService::class)->syncFor($admin);
+                $adminId = (string) $admin->getKey();
+                $notifications = AdminNotification::query()
+                    ->where('admin_id', $adminId)
+                    ->latest()
+                    ->limit(6)
+                    ->get();
+                $unreadCount = AdminNotification::query()
+                    ->where('admin_id', $adminId)
+                    ->where('is_read', false)
+                    ->count();
+            } catch (Throwable) {
+                $notifications = collect();
+                $unreadCount = 0;
+            }
+
+            $view->with([
+                'headerNotifications' => $notifications,
+                'headerUnreadCount' => $unreadCount,
             ]);
         });
     }
