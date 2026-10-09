@@ -35,6 +35,24 @@ return [
         ],
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI'),
+    ],
+
+    'facebook' => [
+        'client_id' => env('FACEBOOK_CLIENT_ID'),
+        'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
+        'redirect' => env('FACEBOOK_REDIRECT_URI'),
+    ],
+
+    'twilio' => [
+        'account_sid' => env('TWILIO_ACCOUNT_SID'),
+        'auth_token' => env('TWILIO_AUTH_TOKEN'),
+        'verify_service_sid' => env('TWILIO_VERIFY_SERVICE_SID'),
+    ],
+
     'itunes' => [
         'base_url' => env('ITUNES_BASE_URL', 'https://itunes.apple.com'),
         'countries' => array_filter(array_map('trim', explode(',', env('ITUNES_COUNTRIES', 'VN,US,CN')))),

@@ -25,7 +25,7 @@
         </div>
         <div class="admin-table-scroll">
             <table class="ant-table admin-data-table">
-                <thead class="ant-table-thead"><tr><th>Ảnh</th><th>Họ tên</th><th>Username</th><th>Email</th><th>Điện thoại</th><th>Ngày tham gia</th><th>Premium</th><th>Đăng nhập lần cuối</th><th>Trạng thái</th><th class="admin-table-actions">Hành động</th></tr></thead>
+                <thead class="ant-table-thead"><tr><th>Ảnh</th><th>Họ tên</th><th>Username</th><th>Email</th><th>Điện thoại</th><th>Ngày tham gia</th><th>Premium</th><th>Đăng nhập lần cuối</th><th>Cách đăng nhập gần nhất</th><th>Trạng thái</th><th class="admin-table-actions">Hành động</th></tr></thead>
                 <tbody class="ant-table-tbody">
                     @forelse($items as $user)
                         <tr>
@@ -45,6 +45,16 @@
                             <td>{{ $user->created_at?->format('d/m/Y') ?? '—' }}</td>
                             <td><span class="ant-tag {{ $user->is_premium ? 'ant-tag-blue' : 'ant-tag-default' }}">{{ $user->is_premium ? 'Premium (1)' : 'Bình thường (0)' }}</span></td>
                             <td>{{ $user->last_login_at?->format('d/m/Y H:i:s') ?? 'Chưa đăng nhập' }}</td>
+                            <td>
+                                @switch($user->last_login_method)
+                                    @case('password')<span class="ant-tag ant-tag-default">Mật khẩu</span>@break
+                                    @case('google')<span class="ant-tag ant-tag-blue">Google</span>@break
+                                    @case('facebook')<span class="ant-tag ant-tag-blue">Facebook</span>@break
+                                    @case('qr')<span class="ant-tag ant-tag-blue">QR Code</span>@break
+                                    @case('phone')<span class="ant-tag ant-tag-default">SMS OTP</span>@break
+                                    @default<span class="admin-text-muted">Chưa đăng nhập</span>
+                                @endswitch
+                            </td>
                             <td><span class="ant-tag {{ $user->status === 'active' ? 'ant-tag-green' : 'ant-tag-red' }}">{{ $user->status === 'active' ? 'Hoạt động' : 'Đã khóa' }}</span></td>
                             <td class="admin-table-actions">
                                 @if($canUpdate)<a href="{{ route('admin.users.edit', $user->getKey()) }}" class="admin-action-link">Sửa</a>@endif
@@ -53,7 +63,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="10" class="admin-empty-state"><span class="admin-empty-icon">◎</span><strong>Chưa có người dùng</strong><span>Người dùng sẽ xuất hiện tại đây sau khi đăng ký tài khoản.</span></td></tr>
+                        <tr><td colspan="11" class="admin-empty-state"><span class="admin-empty-icon">◎</span><strong>Chưa có người dùng</strong><span>Người dùng sẽ xuất hiện tại đây sau khi đăng ký tài khoản.</span></td></tr>
                     @endforelse
                 </tbody>
             </table>

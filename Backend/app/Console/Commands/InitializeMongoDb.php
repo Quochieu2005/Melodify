@@ -25,7 +25,7 @@ class InitializeMongoDb extends Command
             'song_artists', 'song_genres', 'song_audio_files', 'lyrics', 'playlists',
             'playlist_songs', 'favorites', 'song_shares', 'listening_history', 'devices', 'song_play_events',
             'comments', 'comment_likes', 'notifications', 'subscription_plans', 'subscriptions',
-            'payments', 'transactions', 'payment_details', 'logs', 'reports', 'recommendations',
+            'payments', 'transactions', 'payment_details', 'user_api_tokens', 'phone_login_challenges', 'logs', 'reports', 'recommendations',
             'topics', 'topic_songs', 'media_assets',
         ];
 
@@ -45,7 +45,7 @@ class InitializeMongoDb extends Command
             'admins' => [[['slug' => 1], ['unique' => true]], [['email' => 1], ['unique' => true]]],
             'admin_notifications' => [[['admin_id' => 1, 'is_read' => 1], []], [['created_at' => -1], []]],
             'banners' => [[['slug' => 1], ['unique' => true]], [['sort_order' => 1], []], [['status' => 1], []]],
-            'users' => [[['slug' => 1], ['unique' => true]], [['email' => 1], ['unique' => true]], [['username' => 1], ['unique' => true, 'sparse' => true]], [['is_premium' => 1], []]],
+            'users' => [[['slug' => 1], ['unique' => true]], [['email' => 1], ['unique' => true, 'sparse' => true]], [['username' => 1], ['unique' => true, 'sparse' => true]], [['phone' => 1], ['unique' => true, 'sparse' => true]], [['is_premium' => 1], []]],
             'artists' => [[['slug' => 1], ['unique' => true]], [['user_id' => 1], ['unique' => true, 'sparse' => true]]],
             'genres' => [[['slug' => 1], ['unique' => true]], [['name' => 1], ['unique' => true]]],
             'topics' => [[['slug' => 1], ['unique' => true]], [['sort_order' => 1], []], [['status' => 1], []]],
@@ -67,10 +67,20 @@ class InitializeMongoDb extends Command
             'subscription_plans' => [[['slug' => 1], ['unique' => true]], [['code' => 1], ['unique' => true]]],
             'payments' => [[['payment_code' => 1], ['unique' => true]]],
             'transactions' => [[['transaction_code' => 1], ['unique' => true]], [['gateway_transaction_id' => 1], ['unique' => true, 'sparse' => true]]],
+            'user_api_tokens' => [[['token_hash' => 1], ['unique' => true]], [['user_id' => 1], []], [['expires_at' => 1], []]],
+            'phone_login_challenges' => [[['phone' => 1, 'created_at' => -1], []], [['expires_at' => 1], []]],
             'recommendations' => [[['user_id' => 1, 'song_id' => 1], ['unique' => true]]],
         ];
 
         foreach ($indexes as $collection => $collectionIndexes) {
+            if ($collection === 'users') {
+                try {
+                    $database->selectCollection('users')->dropIndex('email_1');
+                } catch (\Throwable) {
+                    // The index may not exist on a fresh database.
+                }
+            }
+
             foreach ($collectionIndexes as [$keys, $options]) {
                 $database->selectCollection($collection)->createIndex($keys, $options);
             }
