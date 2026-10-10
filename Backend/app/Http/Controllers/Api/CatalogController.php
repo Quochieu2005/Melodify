@@ -16,6 +16,7 @@ use App\Models\SongArtist;
 use App\Models\SongGenre;
 use App\Models\SongPlayEvent;
 use App\Models\SongShare;
+use App\Models\SongVideo;
 use App\Models\Topic;
 use App\Models\TopicSong;
 use App\Services\Music\LyricsClient;
@@ -154,6 +155,52 @@ class CatalogController extends Controller
         } catch (RuntimeException $exception) {
             return $this->externalApiError($exception);
         }
+    }
+
+    public function videos(Request $request): JsonResponse
+    {
+        $perPage = min(max($request->integer('per_page', 20), 1), 50);
+        $query = SongVideo::query()->where('status', 'active');
+
+        if ($request->filled('q')) {
+            $term = trim((string) $request->input('q'));
+            $query->where(function ($nestedQuery) use ($term): void {
+                $nestedQuery
+                    ->where('title', 'like', "%{$term}%")
+                    ->orWhere('slug', 'like', "%{$term}%");
+            });
+        }
+
+        $items = $query
+            ->orderBy('sort_order')
+            ->orderByDesc('created_at')
+            ->paginate($perPage);
+
+        return response()->json([
+            'data' => collect($items->items())->map(fn (SongVideo $video): array => $this->videoData($video))->values()->all(),
+            'meta' => [
+                'current_page' => $items->currentPage(),
+                'last_page' => $items->lastPage(),
+                'per_page' => $items->perPage(),
+                'total' => $items->total(),
+            ],
+        ]);
+    }
+
+    public function video(string $slug): JsonResponse
+    {
+        $video = SongVideo::query()->where('status', 'active')->where('slug', $slug)->first();
+        if (! $video) {
+            try {
+                $video = SongVideo::query()->where('status', 'active')->find($slug);
+            } catch (\Throwable) {
+                $video = null;
+            }
+        }
+
+        abort_unless($video, 404);
+
+        return response()->json(['data' => $this->videoData($video)]);
     }
 
     public function popularSongs(Request $request): JsonResponse
@@ -604,8 +651,46 @@ class CatalogController extends Controller
             'stream_url' => filled($id) ? route('api.v1.songs.external-audio', ['externalId' => $id]) : null,
             'preview_url' => null,
             'cover_url' => $track['artworkUrl100'] ?? null,
+            'country_code' => $track['countryCode'] ?? null,
+            'country' => filled($track['countryCode'] ?? null) ? config('music.countries.'.$track['countryCode']) : null,
             'source_url' => $track['trackViewUrl'] ?? null,
             'external_source' => 'nhaccuatui',
+        ];
+    }
+
+    private function videoData(SongVideo $video): array
+    {
+        $streamUrl = $video->video_url;
+        $embedUrl = null;
+        $watchUrl = null;
+        $playerType = 'native';
+        if ($video->source === 'nhaccuatui' && filled($video->slug ?: $video->getKey())) {
+            $streamUrl = route('api.v1.videos.stream', ['slug' => $video->slug ?: $video->getKey()]);
+        }
+        if ($video->source === 'youtube' && filled($video->external_id)) {
+            $watchUrl = 'https://www.youtube.com/watch?v='.$video->external_id;
+            $embedUrl = 'https://www.youtube.com/embed/'.$video->external_id;
+            $streamUrl = $embedUrl;
+            $playerType = 'youtube';
+        }
+
+        return [
+            'id' => (string) $video->getKey(),
+            'slug' => $video->slug,
+            'title' => $video->title,
+            'video_url' => $streamUrl,
+            'embed_url' => $embedUrl,
+            'watch_url' => $watchUrl,
+            'player_type' => $playerType,
+            'youtube_video_id' => $video->source === 'youtube' ? $video->external_id : null,
+            'thumbnail_url' => $video->thumbnail_url,
+            'duration_seconds' => $video->duration_seconds !== null ? (int) $video->duration_seconds : null,
+            'source' => $video->source,
+            'external_id' => $video->external_id,
+            'external_source' => $video->external_source,
+            'source_url' => $video->source_url,
+            'artist_ids' => $video->artist_ids ?? [],
+            'artists' => $video->artists ?? [],
         ];
     }
 
@@ -660,6 +745,12 @@ class CatalogController extends Controller
             ->where('status', 'active')
             ->where('file_type', 'full')
             ->first();
+        $videos = SongVideo::query()
+            ->where('song_id', $songId)
+            ->where('status', 'active')
+            ->orderBy('sort_order')
+            ->orderBy('created_at')
+            ->get();
 
         $externalId = $audio?->external_id;
         if (blank($externalId) && $song->external_source === 'nhaccuatui') {
@@ -779,8 +870,12 @@ class CatalogController extends Controller
             'audio_url' => $audioUrl,
             'stream_url' => $audioUrl,
             'preview_url' => $song->preview_url,
+            'video_url' => $videos->first() ? $this->videoData($videos->first())['video_url'] : null,
+            'videos' => $videos->map(fn (SongVideo $video): array => $this->videoData($video))->values()->all(),
             'source_url' => $song->external_url ?: $song->itunes_url,
             'external_source' => $song->external_source,
+            'country_code' => $song->country_code,
+            'country' => filled($song->country_code) ? config('music.countries.'.$song->country_code, $song->country_code) : null,
             'favorite_count' => $this->songFavoriteCount($song),
             'share_count' => $this->songShareCount($song),
             'status' => $song->status,

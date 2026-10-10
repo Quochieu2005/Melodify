@@ -9,4 +9,5 @@ return [
     'banner_folder' => env('CLOUDINARY_BANNER_FOLDER', 'banner'),
     'artist_folder' => env('CLOUDINARY_ARTIST_FOLDER', 'melodify/artists'),
     'audio_folder' => env('CLOUDINARY_AUDIO_FOLDER', 'melodify/audio'),
+    'video_folder' => env('CLOUDINARY_VIDEO_FOLDER', 'melodify/videos'),
 ];

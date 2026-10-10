@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
+use App\Models\Playlist;
 use App\Rules\PlainText;
 use App\Services\MediaAssetService;
 use Illuminate\Http\RedirectResponse;
@@ -44,6 +45,80 @@ abstract class MediaCatalogController extends Controller
     protected function supplementalFormData(?object $item): array
     {
         return [];
+    }
+
+    /** @return mixed */
+    protected function availablePlaylists()
+    {
+        return Playlist::query()
+            ->orderBy('name')
+            ->limit(500)
+            ->get();
+    }
+
+    /** @return array<int, string> */
+    protected function selectedPlaylistIds(?object $item, string $relationField): array
+    {
+        if ($item === null) {
+            return [];
+        }
+
+        return Playlist::query()
+            ->where($relationField, (string) $item->getKey())
+            ->pluck((new Playlist())->getKeyName())
+            ->map(fn ($id): string => (string) $id)
+            ->values()
+            ->all();
+    }
+
+    /** @param array<int, string> $playlistIds */
+    protected function validatePlaylistIds(array $playlistIds): void
+    {
+        foreach ($playlistIds as $playlistId) {
+            if (! Playlist::query()->find($playlistId)) {
+                throw ValidationException::withMessages([
+                    'playlist_ids' => 'Một playlist đã chọn không còn tồn tại.',
+                ]);
+            }
+        }
+    }
+
+    /** @param array<int, string> $selectedPlaylistIds */
+    protected function syncPlaylistRelation(string $relationField, string $catalogId, array $selectedPlaylistIds): void
+    {
+        $selected = collect($selectedPlaylistIds)
+            ->map(fn ($id): string => (string) $id)
+            ->filter()
+            ->unique()
+            ->flip();
+        $playlistKey = (new Playlist())->getKeyName();
+
+        Playlist::query()
+            ->where($relationField, $catalogId)
+            ->get()
+            ->merge($selected->keys()->isEmpty() ? collect() : Playlist::query()->whereIn($playlistKey, $selected->keys()->all())->get())
+            ->unique(fn (Playlist $playlist): string => (string) $playlist->getKey())
+            ->each(function (Playlist $playlist) use ($relationField, $catalogId, $selected): void {
+                $ids = collect($playlist->{$relationField} ?? [])
+                    ->map(fn ($id): string => (string) $id)
+                    ->filter(fn (string $id): bool => $id !== $catalogId)
+                    ->values();
+
+                if ($selected->has((string) $playlist->getKey())) {
+                    $ids->push($catalogId);
+                }
+
+                $nextIds = $ids->unique()->values()->all();
+                $currentIds = collect($playlist->{$relationField} ?? [])
+                    ->map(fn ($id): string => (string) $id)
+                    ->values()
+                    ->all();
+
+                if ($currentIds !== $nextIds) {
+                    $playlist->setAttribute($relationField, $nextIds);
+                    $playlist->save();
+                }
+            });
     }
 
     /** @param array<string, mixed> $data */

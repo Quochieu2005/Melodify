@@ -35,7 +35,7 @@ class SongController extends CrudResourceController
 
     protected string $viewDirectory = 'Admin.songs';
 
-    protected array $columns = ['title' => 'Tên bài hát', 'release_date' => 'Ngày phát hành', 'duration_seconds' => 'Thời lượng', 'is_featured' => 'Nổi bật', 'status' => 'Trạng thái'];
+    protected array $columns = ['title' => 'Tên bài hát', 'country_code' => 'Quốc gia', 'release_date' => 'Ngày phát hành', 'duration_seconds' => 'Thời lượng', 'is_featured' => 'Nổi bật', 'status' => 'Trạng thái'];
 
     protected array $fields = [
         'title' => ['label' => 'Tên bài hát', 'required' => true],
@@ -155,7 +155,26 @@ class SongController extends CrudResourceController
     public function update(AdminResourceRequest $request, string $id): RedirectResponse
     {
         $item = ($this->model)::query()->findOrFail($id);
-        $item->update($this->normalize($request->validated(), $item->getKey()));
+        $data = $this->normalize($request->validated(), $item->getKey());
+
+        if ($request->boolean('sync_external')
+            && $item->external_source === 'nhaccuatui'
+            && filled($item->external_id)) {
+            try {
+                $item = app(SongImportService::class)->importFromNhacCuaTui(
+                    (string) $item->external_id,
+                    auth('admin')->user(),
+                );
+            } catch (RuntimeException $exception) {
+                report($exception);
+
+                return back()->withErrors([
+                    'external_id' => 'Không thể lấy lại dữ liệu bài hát từ NhacCuaTui. Vui lòng thử lại.',
+                ])->withInput();
+            }
+        }
+
+        $item->update($data);
         $this->syncArtist($item, $request->input('artist_name'));
         $this->syncTopics($item, $request->input('topic_id'));
         $this->syncGenre($item, $request->input('genre_id'));
@@ -188,6 +207,7 @@ class SongController extends CrudResourceController
                     'genre' => $track['primaryGenreName'] ?? null,
                     'artwork_url' => $track['artworkUrl100'] ?? null,
                     'audio_url' => $track['streamUrl'] ?? null,
+                    'country_code' => $track['countryCode'] ?? null,
                 ])->values()->all(),
             ]);
         } catch (RuntimeException $exception) {
@@ -239,6 +259,7 @@ class SongController extends CrudResourceController
                     'cover_url' => $track['artworkUrl100'] ?? null,
                     'release_date' => $track['releaseDate'] ?? null,
                     'duration_seconds' => isset($track['trackTimeMillis']) ? (int) round(((int) $track['trackTimeMillis']) / 1000) : null,
+                    'country_code' => $track['countryCode'] ?? null,
                     'plain_lyrics' => $lyrics['plainLyrics'] ?? null,
                     'synced_lyrics' => $lyrics['syncedLyrics'] ?? null,
                 ],
@@ -253,7 +274,7 @@ class SongController extends CrudResourceController
     protected function normalize(array $data, mixed $ignoreId = null): array
     {
         $data = parent::normalize($data, $ignoreId);
-        unset($data['topic_ids'], $data['topic_id'], $data['artist_id'], $data['genre_id'], $data['playlist_id'], $data['plain_lyrics'], $data['synced_lyrics']);
+        unset($data['topic_ids'], $data['topic_id'], $data['artist_id'], $data['genre_id'], $data['playlist_id'], $data['plain_lyrics'], $data['synced_lyrics'], $data['sync_external']);
         $data['is_featured'] = (int) ($data['is_featured'] ?? 0);
 
         if (request()->routeIs('admin.songs.store')) {

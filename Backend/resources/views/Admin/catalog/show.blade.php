@@ -7,7 +7,7 @@
         <div>
             <a href="{{ route("admin.$resource.index") }}" class="admin-back-link">← Quay lại danh sách {{ $resourceTitle }}</a>
             <h1 class="admin-page-title">{{ $item->name }}</h1>
-            <p class="admin-page-description">Thông tin {{ $resourceTitle }} và các bài hát đã được liên kết.</p>
+            <p class="admin-page-description">Thông tin {{ $resourceTitle }} và nội dung đã được liên kết.</p>
         </div>
         <div class="admin-page-header-actions"><a href="{{ route("admin.$resource.edit", $item->getKey()) }}" class="ant-btn ant-btn-primary">Sửa {{ $resourceTitle }}</a></div>
     </div>
@@ -21,11 +21,30 @@
                 @if(filled($item->description))<p>{{ $item->description }}</p>@endif
             </div>
         </article>
-        <article class="ant-card admin-album-songs-card">
-            <div class="admin-resource-form-heading"><div><strong>Bài hát thuộc {{ $resourceTitle }}</strong><span>{{ $songs->total() }} bài hát</span></div></div>
-            <div class="admin-album-song-list">@forelse($songs as $index => $song)<div class="admin-album-song-row"><span class="admin-album-song-number">{{ str_pad((string) (($songs->firstItem() ?? 1) + $index), 2, '0', STR_PAD_LEFT) }}</span><div><strong>{{ $song->title }}</strong><small>{{ $song->artist_name ?: 'Chưa có nghệ sĩ' }}</small></div><span>{{ $song->duration_seconds ? gmdate('i:s', (int) $song->duration_seconds) : '—' }}</span><a href="{{ route('admin.songs.edit', $song->getKey()) }}" class="admin-action-link">Sửa bài hát</a></div>@empty<div class="admin-selection-empty">Chưa có bài hát nào. Mở phần Sửa để chọn bài hát.</div>@endforelse</div>
-            @if($songs->hasPages())<div class="admin-pagination">{{ $songs->links() }}</div>@endif
-        </article>
+        @if(isset($playlists))
+            <article class="ant-card admin-album-songs-card">
+                <div class="admin-resource-form-heading"><div><strong>Playlist thuộc {{ $resourceTitle }}</strong><span>{{ $playlists->total() }} playlist</span></div></div>
+                <div class="admin-album-song-list">
+                    @forelse($playlists as $index => $playlist)
+                        <div class="admin-album-song-row">
+                            <span class="admin-album-song-number">{{ str_pad((string) (($playlists->firstItem() ?? 1) + $index), 2, '0', STR_PAD_LEFT) }}</span>
+                            <div><strong>{{ $playlist->name }}</strong><small>{{ $playlist->type_custom ?: config('playlists.types.'.$playlist->type, 'Playlist') }}</small></div>
+                            <span>{{ $playlist->status === 'active' ? 'Hoạt động' : 'Tạm ẩn' }}</span>
+                            <a href="{{ route('admin.playlists.edit', $playlist->getKey()) }}" class="admin-action-link">Sửa playlist</a>
+                        </div>
+                    @empty
+                        <div class="admin-selection-empty">Chưa có playlist nào. Mở phần Sửa để chọn playlist.</div>
+                    @endforelse
+                </div>
+                @if($playlists->hasPages())<div class="admin-pagination">{{ $playlists->links() }}</div>@endif
+            </article>
+        @else
+            <article class="ant-card admin-album-songs-card">
+                <div class="admin-resource-form-heading"><div><strong>Bài hát thuộc {{ $resourceTitle }}</strong><span>{{ $songs->total() }} bài hát</span></div></div>
+                <div class="admin-album-song-list">@forelse($songs as $index => $song)<div class="admin-album-song-row"><span class="admin-album-song-number">{{ str_pad((string) (($songs->firstItem() ?? 1) + $index), 2, '0', STR_PAD_LEFT) }}</span><div><strong>{{ $song->title }}</strong><small>{{ $song->artist_name ?: 'Chưa có nghệ sĩ' }}</small></div><span>{{ $song->duration_seconds ? gmdate('i:s', (int) $song->duration_seconds) : '—' }}</span><a href="{{ route('admin.songs.edit', $song->getKey()) }}" class="admin-action-link">Sửa bài hát</a></div>@empty<div class="admin-selection-empty">Chưa có bài hát nào. Mở phần Sửa để chọn bài hát.</div>@endforelse</div>
+                @if($songs->hasPages())<div class="admin-pagination">{{ $songs->links() }}</div>@endif
+            </article>
+        @endif
     </div>
 </section>
 @endsection

@@ -22,7 +22,7 @@ class InitializeMongoDb extends Command
 
         $collections = [
             'admins', 'admin_notifications', 'banners', 'users', 'artists', 'artist_followers', 'genres', 'albums', 'songs',
-            'song_artists', 'song_genres', 'song_audio_files', 'lyrics', 'playlists',
+            'song_artists', 'song_genres', 'song_audio_files', 'song_videos', 'lyrics', 'playlists',
             'playlist_songs', 'favorites', 'song_shares', 'listening_history', 'devices', 'song_play_events',
             'comments', 'comment_likes', 'notifications', 'subscription_plans', 'subscriptions',
             'payments', 'transactions', 'payment_details', 'user_api_tokens', 'phone_login_challenges', 'logs', 'reports', 'recommendations',
@@ -56,6 +56,7 @@ class InitializeMongoDb extends Command
             'topic_songs' => [[['topic_id' => 1, 'song_id' => 1], ['unique' => true]], [['topic_id' => 1, 'position' => 1], []], [['song_id' => 1, 'position' => 1], []]],
             'lyrics' => [[['song_id' => 1, 'language' => 1], ['unique' => true]]],
             'song_audio_files' => [[['song_id' => 1, 'file_type' => 1, 'status' => 1], []]],
+            'song_videos' => [[['slug' => 1], ['unique' => true, 'sparse' => true]], [['song_id' => 1, 'status' => 1, 'sort_order' => 1], []], [['created_at' => -1], []]],
             'playlists' => [[['slug' => 1], ['unique' => true]], [['user_id' => 1], []], [['sort_order' => 1], []], [['status' => 1], []]],
             'media_assets' => [[['public_id' => 1], ['unique' => true]], [['folder' => 1], []], [['created_at' => -1], []]],
             'playlist_songs' => [[['playlist_id' => 1, 'song_id' => 1], ['unique' => true]], [['playlist_id' => 1, 'position' => 1], []], [['song_id' => 1, 'position' => 1], []]],

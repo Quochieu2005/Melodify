@@ -8,7 +8,7 @@
         <div>
             <a href="{{ route('admin.playlists.index') }}" class="admin-back-link">← Quay lại danh sách playlist</a>
             <h1 class="admin-page-title">{{ $isEditing ? 'Chỉnh sửa playlist' : 'Thêm playlist' }}</h1>
-            <p class="admin-page-description">Playlist có thể là playlist hệ thống hoặc thuộc về một người dùng cụ thể.</p>
+            <p class="admin-page-description">Playlist thuộc Thể loại/Chủ đề và là nơi quản lý danh sách bài hát.</p>
         </div>
     </div>
 

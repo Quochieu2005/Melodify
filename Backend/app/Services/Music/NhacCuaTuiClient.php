@@ -70,7 +70,128 @@ class NhacCuaTuiClient
             throw new RuntimeException('NhacCuaTui trả về dữ liệu bài hát không hợp lệ.');
         }
 
-        return $this->normalizeTrack($data, $songId);
+        $track = $this->normalizeTrack($data, $songId);
+        $artistId = trim((string) ($track['artistId'] ?? ''));
+
+        if (blank($track['countryCode']) && $artistId !== '') {
+            try {
+                $artist = $this->getArtist($artistId);
+                $track['countryCode'] = $this->countryCode($artist);
+            } catch (RuntimeException) {
+                // Country remains empty so the admin can enter it manually.
+            }
+        }
+
+        return $track;
+    }
+
+    public function searchVideos(string $query, int $limit = 10): array
+    {
+        $query = trim($query);
+        if ($query === '') {
+            throw new RuntimeException('Hãy nhập tên video hoặc nghệ sĩ cần tìm.');
+        }
+
+        $size = min(max($limit, 1), 30);
+        $response = $this->request()->get(
+            config('services.nhaccuatui.graph_base_url').'/api/v1/search/video',
+            [
+                'keyword' => $query,
+                'pageindex' => 1,
+                'pagesize' => $size,
+                'correct' => 'false',
+            ],
+        );
+        $payload = $response->json();
+
+        if ($response->failed() || (string) data_get($payload, 'code') !== '0') {
+            throw new RuntimeException((string) data_get($payload, 'msg', 'NhacCuaTui không thể tìm video.'));
+        }
+
+        $items = [];
+        foreach ((array) data_get($payload, 'data.videos', []) as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $video = $this->normalizeVideo($item);
+            $id = (string) ($video['videoId'] ?? '');
+            if ($id !== '') {
+                $items[$id] = $video;
+            }
+        }
+
+        return ['results' => array_slice(array_values($items), 0, $limit)];
+    }
+
+    public function getVideo(string $videoId): array
+    {
+        $videoId = trim($videoId);
+        if ($videoId === '' || ! preg_match('/^[A-Za-z0-9]+$/', $videoId)) {
+            throw new RuntimeException('Mã video NhacCuaTui không hợp lệ.');
+        }
+
+        $response = $this->request()->get(
+            config('services.nhaccuatui.graph_base_url').'/api/v1/video/detail/'.$videoId,
+        );
+        $payload = $response->json();
+        if ($response->failed() || (string) data_get($payload, 'code') !== '0') {
+            throw new RuntimeException((string) data_get($payload, 'msg', 'Không tìm thấy video trên NhacCuaTui.'));
+        }
+
+        $data = data_get($payload, 'data');
+        if (! is_array($data)) {
+            throw new RuntimeException('NhacCuaTui trả về dữ liệu video không hợp lệ.');
+        }
+
+        $video = $this->normalizeVideo($data, $videoId);
+        $video['artists'] = collect($video['artists'] ?? [])
+            ->map(function (array $artist): array {
+                if (blank($artist['id'] ?? null)) {
+                    return $artist;
+                }
+
+                try {
+                    $details = $this->getArtist((string) $artist['id']);
+                    $artist['image_url'] ??= $this->firstUrl([$details['image'] ?? null, $details['avatar'] ?? null]);
+                    $artist['country_code'] = $this->countryCode($details);
+                    $artist['country'] = filled($artist['country_code'])
+                        ? config('music.countries.'.$artist['country_code'], $artist['country_code'])
+                        : null;
+                } catch (RuntimeException) {
+                    // Keep the video response usable when one artist profile is unavailable.
+                }
+
+                return $artist;
+            })
+            ->values()
+            ->all();
+        $video['artistName'] = $video['artists'] !== []
+            ? implode(', ', array_column($video['artists'], 'name'))
+            : $video['artistName'];
+
+        return $video;
+    }
+
+    public function getArtist(string $artistId): array
+    {
+        $artistId = trim($artistId);
+        if ($artistId === '' || ! preg_match('/^[A-Za-z0-9]+$/', $artistId)) {
+            throw new RuntimeException('Mã nghệ sĩ NhacCuaTui không hợp lệ.');
+        }
+
+        $response = $this->request()->get(config('services.nhaccuatui.graph_base_url').'/api/v1/artist/detail/'.$artistId);
+        $payload = $response->json();
+        if ($response->failed() || (string) data_get($payload, 'code') !== '0') {
+            throw new RuntimeException((string) data_get($payload, 'msg', 'Không tìm thấy nghệ sĩ trên NhacCuaTui.'));
+        }
+
+        $data = data_get($payload, 'data');
+        if (! is_array($data)) {
+            throw new RuntimeException('NhacCuaTui trả về dữ liệu nghệ sĩ không hợp lệ.');
+        }
+
+        return $data;
     }
 
     public function getLyrics(string $songId, ?array $track = null): ?array
@@ -112,11 +233,11 @@ class NhacCuaTuiClient
      * The returned response is streamed by the application so browsers do not
      * request the signed NCT URL directly with a localhost Referer.
      */
-    public function stream(string $url, ?string $range = null)
+    public function stream(string $url, ?string $range = null, string $accept = 'audio/mpeg,audio/*;q=0.9,*/*;q=0.8')
     {
         $request = $this->request()
             ->withOptions(['stream' => true])
-            ->withHeaders(['Accept' => 'audio/mpeg,audio/*;q=0.9,*/*;q=0.8']);
+            ->withHeaders(['Accept' => $accept]);
 
         if (filled($range)) {
             $request = $request->withHeaders(['Range' => $range]);
@@ -141,21 +262,63 @@ class NhacCuaTuiClient
         $album = $item['album'] ?? [];
         $album = is_array($album) ? $album : [];
         $duration = $item['duration'] ?? $item['SongDuration'] ?? null;
-        $artistName = $item['artistName'] ?? data_get($item, 'artist.name') ?? $item[3] ?? 'Nghệ sĩ chưa xác định';
-        $artistId = $item['artistId'] ?? data_get($item, 'artist.key') ?? '';
+        $artistItems = $item['artist'] ?? [];
+        if (is_array($artistItems) && isset($artistItems['name'])) {
+            $artistItems = [$artistItems];
+        }
+
+        $artists = collect(is_array($artistItems) ? $artistItems : [])
+            ->filter(fn ($artist): bool => is_array($artist))
+            ->map(function (array $artist): array {
+                return [
+                    'id' => trim((string) ($artist['key'] ?? $artist['artistId'] ?? $artist['id'] ?? '')),
+                    'name' => trim((string) ($artist['name'] ?? $artist['artistName'] ?? '')),
+                    'image_url' => $this->firstUrl([
+                        $artist['image'] ?? null,
+                        $artist['artistImage'] ?? null,
+                        $artist['avatar'] ?? null,
+                    ]),
+                ];
+            })
+            ->filter(fn (array $artist): bool => $artist['name'] !== '')
+            ->values()
+            ->all();
+
+        if ($artists === []) {
+            $fallbackArtistName = trim((string) ($item['artistName'] ?? data_get($item, 'artist.name') ?? $item[3] ?? ''));
+            if ($fallbackArtistName !== '') {
+                $artists[] = [
+                    'id' => trim((string) ($item['artistId'] ?? data_get($item, 'artist.key') ?? '')),
+                    'name' => $fallbackArtistName,
+                    'image_url' => $this->firstUrl([
+                        $item['artistImage'] ?? null,
+                        data_get($item, 'artist.image'),
+                    ]),
+                ];
+            }
+        }
+
+        $artistName = $item['artistName'] ?? data_get($item, 'artist.name') ?? $item[3] ?? '';
+        if ($artists !== []) {
+            $artistName = implode(', ', array_column($artists, 'name'));
+        }
+        $artistId = $artists[0]['id'] ?? ($item['artistId'] ?? data_get($item, 'artist.key') ?? '');
+        $artistImageUrl = $artists[0]['image_url'] ?? $item['artistImage'] ?? data_get($item, 'artist.image');
         $songId = $item['key'] ?? $item['SongID'] ?? $fallbackId ?? '';
 
         return [
             'trackId' => (string) $songId,
             'trackName' => trim((string) ($item['name'] ?? $item['SongName'] ?? $item[2] ?? 'Bài hát')),
             'artistId' => (string) $artistId,
-            'artistName' => trim((string) $artistName),
-            'artistImageUrl' => $item['artistImage'] ?? data_get($item, 'artist.image'),
+            'artistName' => trim((string) $artistName) ?: 'Nghệ sĩ chưa xác định',
+            'artistImageUrl' => $artistImageUrl,
+            'artists' => $artists,
             'collectionId' => (string) ($album['key'] ?? $item['collectionId'] ?? ''),
             'collectionName' => trim((string) ($album['name'] ?? $item['collectionName'] ?? $item['AlbumName'] ?? '')) ?: null,
             'releaseDate' => $this->releaseDate($item['dateRelease'] ?? $item['releaseDate'] ?? null),
             'trackTimeMillis' => $this->durationMilliseconds($duration),
             'primaryGenreName' => $item['genreName'] ?? $item['primaryGenreName'] ?? null,
+            'countryCode' => $this->countryCode($item),
             'trackExplicitness' => ($item['explicit'] ?? false) ? 'explicit' : 'notExplicit',
             'artworkUrl100' => $this->firstUrl([
                 $item['image'] ?? null,
@@ -170,6 +333,78 @@ class NhacCuaTuiClient
             'streamUrl' => $this->streamUrl($item['streamURL'] ?? $item['streamUrl'] ?? $item[7] ?? null),
             'downloadUrl' => $this->downloadUrl($item['streamURL'] ?? $item['streamUrl'] ?? null),
             'previewUrl' => null,
+            'source' => 'nhaccuatui',
+        ];
+    }
+
+    private function normalizeVideo(array $item, ?string $fallbackId = null): array
+    {
+        $artistItems = $item['artists'] ?? $item['artist'] ?? [];
+        if (is_array($artistItems) && isset($artistItems['name'])) {
+            $artistItems = [$artistItems];
+        }
+
+        $artists = collect(is_array($artistItems) ? $artistItems : [])
+            ->filter(fn ($artist): bool => is_array($artist))
+            ->map(function (array $artist): array {
+                return [
+                    'id' => trim((string) ($artist['key'] ?? $artist['artistId'] ?? $artist['id'] ?? '')),
+                    'name' => trim((string) ($artist['name'] ?? $artist['artistName'] ?? '')),
+                    'image_url' => $this->firstUrl([
+                        $artist['image'] ?? null,
+                        $artist['artistImage'] ?? null,
+                        $artist['avatar'] ?? null,
+                    ]),
+                ];
+            })
+            ->filter(fn (array $artist): bool => $artist['name'] !== '')
+            ->values()
+            ->all();
+
+        if ($artists === []) {
+            $artistName = trim((string) ($item['artistName'] ?? data_get($item, 'artist.name') ?? ''));
+            if ($artistName !== '') {
+                $artists[] = [
+                    'id' => trim((string) ($item['artistId'] ?? data_get($item, 'artist.key') ?? '')),
+                    'name' => $artistName,
+                    'image_url' => $this->firstUrl([
+                        $item['artistImage'] ?? null,
+                        data_get($item, 'artist.image'),
+                    ]),
+                ];
+            }
+        }
+
+        $videoId = (string) ($item['key'] ?? $item['videoId'] ?? $fallbackId ?? '');
+        $streams = $item['streamURL'] ?? $item['streamUrl'] ?? null;
+        $durationSeconds = null;
+        if (isset($item['duration']) && is_numeric($item['duration'])) {
+            $durationSeconds = (int) round((float) $item['duration']);
+        } elseif (isset($item['durationMillis']) && is_numeric($item['durationMillis'])) {
+            $durationSeconds = (int) round(((float) $item['durationMillis']) / 1000);
+        }
+
+        return [
+            'videoId' => $videoId,
+            'videoName' => trim((string) ($item['name'] ?? $item['videoName'] ?? 'Video nhạc')),
+            'artistId' => (string) ($artists[0]['id'] ?? $item['artistId'] ?? ''),
+            'artistName' => $artists !== []
+                ? implode(', ', array_column($artists, 'name'))
+                : 'Nghệ sĩ chưa xác định',
+            'artists' => $artists,
+            'artworkUrl' => $this->firstUrl([
+                $item['image'] ?? null,
+                $item['thumbnail'] ?? null,
+                $item['thumbnailUrl'] ?? null,
+            ]),
+            'durationSeconds' => $durationSeconds,
+            'videoUrl' => $this->streamUrl($streams),
+            'downloadUrl' => $this->downloadUrl($streams),
+            'videoViewUrl' => $this->firstUrl([
+                $item['linkShare'] ?? null,
+                $item['link'] ?? null,
+                $videoId !== '' ? 'https://www.nhaccuatui.com/video/'.$videoId : null,
+            ]),
             'source' => 'nhaccuatui',
         ];
     }
@@ -228,6 +463,55 @@ class NhacCuaTuiClient
         foreach ($values as $value) {
             if (is_string($value) && preg_match('#^https?://#i', $value)) {
                 return $value;
+            }
+        }
+
+        return null;
+    }
+
+    private function countryCode(array $item): ?string
+    {
+        $rawCountry = $item['countryCode']
+            ?? $item['country_code']
+            ?? data_get($item, 'country.code')
+            ?? data_get($item, 'country.name')
+            ?? $item['national']
+            ?? $item['nationality']
+            ?? $item['countryName']
+            ?? $item['country_name']
+            ?? $item['country']
+            ?? '';
+        $candidate = strtoupper(trim((string) (
+            is_scalar($rawCountry) ? $rawCountry : ''
+        )));
+
+        $aliases = [
+            'VNM' => 'VN', 'VIETNAM' => 'VN',
+            'KOR' => 'KR', 'SOUTH KOREA' => 'KR', 'KOREA' => 'KR',
+            'CHN' => 'CN', 'CHINA' => 'CN',
+            'JPN' => 'JP', 'JAPAN' => 'JP',
+            'USA' => 'US', 'UNITED STATES' => 'US', 'UNITED STATES OF AMERICA' => 'US',
+            'GBR' => 'GB', 'UNITED KINGDOM' => 'GB', 'ENGLAND' => 'GB',
+            'FRA' => 'FR', 'FRANCE' => 'FR',
+            'DEU' => 'DE', 'GERMANY' => 'DE',
+            'ESP' => 'ES', 'SPAIN' => 'ES',
+            'ITA' => 'IT', 'ITALY' => 'IT',
+            'THA' => 'TH', 'THAILAND' => 'TH',
+            'IDN' => 'ID', 'INDONESIA' => 'ID',
+            'PHL' => 'PH', 'PHILIPPINES' => 'PH',
+            'AUS' => 'AU', 'AUSTRALIA' => 'AU',
+            'CAN' => 'CA', 'CANADA' => 'CA',
+        ];
+
+        $candidate = $aliases[$candidate] ?? $candidate;
+
+        if (array_key_exists($candidate, config('music.countries', []))) {
+            return $candidate;
+        }
+
+        foreach (config('music.countries', []) as $code => $label) {
+            if (mb_strtolower($candidate) === mb_strtolower((string) $label)) {
+                return (string) $code;
             }
         }
 

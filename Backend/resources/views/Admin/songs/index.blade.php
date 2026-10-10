@@ -53,6 +53,7 @@
                         <th>Ảnh</th>
                         <th>Tên bài hát</th>
                         <th>Nghệ sĩ</th>
+                        <th>Quốc gia</th>
                         <th>Album</th>
                         <th>Thể loại</th>
                         <th>Chủ đề</th>
@@ -84,6 +85,7 @@
                                 @if(filled($song->slug))<small class="admin-table-subtext">{{ $song->slug }}</small>@endif
                             </td>
                             <td>{{ $row['artist'] ?: '—' }}</td>
+                            <td>{{ $song->country_code ? config('music.countries.'.$song->country_code, $song->country_code) : '—' }}</td>
                             <td>{{ $row['album'] ?: '—' }}</td>
                             <td>{{ $row['genre'] ?: '—' }}</td>
                             <td>{{ $row['topic'] ?: '—' }}</td>
@@ -110,7 +112,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ 12 + ($canDelete ? 1 : 0) }}" class="admin-empty-state">
+                            <td colspan="{{ 13 + ($canDelete ? 1 : 0) }}" class="admin-empty-state">
                                 <strong>Chưa có bài hát</strong>
                                 <span>{{ $search !== '' ? 'Không tìm thấy bài hát phù hợp.' : 'Tạo hoặc nhập bài hát đầu tiên để bắt đầu quản lý.' }}</span>
                                 @if($canCreate)<a href="{{ route('admin.songs.create') }}" class="ant-btn">Thêm bài hát</a>@endif

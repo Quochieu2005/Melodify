@@ -46,7 +46,27 @@ class CloudinaryService
         return $this->uploadMediaContents($contents, $filename, 'video', $folder, $publicId);
     }
 
+    public function uploadVideo(UploadedFile $file, ?string $folder = null, ?string $publicId = null): array
+    {
+        return $this->uploadVideoContents(
+            $file->get(),
+            $file->getClientOriginalName(),
+            $folder,
+            $publicId,
+        );
+    }
+
+    public function uploadVideoContents(string $contents, string $filename, ?string $folder = null, ?string $publicId = null): array
+    {
+        return $this->uploadMediaContents($contents, $filename, 'video', $folder, $publicId);
+    }
+
     public function deleteAudio(?string $publicId): void
+    {
+        $this->deleteAsset($publicId, 'video');
+    }
+
+    public function deleteVideo(?string $publicId): void
     {
         $this->deleteAsset($publicId, 'video');
     }
