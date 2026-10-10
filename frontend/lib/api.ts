@@ -14,6 +14,7 @@ export type Song = {
   slug: string | null;
   duration_seconds: number | null;
   artist: { id: string | null; name: string } | null;
+  artists?: SongArtistCredit[];
   album?: { id: string; title: string } | null;
   genre?: { id: string; name: string } | null;
   topics?: { id: string; name: string; type: string | null }[];
@@ -60,6 +61,29 @@ export type Artist = {
   status: string;
 };
 
+export type SongArtistCredit = {
+  id: string | null;
+  name: string;
+  slug?: string | null;
+  avatar_url?: string | null;
+};
+
+export type AlbumRecord = {
+  id: string;
+  title: string;
+  slug: string | null;
+  artist_id: string | null;
+  artist: Artist | null;
+  release_date: string | null;
+  cover_url: string | null;
+  status: string;
+  song_count: number;
+};
+
+export type AlbumDetail = AlbumRecord & {
+  songs: Song[];
+};
+
 export type Banner = {
   id: string;
   title: string;
@@ -68,6 +92,30 @@ export type Banner = {
   link_url: string | null;
   sort_order: number;
   status: string;
+};
+
+export type TopicRecord = {
+  id: string;
+  name: string;
+  slug: string | null;
+  type: string | null;
+  type_custom?: string | null;
+  description: string | null;
+  image_url: string | null;
+  sort_order: number;
+  status: string;
+  song_count: number;
+};
+
+export type GenreRecord = {
+  id: string;
+  name: string;
+  slug: string | null;
+  description: string | null;
+  image_url: string | null;
+  sort_order: number;
+  status: string;
+  song_count: number;
 };
 
 type PaginatedResponse<T> = {
@@ -86,10 +134,137 @@ export class ApiError extends Error {
   }
 }
 
+export type AuthUser = {
+  id: string;
+  name: string;
+  username: string | null;
+  email: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  is_premium: number;
+  status: string;
+  created_at: string | null;
+  google_connected: boolean;
+  facebook_connected: boolean;
+  last_login_at: string | null;
+  last_login_method: string | null;
+};
+
+export type AuthResponse = {
+  message: string;
+  token: string;
+  token_type: 'Bearer' | string;
+  expires_at: string;
+  remembered?: boolean;
+  user: AuthUser;
+};
+
+export type QrLoginStartResponse = {
+  session_id: string;
+  qr_payload: string;
+  poll_token: string;
+  status: 'pending' | 'approved' | 'completed' | 'expired';
+  expires_at: string;
+  poll_interval_seconds: number;
+};
+
+export type QrLoginStatusResponse = {
+  message?: string;
+  status: 'pending' | 'approved' | 'completed' | 'expired';
+  token?: string;
+  token_type?: string;
+  expires_at?: string;
+  remembered?: boolean;
+  user?: AuthUser;
+};
+
+export type SocialProvider = 'google' | 'facebook';
+
+export const AUTH_TOKEN_STORAGE_KEY = 'melodify_access_token';
+export const AUTH_USER_STORAGE_KEY = 'melodify_auth_user';
+
+export function saveAuthSession(auth: AuthResponse): void {
+  if (typeof window === 'undefined') return;
+
+  window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, auth.token);
+  window.localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(auth.user));
+  window.dispatchEvent(new Event('melodify-auth-changed'));
+}
+
+export function clearAuthSession(): void {
+  if (typeof window === 'undefined') return;
+
+  window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+  window.dispatchEvent(new Event('melodify-auth-changed'));
+}
+
+function jsonRequest(body: unknown): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  };
+}
+
+export function loginWithPassword(identifier: string, password: string, remember: boolean) {
+  return apiFetch<AuthResponse>('/v1/auth/login', jsonRequest({
+    identifier,
+    password,
+    remember,
+    device_name: 'melodify-web',
+  }));
+}
+
+export function requestPhoneOtp(phone: string) {
+  return apiFetch<{ message: string; data: { phone: string; expires_at: string; resend_after_seconds: number } }>(
+    '/v1/auth/phone/request-otp',
+    jsonRequest({ phone }),
+  );
+}
+
+export function loginWithPhone(phone: string, code: string, remember: boolean) {
+  return apiFetch<AuthResponse>('/v1/auth/phone/verify', jsonRequest({
+    phone,
+    code,
+    remember,
+    device_name: 'melodify-web',
+  }));
+}
+
+export function loginWithSocial(provider: SocialProvider, accessToken: string, remember: boolean) {
+  return apiFetch<AuthResponse>('/v1/auth/social', jsonRequest({
+    provider,
+    access_token: accessToken,
+    remember,
+    device_name: 'melodify-web',
+  }));
+}
+
+export function startQrLogin(remember: boolean) {
+  return apiFetch<QrLoginStartResponse>('/v1/auth/qr/start', jsonRequest({
+    remember,
+    device_name: 'melodify-web',
+  }));
+}
+
+export function getQrLoginStatus(sessionId: string, pollToken: string) {
+  return apiFetch<QrLoginStatusResponse>(
+    `/v1/auth/qr/${encodeURIComponent(sessionId)}/status?poll_token=${encodeURIComponent(pollToken)}`,
+  );
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const storedToken = typeof window !== 'undefined'
+    ? window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+    : null;
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
-    headers: { Accept: "application/json", ...init?.headers },
+    headers: {
+      Accept: "application/json",
+      ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
+      ...init?.headers,
+    },
   });
 
   if (!response.ok) {
@@ -192,6 +367,26 @@ export async function listBanners(options: { query?: string; perPage?: number; d
   return apiFetch<PaginatedResponse<Banner>>(`/v1/banners${query ? `?${query}` : ''}`);
 }
 
+export async function listTopics(options: { query?: string; perPage?: number } = {}) {
+  const params = new URLSearchParams();
+
+  if (options.query?.trim()) params.set('q', options.query.trim());
+  params.set('per_page', String(options.perPage ?? 50));
+
+  const query = params.toString();
+  return apiFetch<PaginatedResponse<TopicRecord>>(`/v1/topics${query ? `?${query}` : ''}`);
+}
+
+export async function listGenres(options: { query?: string; perPage?: number } = {}) {
+  const params = new URLSearchParams();
+
+  if (options.query?.trim()) params.set('q', options.query.trim());
+  params.set('per_page', String(options.perPage ?? 50));
+
+  const query = params.toString();
+  return apiFetch<PaginatedResponse<GenreRecord>>(`/v1/genres${query ? `?${query}` : ''}`);
+}
+
 export async function listPlaylists(options: { query?: string; type?: string; perPage?: number } = {}) {
   const params = new URLSearchParams();
 
@@ -201,6 +396,21 @@ export async function listPlaylists(options: { query?: string; type?: string; pe
 
   const query = params.toString();
   return apiFetch<PaginatedResponse<Playlist>>(`/v1/playlists${query ? `?${query}` : ''}`);
+}
+
+export async function listAlbums(options: { query?: string; page?: number; perPage?: number } = {}) {
+  const params = new URLSearchParams();
+
+  if (options.query?.trim()) params.set('q', options.query.trim());
+  if (options.page) params.set('page', String(options.page));
+  if (options.perPage) params.set('per_page', String(options.perPage));
+
+  const query = params.toString();
+  return apiFetch<PaginatedResponse<AlbumRecord>>(`/v1/albums${query ? `?${query}` : ''}`);
+}
+
+export async function getAlbum(slug: string) {
+  return apiFetch<{ data: AlbumDetail }>(`/v1/albums/${encodeURIComponent(slug)}`);
 }
 
 export async function getPlaylist(playlistId: string) {

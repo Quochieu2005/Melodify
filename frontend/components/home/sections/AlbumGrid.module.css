@@ -1,0 +1,21 @@
+.homeGrid,
+.galleryGrid {
+  display: grid;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.homeGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 240px));
+}
+
+.galleryGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 205px), 205px));
+}
+
+@media (max-width: 640px) {
+  .homeGrid,
+  .galleryGrid {
+    gap: 16px;
+  }
+}
