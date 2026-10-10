@@ -35,7 +35,7 @@ class SongController extends CrudResourceController
 
     protected string $viewDirectory = 'Admin.songs';
 
-    protected array $columns = ['title' => 'Tên bài hát', 'release_date' => 'Ngày phát hành', 'duration_seconds' => 'Thời lượng', 'status' => 'Trạng thái'];
+    protected array $columns = ['title' => 'Tên bài hát', 'release_date' => 'Ngày phát hành', 'duration_seconds' => 'Thời lượng', 'is_featured' => 'Nổi bật', 'status' => 'Trạng thái'];
 
     protected array $fields = [
         'title' => ['label' => 'Tên bài hát', 'required' => true],
@@ -44,6 +44,7 @@ class SongController extends CrudResourceController
         'release_date' => ['label' => 'Ngày phát hành', 'type' => 'date'],
         'duration_seconds' => ['label' => 'Thời lượng (giây)', 'type' => 'number'],
         'explicit' => ['label' => 'Nội dung nhạy cảm', 'type' => 'checkbox'],
+        'is_featured' => ['label' => 'Bài hát nổi bật', 'type' => 'checkbox'],
         'status' => ['label' => 'Trạng thái', 'type' => 'select', 'required' => true, 'options' => ['draft' => 'Bản nháp', 'published' => 'Đã phát hành', 'blocked' => 'Đã chặn']],
     ];
 
@@ -253,6 +254,7 @@ class SongController extends CrudResourceController
     {
         $data = parent::normalize($data, $ignoreId);
         unset($data['topic_ids'], $data['topic_id'], $data['artist_id'], $data['genre_id'], $data['playlist_id'], $data['plain_lyrics'], $data['synced_lyrics']);
+        $data['is_featured'] = (int) ($data['is_featured'] ?? 0);
 
         if (request()->routeIs('admin.songs.store')) {
             $data['created_by_admin_id'] = (string) auth('admin')->id();

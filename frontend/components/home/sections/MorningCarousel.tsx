@@ -65,7 +65,7 @@ export default function MorningCarousel() {
 
         <div className="grid gap-3 md:grid-cols-2 md:gap-4">
           {banners.map((banner) => (
-            <article key={banner.title} className="group relative h-[148px] overflow-hidden rounded-[10px] bg-[#25403c] shadow-sm">
+            <article key={banner.title} className="banner-clip group relative aspect-[5/1] bg-[#25403c] shadow-sm">
               <div className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-[1.03]" style={{ backgroundImage: `url(${banner.image})`, backgroundPosition: banner.position }} />
               <div className="absolute inset-0 bg-gradient-to-r from-black/45 via-black/5 to-black/10" />
               <div className="relative flex h-full max-w-[72%] flex-col justify-end p-5 text-white">

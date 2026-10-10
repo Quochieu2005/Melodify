@@ -1,48 +1,28 @@
 'use client';
 
 import { Lexend } from 'next/font/google';
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type TransitionEvent as ReactTransitionEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type TransitionEvent as ReactTransitionEvent } from 'react';
+import { listBanners, type Banner as ApiBanner } from '@/lib/api';
 
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const dragThreshold = 48;
 
 type Banner = {
+  id: string;
   title: string;
-  subtitle: string;
   image: string;
-  position?: string;
+  subtitle?: string;
+  linkUrl?: string | null;
 };
 
-const bannerSets: Banner[][] = [
-  [
-    {
-      title: 'Thót Một Lần Yêu Thương',
-      subtitle: 'Giai điệu cho một buổi sáng dịu dàng',
-      image: 'https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=1400&q=85',
-      position: 'center 42%',
-    },
-    {
-      title: 'Nhạc Mới Thịnh Hành',
-      subtitle: 'Những bản nhạc đang được yêu thích',
-      image: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=1400&q=85',
-      position: 'center 35%',
-    },
-  ],
-  [
-    {
-      title: 'Chạm Vào Giai Điệu',
-      subtitle: 'Playlist dành riêng cho bạn',
-      image: 'https://images.unsplash.com/photo-1524368535928-5b5e00ddc76b?auto=format&fit=crop&w=1400&q=85',
-    },
-    {
-      title: 'V-Pop Hôm Nay',
-      subtitle: 'Khám phá những ca khúc mới',
-      image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=1400&q=85',
-    },
-  ],
-];
-
-const mobileBannerSets: Banner[][] = bannerSets.flat().map((banner) => [banner]);
+function mapApiBanner(banner: ApiBanner): Banner {
+  return {
+    id: banner.id,
+    title: banner.title,
+    image: banner.image_url ?? '',
+    linkUrl: banner.link_url,
+  };
+}
 
 function getVietnamGreeting() {
   const hour = Number(
@@ -85,23 +65,31 @@ function BannerArrowSymbols() {
   );
 }
 
-function BannerCarouselView({ slides, className, twoColumns }: { slides: Banner[][]; className: string; twoColumns: boolean }) {
-  const [slidePosition, setSlidePosition] = useState(1);
+function BannerCarouselView({ banners, className, twoColumns }: { banners: Banner[]; className: string; twoColumns: boolean }) {
+  const [slidePosition, setSlidePosition] = useState(0);
   const [dragOffset, setDragOffset] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [transitionEnabled, setTransitionEnabled] = useState(true);
   const dragStartX = useRef<number | null>(null);
-  const loopedSlides = [slides[slides.length - 1], ...slides, slides[0]];
 
-  const activeSet = (slidePosition - 1 + slides.length) % slides.length;
+  const activeSet = slidePosition;
+  const visibleCount = twoColumns ? 2 : 1;
+  const lastPosition = Math.max(banners.length - visibleCount, 0);
   const canGoPrevious = activeSet > 0 && !isAnimating;
-  const canGoNext = activeSet < slides.length - 1 && !isAnimating;
+  const canGoNext = activeSet < lastPosition && !isAnimating;
 
   function goToSlide(position: number) {
+    const nextPosition = Math.min(Math.max(position, 0), lastPosition);
     setDragOffset(0);
     setTransitionEnabled(true);
+
+    if (nextPosition === slidePosition) {
+      setIsAnimating(false);
+      return;
+    }
+
     setIsAnimating(true);
-    setSlidePosition(position);
+    setSlidePosition(nextPosition);
   }
 
   function moveByButton(direction: 'previous' | 'next') {
@@ -132,7 +120,11 @@ function BannerCarouselView({ slides, className, twoColumns }: { slides: Banner[
       return;
     }
 
-    setDragOffset(event.clientX - dragStartX.current);
+    const distance = event.clientX - dragStartX.current;
+    const draggingBeyondStart = slidePosition === 0 && distance > 0;
+    const draggingBeyondEnd = slidePosition === lastPosition && distance < 0;
+
+    setDragOffset(draggingBeyondStart || draggingBeyondEnd ? 0 : distance);
   }
 
   function releasePointer(event: ReactPointerEvent<HTMLDivElement>) {
@@ -150,7 +142,7 @@ function BannerCarouselView({ slides, className, twoColumns }: { slides: Banner[
     dragStartX.current = null;
     releasePointer(event);
 
-    if (Math.abs(distance) >= dragThreshold) {
+    if (Math.abs(distance) >= dragThreshold && ((distance < 0 && canGoNext) || (distance > 0 && canGoPrevious))) {
       goToSlide(slidePosition + (distance < 0 ? 1 : -1));
       return;
     }
@@ -169,18 +161,6 @@ function BannerCarouselView({ slides, className, twoColumns }: { slides: Banner[
   function handleTransitionEnd(event: ReactTransitionEvent<HTMLDivElement>) {
     if (event.propertyName !== 'transform') {
       return;
-    }
-
-    if (slidePosition === 0) {
-      setTransitionEnabled(false);
-      setSlidePosition(slides.length);
-      requestAnimationFrame(() => setTransitionEnabled(true));
-    }
-
-    if (slidePosition === slides.length + 1) {
-      setTransitionEnabled(false);
-      setSlidePosition(1);
-      requestAnimationFrame(() => setTransitionEnabled(true));
     }
 
     setIsAnimating(false);
@@ -208,28 +188,45 @@ function BannerCarouselView({ slides, className, twoColumns }: { slides: Banner[
           onPointerCancel={handlePointerCancel}
         >
           <div
-            className={`flex w-full select-none ${transitionEnabled ? 'transition-transform duration-300 ease-out' : ''}`}
+            className={`flex w-full select-none ${twoColumns ? 'gap-4' : 'gap-0'} ${transitionEnabled ? 'transition-transform duration-300 ease-out' : ''}`}
             style={{
-              transform: `translate3d(calc(-${slidePosition * 100}% + ${dragOffset}px), 0, 0)`,
+              '--banner-step': twoColumns ? 'calc(50% + 0.5rem)' : '100%',
+              transform: `translate3d(calc(-${slidePosition} * var(--banner-step) + ${dragOffset}px), 0, 0)`,
               willChange: 'transform',
-            }}
+            } as CSSProperties}
             onTransitionEnd={handleTransitionEnd}
           >
-            {loopedSlides.map((banners, setIndex) => (
-              <div key={`banner-set-${setIndex}`} className="w-full shrink-0">
-                <div className={twoColumns ? 'grid w-full grid-cols-2 gap-4' : 'grid w-full'}>
-                  {banners.map((banner) => (
-                    <article key={banner.title} className={'group relative h-[157px] w-full overflow-hidden rounded-[10px] bg-[#25403c] shadow-sm' + (twoColumns ? ' max-w-[785px]' : '')}>
-                      <div className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-[1.03]" style={{ backgroundImage: `url(${banner.image})`, backgroundPosition: banner.position }} />
-                      <div className="absolute inset-0 bg-gradient-to-r from-black/45 via-black/5 to-black/10" />
-                      <div className="relative flex h-full max-w-[85%] flex-col justify-center px-4 text-white sm:max-w-[78%] sm:px-6">
-                        <p className="text-lg font-bold leading-tight drop-shadow-sm sm:text-xl">{banner.title}</p>
-                        <p className="mt-1 text-xs text-white/85">{banner.subtitle}</p>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </div>
+            {banners.map((banner) => (
+              <article
+                key={banner.id}
+                style={{
+                  flex: twoColumns ? '0 0 calc((100% - 1rem) / 2)' : '0 0 100%',
+                  aspectRatio: '5 / 1',
+                  borderRadius: '16px',
+                  overflow: 'hidden',
+                  clipPath: 'inset(0 round 16px)',
+                }}
+                className="banner-clip group relative min-h-0 shrink-0 bg-transparent"
+              >
+                {banner.image ? (
+                  <div
+                  className="banner-clip absolute inset-0 isolate"
+                    style={{
+                      borderRadius: '16px',
+                      overflow: 'hidden',
+                      clipPath: 'inset(0 round 16px)',
+                      WebkitMaskImage: '-webkit-radial-gradient(white, black)',
+                    }}
+                  >
+                    <img
+                      src={banner.image}
+                      alt=""
+                      draggable={false}
+                      className="banner-clip-image pointer-events-none h-full w-full select-none object-contain"
+                    />
+                  </div>
+                ) : null}
+              </article>
             ))}
           </div>
         </div>
@@ -250,6 +247,8 @@ function BannerCarouselView({ slides, className, twoColumns }: { slides: Banner[
 
 export default function MorningBannerCarousel() {
   const [greeting, setGreeting] = useState(getVietnamGreeting);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const greetingTimer = window.setInterval(() => {
@@ -259,6 +258,33 @@ export default function MorningBannerCarousel() {
     return () => window.clearInterval(greetingTimer);
   }, []);
 
+  useEffect(() => {
+    let isCurrent = true;
+
+    listBanners({ daily: true, limit: 5 })
+      .then((response) => {
+        const uniqueBanners = Array.from(
+          new Map(
+            response.data
+              .filter((banner) => banner.image_url)
+              .map((banner) => [banner.image_url, banner]),
+          ).values(),
+        ).slice(0, 5);
+
+        if (isCurrent) setBanners(uniqueBanners.map(mapApiBanner));
+      })
+      .catch(() => {
+        if (isCurrent) setBanners([]);
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
   return (
     <section aria-label="Gợi ý nghe nhạc">
       <h1 className={lexend.className + ' text-[34px] font-bold leading-tight text-white'} style={{ color: '#ffffff', fontFamily: 'Lexend, sans-serif', fontSize: '34px', fontWeight: 700 }}>
@@ -266,8 +292,12 @@ export default function MorningBannerCarousel() {
       </h1>
 
       <BannerArrowSymbols />
-      <BannerCarouselView slides={mobileBannerSets} className="xl:hidden" twoColumns={false} />
-      <BannerCarouselView slides={bannerSets} className="hidden xl:block" twoColumns />
+      {!isLoading && banners.length > 0 ? (
+        <>
+          <BannerCarouselView banners={banners} className="xl:hidden" twoColumns={false} />
+          <BannerCarouselView banners={banners} className="hidden xl:block" twoColumns />
+        </>
+      ) : null}
     </section>
   );
 }

@@ -60,6 +60,16 @@ export type Artist = {
   status: string;
 };
 
+export type Banner = {
+  id: string;
+  title: string;
+  slug: string | null;
+  image_url: string | null;
+  link_url: string | null;
+  sort_order: number;
+  status: string;
+};
+
 type PaginatedResponse<T> = {
   data: T[];
   meta: {
@@ -168,6 +178,18 @@ export async function listPopularSongs(options: { query?: string; period?: 'all'
   return apiFetch<{ data: Song[]; meta: { total: number; period: string; source: string } }>(
     `/v1/songs/popular${query ? `?${query}` : ''}`,
   );
+}
+
+export async function listBanners(options: { query?: string; perPage?: number; daily?: boolean; limit?: number } = {}) {
+  const params = new URLSearchParams();
+
+  if (options.query?.trim()) params.set('q', options.query.trim());
+  if (options.perPage) params.set('per_page', String(options.perPage));
+  if (options.daily) params.set('daily', '1');
+  if (options.limit) params.set('limit', String(options.limit));
+
+  const query = params.toString();
+  return apiFetch<PaginatedResponse<Banner>>(`/v1/banners${query ? `?${query}` : ''}`);
 }
 
 export async function listPlaylists(options: { query?: string; type?: string; perPage?: number } = {}) {
