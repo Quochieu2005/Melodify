@@ -3,12 +3,10 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Models\Topic;
-use App\Models\Song;
-use App\Models\TopicSong;
+use App\Models\Playlist;
 use App\Rules\PlainText;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class TopicController extends MediaCatalogController
@@ -98,8 +96,8 @@ class TopicController extends MediaCatalogController
             'description' => ['nullable', 'string', 'max:2000', new PlainText()],
             'sort_order' => ['required', 'integer', 'min:0', 'max:9999'],
             'status' => ['required', 'in:active,inactive'],
-            'song_ids' => ['nullable', 'array', 'max:500'],
-            'song_ids.*' => ['required', 'string', 'max:64', 'distinct'],
+            'playlist_ids' => ['nullable', 'array', 'max:500'],
+            'playlist_ids.*' => ['required', 'string', 'max:64', 'distinct'],
             'image' => [$item === null ? 'required_without:image_asset_id' : 'nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=4000,max_height=4000'],
             'image_asset_id' => [$item === null ? 'required_without:image' : 'nullable', 'string', 'alpha_dash', 'max:64'],
         ];
@@ -108,27 +106,18 @@ class TopicController extends MediaCatalogController
     public function show(string $id): View
     {
         $item = Topic::query()->findOrFail($id);
-        $links = TopicSong::query()
-            ->where('topic_id', (string) $item->getKey())
-            ->orderBy('position')
+        $playlists = Playlist::query()
+            ->where('topic_ids', (string) $item->getKey())
+            ->orderBy('sort_order')
+            ->orderBy('name')
             ->paginate(20)
             ->withQueryString();
-        $songIds = $links->getCollection()->pluck('song_id')->map(fn ($id): string => (string) $id)->all();
-        $songMap = $songIds === []
-            ? collect()
-            : Song::query()->whereIn((new Song())->getKeyName(), $songIds)->get()->keyBy(fn (Song $song): string => (string) $song->getKey());
-        $songs = $links->setCollection(
-            $links->getCollection()
-                ->map(fn (TopicSong $link) => $songMap->get((string) $link->song_id))
-                ->filter()
-                ->values()
-        );
 
         return view('Admin.catalog.show', [
             'item' => $item,
             'resource' => $this->resource,
             'resourceTitle' => $this->title,
-            'songs' => $songs,
+            'playlists' => $playlists,
         ]);
     }
 
@@ -146,18 +135,16 @@ class TopicController extends MediaCatalogController
     protected function supplementalFormData(?object $item): array
     {
         return [
-            'songs' => Song::query()->orderBy('title')->limit(500)->get(),
-            'selectedSongIds' => $item === null
-                ? []
-                : TopicSong::query()->where('topic_id', (string) $item->getKey())->orderBy('position')->pluck('song_id')->map(fn ($id): string => (string) $id)->all(),
+            'playlists' => $this->availablePlaylists(),
+            'selectedPlaylistIds' => $this->selectedPlaylistIds($item, 'topic_ids'),
         ];
     }
 
     protected function preparePayload(Request $request, array $data, ?object $item): array
     {
-        $this->validateSongIds($data['song_ids'] ?? []);
+        $this->validatePlaylistIds($data['playlist_ids'] ?? []);
         $data = parent::preparePayload($request, $data, $item);
-        unset($data['song_ids']);
+        unset($data['playlist_ids']);
 
         return $data;
     }
@@ -165,16 +152,7 @@ class TopicController extends MediaCatalogController
     protected function afterPersist(object $item, array $data): void
     {
         $topicId = (string) $item->getKey();
-        TopicSong::query()->where('topic_id', $topicId)->delete();
-
-        foreach (array_values(array_unique(array_map('strval', $data['song_ids'] ?? []))) as $position => $songId) {
-            TopicSong::query()->create([
-                'topic_id' => $topicId,
-                'song_id' => $songId,
-                'position' => $position,
-                'added_by_admin_id' => (string) auth('admin')->id(),
-            ]);
-        }
+        $this->syncPlaylistRelation('topic_ids', $topicId, $data['playlist_ids'] ?? []);
     }
 
     protected function validationMessages(): array
@@ -185,17 +163,7 @@ class TopicController extends MediaCatalogController
             'type_custom.required_if' => 'Vui lòng nhập tên kiểu chủ đề.',
             'type_custom.min' => 'Tên kiểu chủ đề phải có ít nhất 1 ký tự.',
             'type_custom.max' => 'Tên kiểu chủ đề không được dài hơn 80 ký tự.',
+            'playlist_ids.*.distinct' => 'Một playlist không được chọn trùng.',
         ];
-    }
-
-    private function validateSongIds(array $songIds): void
-    {
-        foreach ($songIds as $songId) {
-            if (! Song::query()->find($songId)) {
-                throw ValidationException::withMessages([
-                    'song_ids' => 'Một bài hát đã chọn không còn tồn tại trong kho nhạc.',
-                ]);
-            }
-        }
     }
 }

@@ -27,13 +27,27 @@
             </div>
             <div data-nct-results aria-live="polite"></div>
         </div>
+    @elseif($item?->external_source === 'nhaccuatui' && filled($item?->external_id))
+        <div class="ant-card admin-resource-form" style="margin-bottom: 16px;">
+            <div class="admin-resource-form-heading">
+                <div><strong>Đồng bộ lại từ NhacCuaTui</strong><span>Lấy lại dữ liệu bài hát, toàn bộ nghệ sĩ và avatar đang thiếu hoặc bị lỗi.</span></div>
+                <span class="ant-tag ant-tag-blue">{{ $item->external_id }}</span>
+            </div>
+            <button type="button" class="ant-btn ant-btn-primary" data-nct-refresh>Lấy lại dữ liệu từ API</button>
+            <p class="admin-field-help" data-nct-refresh-message>Chưa có thay đổi nào được lấy từ API. Bấm nút rồi lưu để cập nhật vào database.</p>
+        </div>
     @endif
 
     <form method="POST" action="{{ $isEditing ? route('admin.songs.update', $item->getKey()) : route('admin.songs.store') }}" class="ant-card admin-resource-form" autocomplete="off">
         @csrf
         @if($isEditing) @method('PUT') @endif
-        @unless($isEditing)
+        @if($isEditing && $item?->external_source === 'nhaccuatui' && filled($item?->external_id))
+            <input id="song-external-id" type="hidden" name="external_id" value="{{ old('external_id', $item->external_id) }}">
+            <input id="song-sync-external" type="hidden" name="sync_external" value="{{ old('sync_external', '0') }}">
+        @elseif(! $isEditing)
             <input id="song-external-id" type="hidden" name="external_id" value="{{ old('external_id') }}">
+        @endif
+        @unless($isEditing)
             @error('external_id')<p class="admin-field-error">{{ $message }}</p>@enderror
         @endunless
         <div class="admin-resource-form-heading"><div><strong>Thông tin bài hát</strong><span>Các trường có dấu * là bắt buộc.</span></div><span class="ant-tag {{ $isEditing ? 'ant-tag-blue' : 'ant-tag-green' }}">{{ $isEditing ? 'Đang chỉnh sửa' : 'Tạo mới' }}</span></div>
@@ -42,6 +56,7 @@
             <div class="admin-form-group"><label class="admin-form-label" for="song-slug">Slug <span>*</span></label><div class="admin-slug-input-row"><input id="song-slug" name="slug" value="{{ old('slug', $item?->slug) }}" maxlength="180" pattern="[A-Za-z0-9_-]+" class="ant-input admin-form-input @error('slug') is-invalid @enderror" required><button type="button" class="ant-btn admin-slug-reset" data-slug-reset="song-slug">Theo tên</button></div><p class="admin-field-help">Tự tạo theo tên, hoặc tự sửa; slug không được trùng.</p>@error('slug')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
             <div class="admin-form-group"><label class="admin-form-label" for="song-cover-url">Ảnh bài hát</label><input id="song-cover-url" name="cover_url" type="url" value="{{ old('cover_url', $item?->cover_url) }}" maxlength="500" class="ant-input admin-form-input @error('cover_url') is-invalid @enderror" placeholder="https://..."><p class="admin-field-help">Ảnh lấy từ NhacCuaTui sẽ được điền vào form; có thể thay bằng URL ảnh khác trước khi lưu.</p>@error('cover_url')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
             <div class="admin-form-group"><label class="admin-form-label" for="song-artist">Nghệ sĩ</label><input id="song-artist" name="artist_name" value="{{ old('artist_name', $item?->artist_name) }}" maxlength="160" class="ant-input admin-form-input @error('artist_name') is-invalid @enderror" placeholder="Tự động lấy từ nguồn API"><p class="admin-field-help">Nghệ sĩ được lấy theo bài hát từ API; không lấy từ danh sách Admin.</p>@error('artist_name')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
+            <div class="admin-form-group"><label class="admin-form-label" for="song-country">Quốc gia của bài hát</label><select id="song-country" name="country_code" class="ant-input admin-form-input @error('country_code') is-invalid @enderror"><option value="">Chưa xác định</option>@foreach(config('music.countries', []) as $code => $label)<option value="{{ $code }}" @selected(old('country_code', $item?->country_code) === $code)>{{ $label }}</option>@endforeach</select><p class="admin-field-help">Chọn quốc gia xuất xứ; API sẽ trả cả mã và tên quốc gia.</p>@error('country_code')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
             <div class="admin-form-group"><label class="admin-form-label" for="song-album">Album</label><select id="song-album" name="album_id" class="ant-input admin-form-input @error('album_id') is-invalid @enderror"><option value="">Không thuộc album</option>@foreach($fields['album_id']['options'] ?? [] as $id => $label)<option value="{{ $id }}" @selected((string) old('album_id', $item?->album_id) === (string) $id)>{{ $label }}</option>@endforeach</select>@error('album_id')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
             <div class="admin-form-group"><label class="admin-form-label" for="song-topic">Chủ đề</label><select id="song-topic" name="topic_id" class="ant-input admin-form-input @error('topic_id') is-invalid @enderror"><option value="">Chưa chọn chủ đề</option>@foreach($topics ?? [] as $topic)<option value="{{ $topic->getKey() }}" @selected((string) old('topic_id', $selectedTopicId ?? '') === (string) $topic->getKey())>{{ $topic->name }}{{ $topic->type ? ' · '.($topic->type_custom ?: config('topics.types.'.$topic->type, $topic->type)) : '' }}</option>@endforeach</select>@error('topic_id')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
             <div class="admin-form-group"><label class="admin-form-label" for="song-genre">Thể loại</label><select id="song-genre" name="genre_id" class="ant-input admin-form-input @error('genre_id') is-invalid @enderror"><option value="">Chưa chọn thể loại</option>@foreach($genres ?? [] as $genre)<option value="{{ $genre->getKey() }}" @selected((string) old('genre_id', $selectedGenreId ?? '') === (string) $genre->getKey())>{{ $genre->name }}</option>@endforeach</select>@error('genre_id')<p class="admin-field-error">{{ $message }}</p>@enderror</div>
@@ -101,6 +116,7 @@
             setValue('#song-slug', track.slug);
             setValue('#song-cover-url', track.cover_url);
             setValue('#song-artist', track.artist_name);
+            setValue('#song-country', track.country_code);
             setValue('#song-release-date', track.release_date);
             setValue('#song-duration', track.duration_seconds);
             setValue('#song-lyrics', track.plain_lyrics);
@@ -162,6 +178,61 @@
 
     searchButton.addEventListener('click', search);
     searchInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); search(); } });
+})();
+</script>
+@endif
+
+@if($isEditing && $item?->external_source === 'nhaccuatui' && filled($item?->external_id))
+<script>
+(() => {
+    const refreshButton = document.querySelector('[data-nct-refresh]');
+    const refreshMessage = document.querySelector('[data-nct-refresh-message]');
+    const syncField = document.querySelector('#song-sync-external');
+    if (!refreshButton || !refreshMessage || !syncField) return;
+
+    const previewUrl = @json(route('admin.songs.external-preview'));
+    const songId = @json((string) $item->external_id);
+
+    const setValue = (selector, value) => {
+        const field = document.querySelector(selector);
+        if (!field) return;
+        field.value = value ?? '';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    refreshButton.addEventListener('click', async () => {
+        refreshButton.disabled = true;
+        refreshButton.textContent = 'Đang lấy dữ liệu...';
+        refreshMessage.textContent = 'Đang lấy lại bài hát, nghệ sĩ và avatar từ NhacCuaTui...';
+        try {
+            const response = await fetch(`${previewUrl}?song_id=${encodeURIComponent(songId)}`, {
+                headers: { Accept: 'application/json' },
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.message || 'Không thể lấy dữ liệu bài hát.');
+
+            const track = payload.data || {};
+            setValue('#song-title', track.title);
+            setValue('#song-slug', track.slug);
+            setValue('#song-cover-url', track.cover_url);
+            setValue('#song-artist', track.artist_name);
+            setValue('#song-country', track.country_code);
+            setValue('#song-release-date', track.release_date);
+            setValue('#song-duration', track.duration_seconds);
+            setValue('#song-lyrics', track.plain_lyrics);
+            setValue('#song-synced-lyrics', track.synced_lyrics);
+            syncField.value = '1';
+            refreshMessage.textContent = 'Đã lấy lại dữ liệu. Bấm Lưu thay đổi để cập nhật đủ nghệ sĩ và avatar vào database.';
+            refreshMessage.className = 'admin-field-help';
+        } catch (error) {
+            refreshMessage.textContent = error.message || 'Không thể lấy dữ liệu bài hát lúc này.';
+            refreshMessage.className = 'admin-field-error';
+        } finally {
+            refreshButton.disabled = false;
+            refreshButton.textContent = 'Lấy lại dữ liệu từ API';
+        }
+    });
 })();
 </script>
 @endif

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\PhoneAuthController;
 use App\Http\Controllers\Api\QrAuthController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\AudioController;
+use App\Http\Controllers\VideoController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -108,4 +109,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::post('/songs/{slug}/share', [CatalogController::class, 'recordSongShare'])->name('songs.share');
     Route::get('/songs/{slug}/lyrics', [CatalogController::class, 'lyrics'])->name('songs.lyrics');
     Route::get('/songs/{slug}', [CatalogController::class, 'song'])->name('songs.show');
+    Route::get('/videos', [CatalogController::class, 'videos'])->name('videos.index');
+    Route::get('/videos/{slug}/stream', [VideoController::class, 'stream'])->name('videos.stream');
+    Route::get('/videos/{slug}', [CatalogController::class, 'video'])->name('videos.show');
 });

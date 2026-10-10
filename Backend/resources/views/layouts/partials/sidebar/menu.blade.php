@@ -116,6 +116,15 @@
     </li>
     @endif
 
+    @if($currentAdmin?->hasAdminResourcePermission('songs', 'view'))
+    <li class="ant-menu-item {{ request()->is('admin/videos*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+        <a href="{{ route('admin.videos.index') }}" class="ant-menu-title-content">
+            <x-anticon name="play-circle" class="ant-menu-item-icon" />
+            <span class="ant-menu-title-text">Video nhạc</span>
+        </a>
+    </li>
+    @endif
+
     {{-- Banner --}}
     @if($currentAdmin?->hasAdminPermission('banners.manage'))
     <li class="ant-menu-item {{ request()->is('admin/banners*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">

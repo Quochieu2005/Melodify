@@ -57,6 +57,9 @@ class SongImportService
         $song->external_url = $track['trackViewUrl'] ?? null;
         $song->itunes_url = null;
         $song->artist_name = $artistName;
+        if (blank($song->country_code)) {
+            $song->country_code = $track['countryCode'] ?? null;
+        }
         $song->status = $song->status ?: 'published';
         $song->save();
 
@@ -77,17 +80,48 @@ class SongImportService
         return $song->fresh();
     }
 
+    /**
+     * Reuse the same de-duplication and avatar sync rules for standalone media.
+     *
+     * @return array<int, Artist>
+     */
+    public function syncExternalArtists(array $externalMedia, ?object $admin = null, ?array $artistNames = null): array
+    {
+        if ($artistNames === null) {
+            $artistNames = collect($externalMedia['artists'] ?? [])
+                ->filter(fn ($artist): bool => is_array($artist) && filled($artist['name'] ?? null))
+                ->pluck('name')
+                ->map(fn ($name): string => trim((string) $name))
+                ->filter()
+                ->values()
+                ->all();
+        }
+
+        if ($artistNames === []) {
+            $artistNames = $this->artistNames((string) ($externalMedia['artistName'] ?? ''));
+        }
+
+        return $this->syncArtists($externalMedia, $artistNames, $admin);
+    }
+
     /** @param array<int, string> $names
      *  @return array<int, Artist>
      */
     private function syncArtists(array $track, array $names, ?object $admin): array
     {
         $source = $this->source($track);
-        $canUseExternalId = count($names) === 1;
+        $artistMetadata = collect($track['artists'] ?? [])
+            ->filter(fn ($artist): bool => is_array($artist) && filled($artist['name'] ?? null))
+            ->keyBy(fn (array $artist): string => $this->artistKey((string) $artist['name']));
         $artists = [];
 
         foreach ($names as $name) {
-            $externalId = $canUseExternalId ? (string) ($track['artistId'] ?? '') : '';
+            $metadata = $artistMetadata->get($this->artistKey($name), []);
+            $externalId = (string) ($metadata['id'] ?? '');
+            if ($externalId === '' && count($names) === 1) {
+                $externalId = (string) ($track['artistId'] ?? '');
+            }
+
             $artist = $externalId !== ''
                 ? Artist::query()->where('external_source', $source)->where('external_id', $externalId)->first()
                 : null;
@@ -107,10 +141,18 @@ class SongImportService
                 $artist->external_source = $source;
                 $artist->external_id = $externalId;
             }
+            $countryCode = $metadata['country_code'] ?? $metadata['countryCode'] ?? null;
+            if (filled($countryCode) && blank($artist->country_code)) {
+                $artist->country_code = $countryCode;
+            }
             $artist->save();
 
-            if ($canUseExternalId) {
-                $this->syncArtistAvatar($artist, $track);
+            $artistTrack = $track;
+            $artistTrack['artistId'] = $externalId ?: ($track['artistId'] ?? '');
+            $artistTrack['artistImageUrl'] = $metadata['image_url'] ?? ($track['artistImageUrl'] ?? null);
+            $artistTrack['countryCode'] = $countryCode;
+            if ($externalId !== '' || filled($artistTrack['artistImageUrl'])) {
+                $this->syncArtistAvatar($artist, $artistTrack);
             }
 
             $artists[] = $artist;
@@ -250,9 +292,14 @@ class SongImportService
 
             $artist->avatar_url = $avatarUrl;
             $artist->avatar_public_id = $uploaded['public_id'] ?? null;
-            $artist->avatar_source = 'apple_music';
+            $artist->avatar_source = $this->source($track);
             $artist->save();
         } catch (Throwable $exception) {
+            if (blank($artist->avatar_url) && filled($imageUrl ?? null)) {
+                $artist->avatar_url = $imageUrl;
+                $artist->avatar_source = $this->source($track);
+                $artist->save();
+            }
             Log::warning('Không thể đồng bộ ảnh nghệ sĩ riêng từ Apple Music.', [
                 'artist_id' => (string) $artist->getKey(),
                 'artist_name' => $artist->name,

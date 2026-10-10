@@ -18,6 +18,7 @@ use App\Http\Controllers\AdminController\ProfileController;
 use App\Http\Controllers\AdminController\ReportController;
 use App\Http\Controllers\AdminController\SettingController;
 use App\Http\Controllers\AdminController\SongController;
+use App\Http\Controllers\AdminController\SongVideoController;
 use App\Http\Controllers\AdminController\SongViewController;
 use App\Http\Controllers\AdminController\SubscriptionController;
 use App\Http\Controllers\AdminController\TopicController;
@@ -54,7 +55,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::put('/account-settings/notifications', [ProfileController::class, 'notifications'])->name('profile.notifications');
         Route::put('/account-settings/appearance', [ProfileController::class, 'appearance'])->name('profile.appearance');
         Route::get('/admins', [AdminManagementController::class, 'index'])->name('admins.index');
-          Route::resource('admins', AdminManagementController::class)->only(['edit', 'update']);
+        Route::resource('admins', AdminManagementController::class)->only(['edit', 'update']);
         Route::patch('/admins/{admin}/status', [AdminManagementController::class, 'toggleStatus'])->name('admins.status');
 
         Route::middleware('admin.permission:banners.manage')->group(function () {
@@ -90,10 +91,17 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::patch('/playlists/{playlist}/status', [PlaylistController::class, 'toggleStatus'])->name('playlists.status');
             Route::resource('playlists', PlaylistController::class);
             Route::resource('artists', ArtistController::class)->except('show');
+            Route::get('/videos/create', [SongVideoController::class, 'create'])->name('videos.create');
+            Route::get('/videos/search-external', [SongVideoController::class, 'searchExternal'])->name('videos.external-search');
+            Route::get('/videos/preview-external', [SongVideoController::class, 'previewExternal'])->name('videos.external-preview');
+            Route::get('/videos/{video}/source', [SongVideoController::class, 'source'])->name('videos.source');
+            Route::delete('/videos/bulk', [SongVideoController::class, 'destroyBulk'])->name('videos.bulk-destroy');
+            Route::delete('/videos/all', [SongVideoController::class, 'destroyAll'])->name('videos.destroy-all');
+            Route::resource('videos', SongVideoController::class)->except('create');
         });
 
         Route::middleware('admin.permission:users.manage')->group(function () {
-              Route::resource('users', UserController::class)->except(['show', 'create', 'store']);
+            Route::resource('users', UserController::class)->except(['show', 'create', 'store']);
         });
 
         Route::middleware('admin.permission:billing.manage')->group(function () {

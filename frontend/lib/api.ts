@@ -21,10 +21,14 @@ export type Song = {
   playlists?: { id: string; name: string }[];
   audio_url?: string | null;
   stream_url?: string | null;
+  video_url?: string | null;
+  videos?: SongVideo[];
   preview_url: string | null;
   source_url?: string | null;
   itunes_url?: string | null;
   external_source?: string | null;
+  country_code?: string | null;
+  country?: string | null;
   cover_url?: string | null;
   external_id?: string | null;
   status?: string;
@@ -66,6 +70,27 @@ export type SongArtistCredit = {
   name: string;
   slug?: string | null;
   avatar_url?: string | null;
+  country_code?: string | null;
+  country?: string | null;
+};
+
+export type SongVideo = {
+  id: string;
+  title: string;
+  slug?: string | null;
+  video_url: string | null;
+  thumbnail_url?: string | null;
+  duration_seconds?: number | null;
+  source?: string | null;
+  external_id?: string | null;
+  external_source?: string | null;
+  source_url?: string | null;
+  embed_url?: string | null;
+  watch_url?: string | null;
+  player_type?: 'native' | 'youtube' | string | null;
+  youtube_video_id?: string | null;
+  artist_ids?: string[];
+  artists?: SongArtistCredit[];
 };
 
 export type AlbumRecord = {
@@ -300,6 +325,20 @@ export async function listSongs(options: { query?: string; perPage?: number } = 
 
 export async function getSong(songId: string) {
   return apiFetch<{ data: Song & { lyrics: Lyric[] } }>(`/v1/songs/${encodeURIComponent(songId)}`);
+}
+
+export async function listVideos(options: { query?: string; page?: number; perPage?: number } = {}) {
+  const params = new URLSearchParams();
+  if (options.query?.trim()) params.set('q', options.query.trim());
+  if (options.page) params.set('page', String(options.page));
+  if (options.perPage) params.set('per_page', String(options.perPage));
+
+  const query = params.toString();
+  return apiFetch<PaginatedResponse<SongVideo>>(`/v1/videos${query ? `?${query}` : ''}`);
+}
+
+export async function getVideo(slug: string) {
+  return apiFetch<{ data: SongVideo }>(`/v1/videos/${encodeURIComponent(slug)}`);
 }
 
 export async function getSongLyrics(songId: string, language?: string) {
