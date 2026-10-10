@@ -687,8 +687,46 @@ class CatalogController extends Controller
                 // Keep the last signed URL when NhacCuaTui is temporarily unavailable.
             }
         }
-        $artistLink = SongArtist::query()->where('song_id', $songId)->first();
-        $artist = $artistLink ? Artist::query()->find($artistLink->artist_id) : null;
+        $artistCredits = SongArtist::query()
+            ->where('song_id', $songId)
+            ->get()
+            ->map(function (SongArtist $artistLink): ?array {
+                $linkedArtist = Artist::query()->find($artistLink->artist_id);
+
+                return $linkedArtist ? [
+                    'id' => (string) $linkedArtist->getKey(),
+                    'name' => $linkedArtist->name,
+                    'slug' => $linkedArtist->slug,
+                    'avatar_url' => $linkedArtist->avatar_url,
+                ] : null;
+            })
+            ->filter()
+            ->values()
+            ->all();
+
+        $creditNames = collect($artistCredits)
+            ->pluck('name')
+            ->map(fn (string $name): string => mb_strtolower(trim($name)))
+            ->all();
+        $artistNames = preg_split('/\s*,\s*/', trim((string) $song->artist_name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        foreach ($artistNames as $artistName) {
+            $normalizedName = mb_strtolower(trim($artistName));
+            if ($normalizedName === '' || in_array($normalizedName, $creditNames, true)) {
+                continue;
+            }
+
+            $matchedArtist = Artist::query()->where('name', trim($artistName))->first();
+            $artistCredits[] = [
+                'id' => $matchedArtist ? (string) $matchedArtist->getKey() : null,
+                'name' => trim($artistName),
+                'slug' => $matchedArtist?->slug,
+                'avatar_url' => $matchedArtist?->avatar_url,
+            ];
+            $creditNames[] = $normalizedName;
+        }
+
+        $primaryArtist = $artistCredits[0] ?? null;
         $album = filled($song->album_id) ? Album::query()->find($song->album_id) : null;
         $genreLink = SongGenre::query()->where('song_id', $songId)->first();
         $genre = $genreLink ? Genre::query()->find($genreLink->genre_id) : null;
@@ -705,10 +743,11 @@ class CatalogController extends Controller
             'external_id' => $song->external_id,
             'title' => $song->title,
             'slug' => $song->slug,
-            'artist' => ($song->artist_name || $artist) ? [
-                'id' => $artist ? (string) $artist->getKey() : null,
-                'name' => $song->artist_name ?: $artist->name,
+            'artist' => ($song->artist_name || $primaryArtist) ? [
+                'id' => $primaryArtist['id'] ?? null,
+                'name' => $song->artist_name ?: $primaryArtist['name'],
             ] : null,
+            'artists' => $artistCredits,
             'album' => $album ? [
                 'id' => (string) $album->getKey(),
                 'title' => $album->title,
