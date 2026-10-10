@@ -24,3 +24,17 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Banner images are clipped at the rendered image layer, not only at the carousel track. */
+.banner-clip {
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  clip-path: inset(0 round 16px) !important;
+  -webkit-mask-image: -webkit-radial-gradient(white, black) !important;
+}
+
+.banner-clip-image {
+  display: block;
+  border-radius: 16px !important;
+  clip-path: inset(0 round 16px) !important;
+}

@@ -24,27 +24,28 @@ class MediaAssetService
         );
     }
 
-    public function folder(): string
+    public function folder(?string $folder = null): string
     {
-        return trim((string) config('cloudinary.folder', 'melodify'), '/');
+        return trim((string) ($folder ?? config('cloudinary.folder', 'melodify')), '/');
     }
 
-    public function latest(int $limit = 36)
+    public function latest(int $limit = 36, ?string $folder = null)
     {
         return MediaAsset::query()
-            ->where('folder', $this->folder())
+            ->where('folder', $this->folder($folder))
             ->latest()
             ->limit(min(max($limit, 1), 60))
             ->get();
     }
 
-    public function upload(UploadedFile $file, Admin $admin, ?string $slug = null): MediaAsset
+    public function upload(UploadedFile $file, Admin $admin, ?string $slug = null, ?string $folder = null): MediaAsset
     {
         $cloudinary = app(CloudinaryService::class);
+        $assetFolder = $this->folder($folder);
         $fileSlug = $slug ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
         $result = $cloudinary->uploadImage(
             $file,
-            $this->folder(),
+            $assetFolder,
             $cloudinary->datedPublicId(Str::slug($fileSlug)),
         );
 
@@ -52,7 +53,7 @@ class MediaAssetService
             ['public_id' => $result['public_id']],
             [
                 'secure_url' => $result['secure_url'],
-                'folder' => $this->folder(),
+                'folder' => $assetFolder,
                 'original_name' => $file->getClientOriginalName(),
                 'width' => $result['width'] ?? null,
                 'height' => $result['height'] ?? null,
@@ -68,9 +69,10 @@ class MediaAssetService
         ?string $currentPublicId = null,
         bool $required = false,
         ?string $slug = null,
+        ?string $folder = null,
     ): array {
         if ($request->hasFile('image')) {
-            $asset = $this->upload($request->file('image'), $admin, $slug);
+            $asset = $this->upload($request->file('image'), $admin, $slug, $folder);
 
             return [
                 'url' => $asset->secure_url,
@@ -80,7 +82,7 @@ class MediaAssetService
 
         if ($request->filled('image_asset_id')) {
             $asset = MediaAsset::query()
-                ->where('folder', $this->folder())
+                ->where('folder', $this->folder($folder))
                 ->whereKey((string) $request->input('image_asset_id'))
                 ->first();
 

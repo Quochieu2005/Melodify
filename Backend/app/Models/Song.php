@@ -9,6 +9,7 @@ class Song extends BaseModel
     protected $casts = [
         'release_date' => 'date',
         'explicit' => 'boolean',
+        'is_featured' => 'integer',
     ];
 
     public function album() { return $this->belongsTo(Album::class, 'album_id'); }

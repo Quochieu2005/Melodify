@@ -20,6 +20,11 @@ use Throwable;
 
 class BannerController extends Controller
 {
+    private function bannerMediaFolder(): string
+    {
+        return (string) config('cloudinary.banner_folder', 'banner');
+    }
+
     public function index(?Request $request = null): View
     {
         $request ??= request();
@@ -53,7 +58,7 @@ class BannerController extends Controller
         return view('Admin.banners.create', [
             'item' => null,
             ...$this->formOptions(),
-            'mediaAssets' => app(MediaAssetService::class)->latest(),
+            'mediaAssets' => app(MediaAssetService::class)->latest(36, $this->bannerMediaFolder()),
         ]);
     }
 
@@ -79,6 +84,7 @@ class BannerController extends Controller
                 null,
                 true,
                 $data['slug'],
+                $this->bannerMediaFolder(),
             );
 
             Banner::query()->create([
@@ -103,7 +109,7 @@ class BannerController extends Controller
         return view('Admin.banners.edit', [
             'item' => $this->findBySlug($slug),
             ...$this->formOptions(),
-            'mediaAssets' => app(MediaAssetService::class)->latest(),
+            'mediaAssets' => app(MediaAssetService::class)->latest(36, $this->bannerMediaFolder()),
         ]);
     }
 
@@ -134,6 +140,7 @@ class BannerController extends Controller
                 $banner->image_public_id,
                 false,
                 $data['slug'],
+                $this->bannerMediaFolder(),
             );
             $data['image_url'] = $media['url'];
             $data['image_public_id'] = $media['public_id'];

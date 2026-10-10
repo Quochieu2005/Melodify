@@ -55,6 +55,33 @@ class CatalogController extends Controller
 
     public function banners(Request $request): JsonResponse
     {
+        if ($request->boolean('daily')) {
+            $limit = min(max($request->integer('limit', 5), 1), 5);
+            $dateKey = now('Asia/Ho_Chi_Minh')->toDateString();
+            $activeBanners = Banner::query()
+                ->where('status', 'active')
+                ->get()
+                ->filter(fn (Banner $banner): bool => filled($banner->image_url))
+                ->unique(fn (Banner $banner): string => (string) ($banner->image_public_id ?: $banner->image_url))
+                ->values();
+            $items = $activeBanners
+                ->sortByDesc(fn (Banner $banner): string => sha1($dateKey.'|'.(string) $banner->getKey()))
+                ->take($limit)
+                ->values();
+
+            return response()->json([
+                'data' => $items->map(fn (Banner $banner): array => $this->bannerData($banner))->all(),
+                'meta' => [
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => $items->count(),
+                    'total' => $items->count(),
+                    'available' => $activeBanners->count(),
+                    'date' => $dateKey,
+                ],
+            ]);
+        }
+
         return $this->collection($request, Banner::class, ['active'], fn (Banner $banner): array => $this->bannerData($banner), 'title');
     }
 
@@ -80,7 +107,7 @@ class CatalogController extends Controller
 
     public function artist(string $slug): JsonResponse
     {
-        return $this->show(Artist::class, $slug, ['active'], fn (Artist $artist): array => $this->artistData($artist));
+        return $this->show(Artist::class, $slug, ['active'], fn (Artist $artist): array => $this->artistData($artist, true));
     }
 
     public function playlists(Request $request): JsonResponse
@@ -485,9 +512,9 @@ class CatalogController extends Controller
         return $data;
     }
 
-    private function artistData(Artist $artist): array
+    private function artistData(Artist $artist, bool $includeFeaturedSongs = false): array
     {
-        return [
+        $data = [
             'id' => (string) $artist->getKey(),
             'name' => $artist->name,
             'slug' => $artist->slug,
@@ -496,6 +523,33 @@ class CatalogController extends Controller
             'verified' => (bool) $artist->verified,
             'status' => $artist->status,
         ];
+
+        if (! $includeFeaturedSongs) {
+            return $data;
+        }
+
+        $songIds = SongArtist::query()
+            ->where('artist_id', (string) $artist->getKey())
+            ->pluck('song_id')
+            ->map(fn ($id): string => (string) $id)
+            ->values()
+            ->all();
+
+        $data['featured_songs'] = $songIds === []
+            ? []
+            : Song::query()
+                ->whereIn((new Song())->getKeyName(), $songIds)
+                ->where('is_featured', 1)
+                ->where('status', 'published')
+                ->orderByDesc('release_date')
+                ->limit(20)
+                ->get()
+                ->map(fn (Song $song): array => $this->localSongData($song))
+                ->values()
+                ->all();
+        $data['featured_song_count'] = count($data['featured_songs']);
+
+        return $data;
     }
 
     private function playlistData(Playlist $playlist, bool $includeSongs = false): array
@@ -681,6 +735,7 @@ class CatalogController extends Controller
                 ->values()
                 ->all(),
             'duration_seconds' => $song->duration_seconds !== null ? (int) $song->duration_seconds : null,
+            'is_featured' => (int) ($song->is_featured ?? 0),
             'cover_url' => $song->cover_url,
             'audio_url' => $audioUrl,
             'stream_url' => $audioUrl,
