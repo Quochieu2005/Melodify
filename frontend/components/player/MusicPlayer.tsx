@@ -49,7 +49,7 @@ function QueueIcon() {
 }
 
 function HeartIcon({ filled }: { filled: boolean }) {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className={filled ? 'size-7 fill-[#ff6f91] stroke-[#ff6f91]' : 'size-7 fill-none stroke-current stroke-[1.7]'}><path d="M12 20.2 3.8 12A5.2 5.2 0 0 1 11.15 4.65L12 5.5l.85-.85A5.2 5.2 0 0 1 20.2 12L12 20.2Z" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className={filled ? 'size-5 fill-[#ff6f91] stroke-[#ff6f91]' : 'size-5 fill-none stroke-current stroke-[1.7]'}><path d="M12 20.2 3.8 12A5.2 5.2 0 0 1 11.15 4.65L12 5.5l.85-.85A5.2 5.2 0 0 1 20.2 12L12 20.2Z" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
 function formatTime(seconds: number) {
@@ -72,42 +72,42 @@ export default function MusicPlayer() {
   const displayElapsed = track ? elapsed : 5;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 h-[100px] border-t border-white/[0.04] bg-[#242424] px-3 py-2.5 text-white shadow-[0_-12px_30px_rgba(0,0,0,0.2)] sm:px-4">
-      <div className="grid h-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 lg:grid-cols-[minmax(280px,380px)_minmax(300px,1fr)_minmax(250px,380px)] lg:gap-6">
-        <div className="flex min-w-0 items-center gap-3">
-          <div role="img" aria-label={`Ảnh bìa ${displayTrack.title}`} className="size-[70px] shrink-0 rounded-lg bg-cover bg-center" style={{ backgroundImage: `url("${displayTrack.coverUrl}")` }} />
+    <div className="fixed bottom-0 left-0 z-50 h-[74px] w-full border-t border-white/[0.04] bg-[#242424] px-2.5 py-1.5 text-white shadow-[0_-12px_30px_rgba(0,0,0,0.2)] sm:px-3">
+      <div className="grid h-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 lg:grid-cols-[minmax(240px,350px)_minmax(280px,1fr)_minmax(220px,350px)] lg:gap-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div role="img" aria-label={`Ảnh bìa ${displayTrack.title}`} className="size-[46px] shrink-0 rounded-md bg-cover bg-center" style={{ backgroundImage: `url("${displayTrack.coverUrl}")` }} />
           <div className="min-w-0">
-            <p className="truncate text-base font-bold">{displayTrack.title}</p>
-            <p className="mt-1 truncate text-sm text-white/60">{displayTrack.artist}</p>
+            <p className="truncate text-sm font-bold">{displayTrack.title}</p>
+            <p className="mt-0.5 truncate text-xs text-white/60">{displayTrack.artist}</p>
           </div>
-          <div className="ml-auto hidden items-center gap-3 sm:flex">
-            <button type="button" aria-label={isLiked ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'} aria-pressed={isLiked} onClick={() => setIsLiked((value) => !value)} className="grid size-9 place-items-center rounded-full text-white/65 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5]"><HeartIcon filled={isLiked} /></button>
-            <PlayerButton label="Thêm tùy chọn" className="size-9 text-xl tracking-[0.18em]">•••</PlayerButton>
+          <div className="ml-auto hidden items-center gap-2 sm:flex">
+            <button type="button" aria-label={isLiked ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'} aria-pressed={isLiked} onClick={() => setIsLiked((value) => !value)} className="grid size-7 place-items-center rounded-full text-white/65 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5]"><HeartIcon filled={isLiked} /></button>
+            <PlayerButton label="Thêm tùy chọn" className="size-7 text-base tracking-[0.1em]">•••</PlayerButton>
           </div>
         </div>
 
-        <div className="hidden min-w-0 flex-col items-center justify-center gap-1.5 lg:flex">
-          <div className="flex items-center gap-6">
-            <PlayerButton label="Phát ngẫu nhiên" className="size-7"><ShuffleIcon /></PlayerButton>
-            <PlayerButton label="Bài trước" className="size-8" onClick={playPrevious}><PreviousIcon /></PlayerButton>
-            <button type="button" aria-label={isPlaying ? 'Tạm dừng' : 'Phát'} aria-pressed={isPlaying} onClick={togglePlay} className="grid size-12 place-items-center rounded-full bg-white text-[#202020] outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
-              {isPlaying ? <span className="flex gap-1"><span className="h-5 w-1.5 rounded-full bg-current" /><span className="h-5 w-1.5 rounded-full bg-current" /></span> : <span className="ml-1 border-y-[10px] border-l-[15px] border-y-transparent border-l-current" />}
+        <div className="hidden min-w-0 flex-col items-center justify-center gap-1 lg:flex">
+          <div className="flex items-center gap-3">
+            <PlayerButton label="Phát ngẫu nhiên" className="size-5"><ShuffleIcon /></PlayerButton>
+            <PlayerButton label="Bài trước" className="size-6" onClick={playPrevious}><PreviousIcon /></PlayerButton>
+            <button type="button" aria-label={isPlaying ? 'Tạm dừng' : 'Phát'} aria-pressed={isPlaying} onClick={togglePlay} className="grid size-9 place-items-center rounded-full bg-white text-[#202020] outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
+              {isPlaying ? <span className="flex gap-0.5"><span className="h-3.5 w-0.5 rounded-full bg-current" /><span className="h-3.5 w-0.5 rounded-full bg-current" /></span> : <span className="ml-0.5 border-y-[7px] border-l-[11px] border-y-transparent border-l-current" />}
             </button>
-            <PlayerButton label="Bài tiếp theo" className="size-8" onClick={playNext}><NextIcon /></PlayerButton>
-            <PlayerButton label="Lặp lại" className="size-7"><RepeatIcon /></PlayerButton>
+            <PlayerButton label="Bài tiếp theo" className="size-6" onClick={playNext}><NextIcon /></PlayerButton>
+            <PlayerButton label="Lặp lại" className="size-5"><RepeatIcon /></PlayerButton>
           </div>
-          <div className="flex w-full max-w-[540px] items-center gap-2 text-[11px] text-white/45">
+          <div className="flex w-full max-w-[500px] items-center gap-1.5 text-[10px] text-white/45">
             <span>{formatTime(displayElapsed)}</span>
             <input aria-label="Tiến trình bài hát" type="range" min="0" max={displayDuration} value={Math.min(displayElapsed, displayDuration)} onChange={(event) => seek(Number(event.target.value))} className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-white/15 accent-white" />
             <span>{formatTime(displayDuration)}</span>
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-2 sm:gap-4">
-          <span className="hidden rounded bg-white/75 px-1.5 py-0.5 text-[11px] font-semibold text-[#202020] sm:inline-block">128 kbps</span>
-          <PlayerButton label="Âm lượng" className="size-9"><VolumeIcon /></PlayerButton>
-          <PlayerButton label="Lời bài hát" className="hidden size-9 sm:grid"><LyricsIcon /></PlayerButton>
-          <PlayerButton label="Danh sách phát" className="size-9"><QueueIcon /></PlayerButton>
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
+          <span className="hidden rounded bg-white/75 px-1.5 py-0.5 text-[10px] font-semibold text-[#202020] sm:inline-block">128 kbps</span>
+          <PlayerButton label="Âm lượng" className="size-7"><VolumeIcon /></PlayerButton>
+          <PlayerButton label="Lời bài hát" className="hidden size-7 sm:grid"><LyricsIcon /></PlayerButton>
+          <PlayerButton label="Danh sách phát" className="size-7"><QueueIcon /></PlayerButton>
         </div>
       </div>
     </div>

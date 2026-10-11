@@ -1,7 +1,12 @@
-.homeGrid,
-.galleryGrid {
+.homeGrid {
   display: grid;
   justify-content: space-between;
+  gap: 24px;
+}
+
+.galleryGrid {
+  display: grid;
+  justify-content: start;
   gap: 24px;
 }
 

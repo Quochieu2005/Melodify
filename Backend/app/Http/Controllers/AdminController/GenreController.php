@@ -54,12 +54,7 @@ class GenreController extends MediaCatalogController
     public function show(string $id): View
     {
         $item = Genre::query()->findOrFail($id);
-        $playlists = Playlist::query()
-            ->where('genre_ids', (string) $item->getKey())
-            ->orderBy('sort_order')
-            ->orderBy('name')
-            ->paginate(20)
-            ->withQueryString();
+        $playlists = $this->playlistsForRelation('genre_ids', (string) $item->getKey());
 
         return view('Admin.catalog.show', [
             'item' => $item,

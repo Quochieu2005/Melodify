@@ -8,6 +8,7 @@ import {
   fallbackHomeTopics,
   genreRecordToCard,
   pickDailyTopics,
+  topicHref,
   topicRecordToCard,
   type TopicCard,
   vietnamDateKey,
@@ -72,17 +73,22 @@ export default function HomeTopicsSection() {
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 2xl:gap-5">
           {topics.map((topic) => (
-            <article key={`${topic.kind}-${topic.id}`} className="relative h-[115px] w-full min-w-0 overflow-hidden rounded-[10px] bg-[#30443f]">
+            <Link
+              key={`${topic.kind}-${topic.id}`}
+              href={topicHref(topic)}
+              aria-label={`Mở playlist theo chủ đề ${topic.title}`}
+              className="group relative block h-[115px] w-full min-w-0 overflow-hidden rounded-[10px] bg-[#30443f] outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202a28]"
+            >
               <div
                 aria-hidden="true"
-                className="absolute inset-0 bg-cover bg-center"
+                className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
                 style={{ backgroundImage: topic.image ? `url("${topic.image}")` : undefined }}
               />
-              <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-black/45 via-black/10 to-black/0" />
+              <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-black/45 via-black/10 to-black/0 transition-colors group-hover:from-black/55" />
               <h3 className="relative z-10 p-3 text-[14px] font-bold leading-tight text-white drop-shadow-sm" style={{ color: '#ffffff', fontSize: '14px', fontWeight: 700 }}>
                 {topic.title}
               </h3>
-            </article>
+            </Link>
           ))}
         </div>
       )}
