@@ -106,12 +106,7 @@ class TopicController extends MediaCatalogController
     public function show(string $id): View
     {
         $item = Topic::query()->findOrFail($id);
-        $playlists = Playlist::query()
-            ->where('topic_ids', (string) $item->getKey())
-            ->orderBy('sort_order')
-            ->orderBy('name')
-            ->paginate(20)
-            ->withQueryString();
+        $playlists = $this->playlistsForRelation('topic_ids', (string) $item->getKey());
 
         return view('Admin.catalog.show', [
             'item' => $item,

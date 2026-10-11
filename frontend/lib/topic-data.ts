@@ -10,6 +10,24 @@ export type TopicCard = {
   kind: TopicKind;
 };
 
+export function topicSlug(topic: Pick<TopicCard, 'id' | 'slug' | 'title'>): string {
+  if (topic.slug?.trim()) return topic.slug.trim();
+  if (topic.id && !topic.id.startsWith('fallback-')) return topic.id;
+
+  return topic.title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export function topicHref(topic: Pick<TopicCard, 'id' | 'slug' | 'title' | 'kind'>): string {
+  const filter = topic.kind === 'genre' ? 'genre' : 'topic';
+  return `/playlist?${filter}=${encodeURIComponent(topicSlug(topic))}&kind=${filter}`;
+}
+
 const fallbackImages = [
   '/topics/genre/vpop_600.png',
   '/topics/genre/vrap_600.png',

@@ -52,6 +52,10 @@ export type Playlist = {
   sort_order: number;
   status: string;
   song_count: number;
+  artist_ids?: string[];
+  artists?: SongArtistCredit[];
+  genre_ids?: string[];
+  topic_ids?: string[];
   songs?: Song[];
 };
 
@@ -426,11 +430,14 @@ export async function listGenres(options: { query?: string; perPage?: number } =
   return apiFetch<PaginatedResponse<GenreRecord>>(`/v1/genres${query ? `?${query}` : ''}`);
 }
 
-export async function listPlaylists(options: { query?: string; type?: string; perPage?: number } = {}) {
+export async function listPlaylists(options: { query?: string; type?: string; topic?: string; genre?: string; page?: number; perPage?: number } = {}) {
   const params = new URLSearchParams();
 
   if (options.query?.trim()) params.set('q', options.query.trim());
   if (options.type?.trim()) params.set('type', options.type.trim());
+  if (options.topic?.trim()) params.set('topic', options.topic.trim());
+  if (options.genre?.trim()) params.set('genre', options.genre.trim());
+  if (options.page) params.set('page', String(options.page));
   if (options.perPage) params.set('per_page', String(options.perPage));
 
   const query = params.toString();
@@ -450,6 +457,14 @@ export async function listAlbums(options: { query?: string; page?: number; perPa
 
 export async function getAlbum(slug: string) {
   return apiFetch<{ data: AlbumDetail }>(`/v1/albums/${encodeURIComponent(slug)}`);
+}
+
+export async function getTopic(slug: string) {
+  return apiFetch<{ data: TopicRecord & { songs?: Song[] } }>(`/v1/topics/${encodeURIComponent(slug)}`);
+}
+
+export async function getGenre(slug: string) {
+  return apiFetch<{ data: GenreRecord & { songs?: Song[] } }>(`/v1/genres/${encodeURIComponent(slug)}`);
 }
 
 export async function getPlaylist(playlistId: string) {

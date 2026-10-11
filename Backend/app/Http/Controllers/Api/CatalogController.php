@@ -113,14 +113,44 @@ class CatalogController extends Controller
 
     public function playlists(Request $request): JsonResponse
     {
-        return $this->collection(
-            $request,
-            Playlist::class,
-            ['active'],
-            fn (Playlist $playlist): array => $this->playlistData($playlist),
-            'name',
-            fn ($query) => $query->whereIn('visibility', ['public', 'unlisted']),
-        );
+        $topicFilter = trim((string) $request->input('topic', ''));
+        $genreFilter = trim((string) $request->input('genre', ''));
+        $topic = $topicFilter !== '' ? Topic::query()->where('slug', $topicFilter)->first() : null;
+        $genre = $genreFilter !== '' ? Genre::query()->where('slug', $genreFilter)->first() : null;
+        $topicId = $topic !== null ? (string) $topic->getKey() : ($topicFilter !== '' ? $topicFilter : null);
+        $genreId = $genre !== null ? (string) $genre->getKey() : ($genreFilter !== '' ? $genreFilter : null);
+        $perPage = min(max($request->integer('per_page', 20), 1), 50);
+        $query = Playlist::query()
+            ->whereIn('status', ['active'])
+            ->whereIn('visibility', ['public', 'unlisted']);
+
+        if ($request->filled('q')) {
+            $term = trim((string) $request->input('q'));
+            $query->where('name', 'like', "%{$term}%");
+        }
+
+        $items = $query
+            ->orderBy('sort_order')
+            ->orderByDesc('created_at')
+            ->get()
+            ->filter(function (Playlist $playlist) use ($topicId, $genreId): bool {
+                return ($topicId === null || $this->relationContainsId($playlist->topic_ids ?? [], $topicId))
+                    && ($genreId === null || $this->relationContainsId($playlist->genre_ids ?? [], $genreId));
+            })
+            ->values();
+        $page = max($request->integer('page', 1), 1);
+        $total = $items->count();
+        $pageItems = $items->forPage($page, $perPage)->values();
+
+        return response()->json([
+            'data' => $pageItems->map(fn (Playlist $playlist): array => $this->playlistData($playlist))->all(),
+            'meta' => [
+                'current_page' => $page,
+                'last_page' => max((int) ceil($total / $perPage), 1),
+                'per_page' => $perPage,
+                'total' => $total,
+            ],
+        ]);
     }
 
     public function playlist(string $slug): JsonResponse
@@ -601,6 +631,8 @@ class CatalogController extends Controller
 
     private function playlistData(Playlist $playlist, bool $includeSongs = false): array
     {
+        $artists = $this->playlistArtists($playlist);
+
         $data = [
             'id' => (string) $playlist->getKey(),
             'name' => $playlist->name,
@@ -614,6 +646,16 @@ class CatalogController extends Controller
             'sort_order' => (int) ($playlist->sort_order ?? 0),
             'status' => $playlist->status,
             'song_count' => PlaylistSong::query()->where('playlist_id', (string) $playlist->getKey())->count(),
+            'artist_ids' => array_values(array_filter(array_map(
+                'strval',
+                collect((array) ($playlist->artist_ids ?? []))
+                    ->concat(collect($artists)->pluck('id'))
+                    ->unique()
+                    ->all(),
+            ))),
+            'artists' => $artists,
+            'genre_ids' => array_values(array_map('strval', (array) ($playlist->genre_ids ?? []))),
+            'topic_ids' => array_values(array_map('strval', (array) ($playlist->topic_ids ?? []))),
         ];
 
         if ($includeSongs) {
@@ -630,6 +672,104 @@ class CatalogController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * A playlist can have its own artist_ids, but imported playlists often only
+     * have artists attached to their songs. Resolve both sources for one
+     * consistent response in the gallery and detail pages.
+     */
+    private function playlistArtists(Playlist $playlist): array
+    {
+        $artistIds = [];
+        $artistNames = [];
+        $seenArtistIds = [];
+        $seenArtistNames = [];
+
+        foreach ((array) ($playlist->artist_ids ?? []) as $artistId) {
+            $normalizedId = trim((string) $artistId);
+            if ($normalizedId !== '' && ! isset($seenArtistIds[$normalizedId])) {
+                $artistIds[] = $normalizedId;
+                $seenArtistIds[$normalizedId] = true;
+            }
+        }
+
+        $playlistSongs = PlaylistSong::query()
+            ->where('playlist_id', (string) $playlist->getKey())
+            ->orderBy('position')
+            ->get();
+
+        foreach ($playlistSongs as $playlistSong) {
+            $songId = (string) $playlistSong->song_id;
+            $song = Song::query()->find($songId);
+
+            foreach (SongArtist::query()->where('song_id', $songId)->get() as $artistLink) {
+                $normalizedId = trim((string) $artistLink->artist_id);
+                if ($normalizedId !== '' && ! isset($seenArtistIds[$normalizedId])) {
+                    $artistIds[] = $normalizedId;
+                    $seenArtistIds[$normalizedId] = true;
+                }
+            }
+
+            foreach (preg_split('/\s*,\s*|\s+feat\.\s+|\s+ft\.\s+/i', trim((string) ($song?->artist_name ?? '')), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $artistName) {
+                $normalizedName = mb_strtolower(trim($artistName));
+                if ($normalizedName !== '' && ! isset($seenArtistNames[$normalizedName])) {
+                    $artistNames[] = trim($artistName);
+                    $seenArtistNames[$normalizedName] = true;
+                }
+            }
+        }
+
+        $artists = [];
+        $seenResolvedNames = [];
+
+        foreach ($artistIds as $artistId) {
+            $artist = Artist::query()->find($artistId);
+            if (! $artist) {
+                continue;
+            }
+
+            $normalizedName = mb_strtolower(trim((string) $artist->name));
+            if ($normalizedName === '' || isset($seenResolvedNames[$normalizedName])) {
+                continue;
+            }
+
+            $artists[] = [
+                'id' => (string) $artist->getKey(),
+                'name' => $artist->name,
+                'slug' => $artist->slug,
+                'avatar_url' => $artist->avatar_url,
+            ];
+            $seenResolvedNames[$normalizedName] = true;
+        }
+
+        foreach ($artistNames as $artistName) {
+            $normalizedName = mb_strtolower(trim($artistName));
+            if ($normalizedName === '' || isset($seenResolvedNames[$normalizedName])) {
+                continue;
+            }
+
+            $artist = Artist::query()->where('name', $artistName)->first();
+            $artists[] = [
+                'id' => $artist ? (string) $artist->getKey() : null,
+                'name' => $artist?->name ?: $artistName,
+                'slug' => $artist?->slug,
+                'avatar_url' => $artist?->avatar_url,
+            ];
+            $seenResolvedNames[$normalizedName] = true;
+        }
+
+        return $artists;
+    }
+
+    private function relationContainsId(mixed $value, string $id): bool
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : [];
+        }
+
+        return in_array($id, array_map('strval', is_array($value) ? $value : []), true);
     }
 
     private function nctTrackData(array $track): array

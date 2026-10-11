@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { listGenres, listTopics } from '@/lib/api';
 import {
   genreRecordToCard,
   pickDailyTopics,
+  topicHref,
   topicRecordToCard,
   type TopicCard,
   vietnamDateKey,
@@ -35,8 +37,8 @@ const emptyCollections = {
 
 function TopicCardButton({ topic }: { topic: TopicCard }) {
   return (
-    <button
-      type="button"
+    <Link
+      href={topicHref(topic)}
       aria-label={`Mở chủ đề ${topic.title}`}
       className="group relative flex aspect-[2.08/1] items-start justify-start overflow-hidden rounded-[8px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]"
     >
@@ -47,7 +49,7 @@ function TopicCardButton({ topic }: { topic: TopicCard }) {
       />
       <span aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/10 to-transparent" />
       <span className="relative z-10 block p-3 text-[14px] font-bold leading-tight text-white drop-shadow-md">{topic.title}</span>
-    </button>
+    </Link>
   );
 }
 
