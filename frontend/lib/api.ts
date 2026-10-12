@@ -32,6 +32,9 @@ export type Song = {
   cover_url?: string | null;
   external_id?: string | null;
   status?: string;
+  is_featured?: number;
+  is_hot?: number;
+  preview_limit_seconds?: number | null;
   views?: number;
   favorites?: number;
   shares?: number;
