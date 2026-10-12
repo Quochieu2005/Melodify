@@ -78,7 +78,10 @@ export default function MusicPlayer() {
           <div role="img" aria-label={`Ảnh bìa ${displayTrack.title}`} className="size-[46px] shrink-0 rounded-md bg-cover bg-center" style={{ backgroundImage: `url("${displayTrack.coverUrl}")` }} />
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">{displayTrack.title}</p>
-            <p className="mt-0.5 truncate text-xs text-white/60">{displayTrack.artist}</p>
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+              <p className="truncate text-xs text-white/60">{displayTrack.artist}</p>
+              {track?.isHot ? <span className="shrink-0 rounded bg-[#ffcf66]/20 px-1 text-[9px] font-bold text-[#ffcf66]">30s</span> : null}
+            </div>
           </div>
           <div className="ml-auto hidden items-center gap-2 sm:flex">
             <button type="button" aria-label={isLiked ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'} aria-pressed={isLiked} onClick={() => setIsLiked((value) => !value)} className="grid size-7 place-items-center rounded-full text-white/65 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5]"><HeartIcon filled={isLiked} /></button>

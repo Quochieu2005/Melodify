@@ -62,6 +62,7 @@ class AdminResourceRequest extends FormRequest
                 'duration_seconds' => ['nullable', 'integer', 'min:0', 'max:86400'],
                 'explicit' => ['nullable', 'boolean'],
                 'is_featured' => ['nullable', 'integer', 'in:0,1'],
+                'is_hot' => ['nullable', 'integer', 'in:0,1'],
                 'plain_lyrics' => ['nullable', 'string', 'max:50000', new PlainText()],
                 'synced_lyrics' => ['nullable', 'string', 'max:80000', new PlainText()],
                 'topic_ids' => ['nullable', 'array', 'max:50'],

@@ -2,10 +2,10 @@
 
 import { Lexend } from 'next/font/google';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
-import { getPlaylist, type Playlist, type Song } from '@/lib/api';
+import { getPlaylist, type Playlist, type Song, type SongArtistCredit } from '@/lib/api';
 
 import styles from '@/components/albums/AlbumDetailPage.module.css';
 
@@ -49,6 +49,43 @@ function songArtists(song: Song) {
 
   if (artists.length > 0) return artists.join(', ');
   return song.artist?.name || 'Nghệ sĩ chưa cập nhật';
+}
+
+function collectCollaborators(playlist: Playlist): SongArtistCredit[] {
+  const artists = new Map<string, SongArtistCredit>();
+  const addArtist = (artist: SongArtistCredit | null | undefined) => {
+    if (!artist?.name) return;
+
+    const key = artist.id || artist.name;
+    if (!artists.has(key)) artists.set(key, artist);
+  };
+
+  if (playlist.artists?.length) {
+    playlist.artists.forEach(addArtist);
+  } else {
+    playlist.songs?.forEach((song) => {
+      if (song.artists?.length) {
+        song.artists.forEach(addArtist);
+      } else if (song.artist) {
+        addArtist(song.artist);
+      }
+    });
+  }
+
+  return Array.from(artists.values());
+}
+
+function ArtistAvatar({ artist }: { artist: SongArtistCredit }) {
+  return (
+    <div
+      role="img"
+      aria-label={`Ảnh đại diện ${artist.name}`}
+      className="grid aspect-square w-full place-items-center overflow-hidden rounded-full bg-[#565657] text-3xl font-bold text-white/75"
+      style={artist.avatar_url ? { backgroundImage: `url("${artist.avatar_url}")`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}
+    >
+      {!artist.avatar_url ? artist.name.trim().charAt(0).toUpperCase() : null}
+    </div>
+  );
 }
 
 function SelectionCheckbox({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
@@ -127,6 +164,7 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
   const isCurrentRequest = request.slug === slug;
   const playlist = isCurrentRequest ? request.playlist : null;
   const isLoading = !isCurrentRequest || request.isLoading;
+  const collaborators = useMemo(() => (playlist ? collectCollaborators(playlist) : []), [playlist]);
 
   if (isLoading) {
     return <main className="min-h-[calc(100vh-80px)] bg-[#202a28] px-5 pb-20 pt-7 sm:px-8 lg:px-7"><div className="h-[270px] animate-pulse rounded-2xl bg-[#30443f]" /></main>;
@@ -150,7 +188,6 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
   const coverUrl = playlist.cover_url || fallbackCover;
   const playlistArtists = playlist.artists ?? [];
   const artistNames = playlistArtists.map((artist) => artist.name).filter(Boolean);
-  const primaryArtist = playlistArtists[0];
 
   const toggleSong = (songId: string) => {
     setSelectedIds((current) => current.includes(songId) ? current.filter((id) => id !== songId) : [...current, songId]);
@@ -211,34 +248,31 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
   return (
     <main className="min-h-[calc(100vh-80px)] overflow-x-hidden bg-[#202a28] px-5 pb-20 pt-7 text-white sm:px-8 lg:px-7">
       <div className="w-full max-w-[1582px]">
-        <section className="grid gap-6 lg:grid-cols-[248px_minmax(0,1fr)] lg:items-end">
+        <section className="grid gap-6 lg:grid-cols-[248px_minmax(0,1fr)] lg:items-stretch">
           <div role="img" aria-label={`Ảnh bìa ${playlist.name}`} className="aspect-square w-full max-w-[248px] rounded-[8px] bg-cover bg-center" style={{ backgroundImage: `url("${coverUrl}")` }} />
 
-          <div className="min-w-0">
+          <div className="flex min-w-0 flex-col lg:h-[248px]">
             <p className="text-[13px] text-white/55">Playlist&nbsp; · &nbsp;{songs.length} Bài hát</p>
             <h1 className={`${lexend.className} mt-4 truncate text-[30px] font-bold leading-tight text-white sm:text-[34px]`}>{playlist.name}</h1>
             {artistNames.length > 0 ? (
-              <div className="mt-4 flex min-w-0 items-center gap-2 text-[14px] font-bold text-white">
-                <div className="size-7 shrink-0 overflow-hidden rounded-full bg-[#30443f]">
-                  {primaryArtist?.avatar_url ? <div role="img" aria-label={`Ảnh nghệ sĩ ${primaryArtist.name}`} className="size-full bg-cover bg-center" style={{ backgroundImage: `url("${primaryArtist.avatar_url}")` }} /> : null}
-                </div>
-                <span className="truncate">{artistNames.join(', ')}</span>
-              </div>
+              <p className="mt-4 truncate text-[14px] font-bold text-white">{artistNames.join(', ')}</p>
             ) : null}
-            <p className="mt-3 max-w-2xl text-sm text-white/55">{playlist.description || 'Playlist được tuyển chọn từ kho nhạc Melodify.'}</p>
+            {playlist.description ? <p className="mt-3 max-w-2xl text-sm text-white/55">{playlist.description}</p> : null}
 
-            <div className="mt-7 flex items-start gap-3">
-              <button type="button" aria-label={isFavorite ? 'Bỏ yêu thích playlist' : 'Thêm playlist vào yêu thích'} aria-pressed={isFavorite} onClick={handleFavorite} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#ff6f91] focus-visible:ring-2 focus-visible:ring-[#00d3e5]"><span className="grid size-8 place-items-center text-white"><HeartIcon filled={isFavorite} solid /></span><span className="text-[11px] font-bold">{favoriteCount}</span></button>
-              <button type="button" aria-label="Chia sẻ playlist" onClick={handleShare} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#00d3e5] focus-visible:ring-2 focus-visible:ring-[#00d3e5]"><span className="grid size-8 place-items-center text-white"><ShareIcon /></span><span className="text-[11px] font-bold">{shareCount}</span></button>
-              <div className="relative">
-                <button type="button" aria-label="Thêm tùy chọn" aria-expanded={isMoreOpen} onClick={() => setIsMoreOpen((current) => !current)} className="grid size-8 place-items-center rounded-full bg-[#303c39] text-[13px] tracking-[0.08em] text-white outline-none transition-colors hover:bg-[#40504b] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">•••</button>
-                {isMoreOpen ? <div role="menu" className="absolute left-0 top-10 z-20 w-32 overflow-hidden rounded-lg bg-[#2b2b2b] p-1.5 text-[13px] font-bold text-white shadow-xl"><button type="button" role="menuitem" onClick={handleShare} className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left hover:bg-white/10">Chia sẻ <span aria-hidden="true">›</span></button><button type="button" role="menuitem" onClick={handleReport} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-white/10"><span aria-hidden="true">⚑</span>Báo cáo</button></div> : null}
+            <div className="mt-auto">
+              <div className="flex items-start gap-3">
+                <button type="button" aria-label={isFavorite ? 'Bỏ yêu thích playlist' : 'Thêm playlist vào yêu thích'} aria-pressed={isFavorite} onClick={handleFavorite} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#ff6f91] focus-visible:ring-2 focus-visible:ring-[#00d3e5]"><span className="grid size-8 place-items-center text-white"><HeartIcon filled={isFavorite} solid /></span><span className="text-[11px] font-bold">{favoriteCount}</span></button>
+                <button type="button" aria-label="Chia sẻ playlist" onClick={handleShare} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#00d3e5] focus-visible:ring-2 focus-visible:ring-[#00d3e5]"><span className="grid size-8 place-items-center text-white"><ShareIcon /></span><span className="text-[11px] font-bold">{shareCount}</span></button>
+                <div className="relative">
+                  <button type="button" aria-label="Thêm tùy chọn" aria-expanded={isMoreOpen} onClick={() => setIsMoreOpen((current) => !current)} className="grid size-8 place-items-center rounded-full bg-[#303c39] text-[13px] tracking-[0.08em] text-white outline-none transition-colors hover:bg-[#40504b] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">•••</button>
+                  {isMoreOpen ? <div role="menu" className="absolute left-0 top-10 z-20 w-32 overflow-hidden rounded-lg bg-[#2b2b2b] p-1.5 text-[13px] font-bold text-white shadow-xl"><button type="button" role="menuitem" onClick={handleShare} className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left hover:bg-white/10">Chia sẻ <span aria-hidden="true">›</span></button><button type="button" role="menuitem" onClick={handleReport} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-white/10"><span aria-hidden="true">⚑</span>Báo cáo</button></div> : null}
+                </div>
               </div>
-            </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-4">
-              <button type="button" onClick={handlePlayAll} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#00cfe3] px-6 text-[14px] font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">{playlistIsPlaying ? <PauseIcon /> : <PlayIcon />}{playlistIsPlaying ? 'Tạm dừng' : 'Phát tất cả'}</button>
-              <button type="button" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3c4140] px-7 text-[14px] font-bold text-white transition-colors hover:bg-[#4a504e]"><DownloadIcon />Tải về</button>
+              <div className="mt-4 flex flex-wrap items-center gap-4">
+                <button type="button" onClick={handlePlayAll} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#00cfe3] px-6 text-[14px] font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">{playlistIsPlaying ? <PauseIcon /> : <PlayIcon />}{playlistIsPlaying ? 'Tạm dừng' : 'Phát tất cả'}</button>
+                <button type="button" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3c4140] px-7 text-[14px] font-bold text-white transition-colors hover:bg-[#4a504e]"><DownloadIcon />Tải về</button>
+              </div>
             </div>
             <span className="sr-only" aria-live="polite">{shareStatus}</span>
           </div>
@@ -249,12 +283,27 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
           {selectedIds.length > 0 ? (
             <div className="mb-3 flex min-h-8 flex-wrap items-center gap-2"><SelectionCheckbox checked={allSongsSelected} label="Chọn tất cả bài hát" onChange={toggleAllSongs} /><button type="button" className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><span aria-hidden="true">☷</span>Thêm vào playlist</button><button type="button" className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><span aria-hidden="true">♡</span>Thêm vào Yêu thích</button><button type="button" className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><DownloadIcon />Tải về</button></div>
           ) : (
-            <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4"><span>#</span><span>Tiêu đề</span><span className="hidden sm:block">Nghệ sĩ</span><span className="text-right">◷</span><span aria-hidden="true" /></div>
+            <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4"><span>#</span><span>Tiêu đề</span><span className="hidden sm:block">Nghệ sĩ</span><span className="grid size-5 place-items-center justify-self-end text-[18px] leading-none">◷</span><span aria-hidden="true" /></div>
           )}
 
           {visibleSongs.length > 0 ? <ol className="mt-2 space-y-0.5">{visibleSongs.map((song, index) => <PlaylistSongRow key={song.id} song={song} index={index} coverUrl={coverUrl} checked={selectedIds.includes(song.id)} onToggle={() => toggleSong(song.id)} onPlay={() => handlePlaySong(song)} isCurrentTrack={track?.id === song.id} isPlaying={isPlaying && track?.id === song.id} />)}</ol> : <p className="mt-8 rounded-lg bg-[#30443f] px-4 py-5 text-sm text-white/70">Playlist chưa có bài hát.</p>}
           {hasMoreSongs ? <button type="button" onClick={() => setRequest((current) => ({ ...current, visibleCount: current.visibleCount + 30 }))} className="mt-5 inline-flex items-center gap-2 text-[14px] font-bold text-white transition-colors hover:text-[#00d3e5]">Xem thêm <span aria-hidden="true">⌄</span></button> : null}
         </section>
+
+        {collaborators.length > 0 ? (
+          <section aria-labelledby="playlist-collaborators-heading" className="mt-14">
+            <h2 id="playlist-collaborators-heading" className={`${lexend.className} text-[24px] font-bold text-white`}>Kết hợp từ các nghệ sĩ</h2>
+            <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-7">
+              {collaborators.map((artist) => (
+                <article key={artist.id || artist.name} className="min-w-0 text-center">
+                  <ArtistAvatar artist={artist} />
+                  <h3 className="mt-3 truncate text-[14px] font-bold text-white">{artist.name}</h3>
+                  <button type="button" className="mt-2 rounded-full border border-white/35 px-4 py-1.5 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10">Theo dõi</button>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </main>
   );

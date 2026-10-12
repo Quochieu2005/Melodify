@@ -697,6 +697,37 @@
     justify-content: space-between;
     margin-top: 11px;
 }
+.admin-lyrics-preview-player {
+    background: color-mix(in srgb, var(--admin-surface-raised) 78%, #ffcf66 22%);
+    border-bottom: 1px solid var(--admin-border);
+    padding: 15px 20px 17px;
+}
+.admin-lyrics-preview-heading {
+    align-items: center;
+    display: flex;
+    gap: 15px;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.admin-lyrics-preview-heading strong,
+.admin-lyrics-preview-heading span {
+    display: block;
+}
+.admin-lyrics-preview-heading strong {
+    color: var(--admin-text);
+    font-size: 13px;
+}
+.admin-lyrics-preview-heading div > span {
+    color: var(--admin-text-muted);
+    font-size: 12px;
+    margin-top: 3px;
+}
+.admin-lyrics-preview-audio {
+    display: block;
+    height: 34px;
+    max-width: 100%;
+    width: 100%;
+}
 .admin-lyrics-player small {
     color: var(--admin-text-muted);
     display: block;

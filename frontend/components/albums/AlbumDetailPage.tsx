@@ -253,10 +253,10 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
   return (
     <main className="min-h-[calc(100vh-80px)] overflow-x-hidden bg-[#202a28] px-5 pb-20 pt-7 text-white sm:px-8 lg:px-7">
       <div className="w-full max-w-[1582px]">
-        <section className="grid gap-6 lg:grid-cols-[248px_minmax(0,1fr)] lg:items-end">
+        <section className="grid gap-6 lg:grid-cols-[248px_minmax(0,1fr)] lg:items-stretch">
           <div role="img" aria-label={`Ảnh bìa ${album.title}`} className="aspect-square w-full max-w-[248px] rounded-[8px] bg-cover bg-center" style={{ backgroundImage: `url("${coverUrl}")` }} />
 
-          <div className="min-w-0">
+          <div className="flex min-w-0 flex-col lg:h-[248px]">
             <p className="text-[13px] text-white/55">Album&nbsp; · &nbsp;{releaseYear}&nbsp; · &nbsp;{album.songs.length} Bài hát</p>
             <h1 className={`${lexend.className} mt-4 truncate text-[30px] font-bold leading-tight text-white sm:text-[34px]`}>{album.title}</h1>
             {album.artist ? (
@@ -268,35 +268,37 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
               </div>
             ) : null}
 
-            <div className="mt-7 flex items-start gap-3">
-              <button type="button" aria-label={isFavorite ? 'Bỏ yêu thích album' : 'Thêm album vào yêu thích'} aria-pressed={isFavorite} onClick={handleFavorite} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#ff6f91] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
-                <span className="grid size-8 place-items-center text-white"><HeartIcon filled={isFavorite} solid /></span>
-                <span className="text-[11px] font-bold">{favoriteCount}</span>
-              </button>
-              <button type="button" aria-label="Chia sẻ album" onClick={handleShare} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#00d3e5] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
-                <span className="grid size-8 place-items-center text-white"><ShareIcon /></span>
-                <span className="text-[11px] font-bold">{shareCount}</span>
-              </button>
-              <div className="relative">
-                <button type="button" aria-label="Thêm tùy chọn" aria-expanded={isMoreOpen} onClick={() => setIsMoreOpen((current) => !current)} className="grid size-8 place-items-center rounded-full bg-[#303c39] text-[13px] tracking-[0.08em] text-white outline-none transition-colors hover:bg-[#40504b] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">•••</button>
-                {isMoreOpen ? (
-                  <div role="menu" className="absolute left-0 top-10 z-20 w-32 overflow-hidden rounded-lg bg-[#2b2b2b] p-1.5 text-[13px] font-bold text-white shadow-xl">
-                    <button type="button" role="menuitem" onClick={handleShare} className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left hover:bg-white/10">Chia sẻ <span aria-hidden="true">›</span></button>
-                    <button type="button" role="menuitem" onClick={handleReport} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-white/10"><span aria-hidden="true">⚑</span>Báo cáo</button>
-                  </div>
-                ) : null}
+            <div className="mt-auto">
+              <div className="flex items-start gap-3">
+                <button type="button" aria-label={isFavorite ? 'Bỏ yêu thích album' : 'Thêm album vào yêu thích'} aria-pressed={isFavorite} onClick={handleFavorite} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#ff6f91] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
+                  <span className="grid size-8 place-items-center text-white"><HeartIcon filled={isFavorite} solid /></span>
+                  <span className="text-[11px] font-bold">{favoriteCount}</span>
+                </button>
+                <button type="button" aria-label="Chia sẻ album" onClick={handleShare} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#00d3e5] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
+                  <span className="grid size-8 place-items-center text-white"><ShareIcon /></span>
+                  <span className="text-[11px] font-bold">{shareCount}</span>
+                </button>
+                <div className="relative">
+                  <button type="button" aria-label="Thêm tùy chọn" aria-expanded={isMoreOpen} onClick={() => setIsMoreOpen((current) => !current)} className="grid size-8 place-items-center rounded-full bg-[#303c39] text-[13px] tracking-[0.08em] text-white outline-none transition-colors hover:bg-[#40504b] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">•••</button>
+                  {isMoreOpen ? (
+                    <div role="menu" className="absolute left-0 top-10 z-20 w-32 overflow-hidden rounded-lg bg-[#2b2b2b] p-1.5 text-[13px] font-bold text-white shadow-xl">
+                      <button type="button" role="menuitem" onClick={handleShare} className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left hover:bg-white/10">Chia sẻ <span aria-hidden="true">›</span></button>
+                      <button type="button" role="menuitem" onClick={handleReport} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-white/10"><span aria-hidden="true">⚑</span>Báo cáo</button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-4">
-              <button type="button" onClick={handlePlayAll} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#00cfe3] px-6 text-[14px] font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">
-                {albumIsPlaying ? <PauseIcon /> : <PlayIcon />}
-                {albumIsPlaying ? 'Tạm dừng' : 'Phát tất cả'}
-              </button>
-              <button type="button" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3c4140] px-7 text-[14px] font-bold text-white transition-colors hover:bg-[#4a504e]">
-                <DownloadIcon />
-                Tải về
-              </button>
+              <div className="mt-4 flex flex-wrap items-center gap-4">
+                <button type="button" onClick={handlePlayAll} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#00cfe3] px-6 text-[14px] font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">
+                  {albumIsPlaying ? <PauseIcon /> : <PlayIcon />}
+                  {albumIsPlaying ? 'Tạm dừng' : 'Phát tất cả'}
+                </button>
+                <button type="button" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3c4140] px-7 text-[14px] font-bold text-white transition-colors hover:bg-[#4a504e]">
+                  <DownloadIcon />
+                  Tải về
+                </button>
+              </div>
             </div>
             <span className="sr-only" aria-live="polite">{shareStatus}</span>
           </div>
@@ -316,7 +318,7 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
               <span>#</span>
               <span>Tiêu đề</span>
               <span className="hidden sm:block">Nghệ sĩ</span>
-              <span className="text-right">◷</span>
+              <span className="grid size-5 place-items-center justify-self-end text-[18px] leading-none">◷</span>
               <span aria-hidden="true" />
             </div>
           )}

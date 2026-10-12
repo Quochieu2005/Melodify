@@ -11,6 +11,8 @@ export type PlayerTrack = {
   coverUrl: string;
   durationSeconds: number | null;
   audioUrl: string | null;
+  isHot: boolean;
+  previewLimitSeconds: number | null;
 };
 
 type PlayerContextValue = {
@@ -28,18 +30,26 @@ type PlayerContextValue = {
 const PlayerContext = createContext<PlayerContextValue | null>(null);
 
 function toPlayerTrack(song: Song): PlayerTrack {
+  const isHot = Number(song.is_hot ?? 0) === 1;
+  const previewLimitSeconds = isHot ? (song.preview_limit_seconds ?? 30) : null;
+
   return {
     id: song.id,
     title: song.title,
     artist: song.artists?.map((artist) => artist.name).filter(Boolean).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật',
     coverUrl: song.cover_url || '/topics/genre/vpop_600.png',
-    durationSeconds: song.duration_seconds,
+    durationSeconds: song.duration_seconds === null || song.duration_seconds === undefined
+      ? previewLimitSeconds
+      : previewLimitSeconds === null ? song.duration_seconds : Math.min(song.duration_seconds, previewLimitSeconds),
     audioUrl: song.audio_url || song.stream_url || song.preview_url || null,
+    isHot,
+    previewLimitSeconds,
   };
 }
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const trackRef = useRef<PlayerTrack | null>(null);
   const queueRef = useRef<PlayerTrack[]>([]);
   const currentIndexRef = useRef(0);
   const playNextRef = useRef<() => void>(() => undefined);
@@ -49,6 +59,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [duration, setDuration] = useState(0);
 
   const startTrack = useCallback((nextTrack: PlayerTrack) => {
+    trackRef.current = nextTrack;
     setTrack(nextTrack);
     setElapsed(0);
     setDuration(nextTrack.durationSeconds ?? 0);
@@ -93,7 +104,26 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     const handleTimeUpdate = () => setElapsed(Math.floor(audio.currentTime));
     const handleLoadedMetadata = () => {
-      if (Number.isFinite(audio.duration)) setDuration(Math.floor(audio.duration));
+      if (Number.isFinite(audio.duration)) {
+        const limit = trackRef.current?.previewLimitSeconds;
+        setDuration(Math.floor(limit === null || limit === undefined ? audio.duration : Math.min(audio.duration, limit)));
+      }
+    };
+    const handleSeeking = () => {
+      const limit = trackRef.current?.previewLimitSeconds;
+      if (limit !== null && limit !== undefined && audio.currentTime > limit) {
+        audio.currentTime = limit;
+      }
+    };
+    const handleLimitedPlayback = () => {
+      const limit = trackRef.current?.previewLimitSeconds;
+      if (limit === null || limit === undefined || audio.currentTime < limit) return;
+
+      audio.currentTime = limit;
+      audio.pause();
+      setElapsed(limit);
+      setDuration(limit);
+      setIsPlaying(false);
     };
     const handleEnded = () => {
       if (currentIndexRef.current + 1 < queueRef.current.length) playNextRef.current();
@@ -101,13 +131,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('timeupdate', handleLimitedPlayback);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('seeking', handleSeeking);
     audio.addEventListener('ended', handleEnded);
 
     return () => {
       audio.pause();
       audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('timeupdate', handleLimitedPlayback);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('seeking', handleSeeking);
       audio.removeEventListener('ended', handleEnded);
       audioRef.current = null;
     };
@@ -127,6 +161,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (!audio || !track?.audioUrl) return;
 
     if (audio.paused) {
+      if (track.previewLimitSeconds !== null && audio.currentTime >= track.previewLimitSeconds) {
+        audio.currentTime = 0;
+        setElapsed(0);
+      }
       void audio.play()
         .then(() => setIsPlaying(true))
         .catch(() => setIsPlaying(false));
@@ -139,9 +177,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const seek = useCallback((seconds: number) => {
     if (!audioRef.current || !track) return;
 
-    audioRef.current.currentTime = seconds;
-    setElapsed(seconds);
-  }, [track]);
+    const limit = track.previewLimitSeconds ?? duration;
+    const nextTime = Math.min(Math.max(0, seconds), limit);
+    audioRef.current.currentTime = nextTime;
+    setElapsed(nextTime);
+  }, [duration, track]);
 
   const value = useMemo(() => ({
     track,
