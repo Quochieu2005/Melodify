@@ -83,6 +83,7 @@ class AdminResourceRequest extends FormRequest
             ],
             'artists' => [
                 'name' => ['bail', 'required', 'string', 'min:1', 'max:120', new PlainText()],
+                'real_name' => ['nullable', 'string', 'max:160', new PlainText()],
                 'slug' => ['nullable', 'alpha_dash', 'max:140', new PlainText(), Rule::unique('artists', 'slug')->ignore($routeId)],
                 'user_id' => ['nullable', 'string', 'max:64'],
                 'bio' => ['nullable', 'string', 'max:2000', new PlainText()],

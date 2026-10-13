@@ -8,6 +8,7 @@ import { usePlayer } from '@/components/player';
 import { getAlbum, type AlbumDetail, type Song, type SongArtistCredit } from '@/lib/api';
 
 import styles from './AlbumDetailPage.module.css';
+import { ArtistLink, ArtistNames } from '@/components/artists';
 
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const fallbackCover = '/topics/genre/vpop_600.png';
@@ -45,10 +46,8 @@ function formatDuration(seconds: number | null | undefined) {
 }
 
 function songArtists(song: Song) {
-  const artists = song.artists?.map((artist) => artist.name).filter(Boolean) ?? [];
-
-  if (artists.length > 0) return artists.join(', ');
-  return song.artist?.name || 'Nghệ sĩ chưa cập nhật';
+  if (song.artists?.length) return song.artists;
+  return song.artist ? [song.artist] : [];
 }
 
 function collectCollaborators(album: AlbumDetail): SongArtistCredit[] {
@@ -80,7 +79,7 @@ function ArtistAvatar({ artist }: { artist: SongArtistCredit }) {
       role="img"
       aria-label={`Ảnh đại diện ${artist.name}`}
       className="grid aspect-square w-full place-items-center overflow-hidden rounded-full bg-[#565657] text-3xl font-bold text-white/75"
-      style={artist.avatar_url ? { backgroundImage: `url("${artist.avatar_url}")`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}
+      style={artist.avatar_url ? { backgroundImage: `url("${artist.avatar_url}")`, backgroundPosition: 'center 20%', backgroundSize: 'cover' } : undefined}
     >
       {!artist.avatar_url ? artist.name.trim().charAt(0).toUpperCase() : null}
     </div>
@@ -122,7 +121,7 @@ function AlbumSongRow({ song, index, coverUrl, checked, onToggle, onPlay, isCurr
         </div>
         <span className={`truncate text-[14px] font-bold ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{song.title}</span>
       </div>
-      <span className="hidden truncate text-[13px] text-white/65 sm:block">{songArtists(song)}</span>
+      <ArtistNames artists={songArtists(song)} className="hidden truncate text-[13px] text-white/65 sm:block" />
       <span className="text-right text-[13px] text-white/75">{formatDuration(song.duration_seconds)}</span>
       <button type="button" aria-label={`Tùy chọn bài ${song.title}`} className={`${styles.rowMore} grid size-7 place-items-center rounded-full text-white/75 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5]`}><MoreHorizontalIcon /></button>
     </li>
@@ -260,12 +259,12 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
             <p className="text-[13px] text-white/55">Album&nbsp; · &nbsp;{releaseYear}&nbsp; · &nbsp;{album.songs.length} Bài hát</p>
             <h1 className={`${lexend.className} mt-4 truncate text-[30px] font-bold leading-tight text-white sm:text-[34px]`}>{album.title}</h1>
             {album.artist ? (
-              <div className="mt-5 flex items-center gap-2 text-[14px] font-bold text-white">
-                <div role="img" aria-label={`Ảnh đại diện ${album.artist.name}`} className="size-7 rounded-full bg-cover bg-center" style={album.artist.avatar_url ? { backgroundImage: `url("${album.artist.avatar_url}")` } : undefined}>
+              <ArtistLink artist={album.artist} className="mt-5 flex min-w-0 items-center gap-2 text-[14px] font-bold text-white">
+                <div role="img" aria-label={`Ảnh đại diện ${album.artist.name}`} className="size-7 shrink-0 rounded-full bg-cover" style={album.artist.avatar_url ? { backgroundImage: `url("${album.artist.avatar_url}")`, backgroundPosition: 'center 20%' } : undefined}>
                   {!album.artist.avatar_url ? <span className="grid size-full place-items-center rounded-full bg-[#60756f] text-xs">{album.artist.name.charAt(0).toUpperCase()}</span> : null}
                 </div>
                 <span className="truncate">{album.artist.name}</span>
-              </div>
+              </ArtistLink>
             ) : null}
 
             <div className="mt-auto">
@@ -345,8 +344,10 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
             <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-7">
               {collaborators.map((artist) => (
                 <article key={artist.id || artist.name} className="min-w-0 text-center">
+                  <ArtistLink artist={artist} className="block">
                   <ArtistAvatar artist={artist} />
                   <h3 className="mt-3 truncate text-[14px] font-bold text-white">{artist.name}</h3>
+                  </ArtistLink>
                   <button type="button" className="mt-2 rounded-full border border-white/35 px-4 py-1.5 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10">Theo dõi</button>
                 </article>
               ))}

@@ -36,6 +36,112 @@
   scroll-snap-align: start;
 }
 
+.songGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  column-gap: 24px;
+  row-gap: 12px;
+}
+
+@container (max-width: 1220px) {
+  .songGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 20px;
+  }
+}
+
+@container (min-width: 1221px) {
+  .songGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: 20px;
+  }
+}
+
+@container (max-width: 900px) {
+  .songGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 16px;
+  }
+}
+
+@container (max-width: 560px) {
+  .songGrid {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline mandatory;
+    scrollbar-width: none;
+  }
+
+  .songGrid::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.songCard {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.songCardContent {
+  width: 100%;
+  max-width: 260px;
+}
+
+.playingBars {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 24px;
+}
+
+.playingBars span {
+  width: 3px;
+  height: 11px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: songBarBounce 0.85s ease-in-out infinite;
+}
+
+.playingBars span:nth-child(2) {
+  height: 20px;
+  animation-delay: -0.6s;
+}
+
+.playingBars span:nth-child(3) {
+  height: 15px;
+  animation-delay: -0.4s;
+}
+
+.playingBars span:nth-child(4) {
+  height: 8px;
+  animation-delay: -0.2s;
+}
+
+@keyframes songBarBounce {
+  0%, 100% {
+    transform: scaleY(0.55);
+  }
+
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@container (max-width: 560px) {
+  .songCard {
+    flex: 0 0 88%;
+    scroll-snap-align: start;
+  }
+
+  .songCardContent {
+    max-width: none;
+  }
+}
+
 @container (min-width: 560px) {
   .playlistTrack {
     gap: 16px;
@@ -67,6 +173,11 @@
 }
 
 @container (min-width: 1450px) {
+  .songGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    column-gap: 24px;
+  }
+
   .playlistCard {
     flex-basis: calc((100% - 80px) / 5);
   }
@@ -75,5 +186,9 @@
 @media (prefers-reduced-motion: reduce) {
   .coverImage {
     transition: none !important;
+  }
+
+  .playingBars span {
+    animation: none !important;
   }
 }

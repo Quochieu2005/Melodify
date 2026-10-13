@@ -100,6 +100,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::get('/artists/{slug}', [CatalogController::class, 'artist'])->name('artists.show');
     Route::get('/playlists', [CatalogController::class, 'playlists'])->name('playlists.index');
     Route::get('/playlists/{slug}', [CatalogController::class, 'playlist'])->name('playlists.show');
+    Route::get('/home/discovery', [CatalogController::class, 'homeDiscovery'])->name('home.discovery');
     Route::get('/songs', [CatalogController::class, 'songs'])->name('songs.index');
     Route::get('/songs/popular', [CatalogController::class, 'popularSongs'])->name('songs.popular');
     Route::get('/songs/external/{externalId}/audio', [AudioController::class, 'streamExternal'])->name('songs.external-audio');
