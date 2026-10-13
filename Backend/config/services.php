@@ -65,6 +65,12 @@ return [
         'timeout' => env('NCT_API_TIMEOUT', 15),
     ],
 
+    'youtube' => [
+        'base_url' => env('YOUTUBE_API_BASE_URL', 'https://www.googleapis.com/youtube/v3'),
+        'api_key' => env('YOUTUBE_API_KEY'),
+        'timeout' => env('YOUTUBE_API_TIMEOUT', 15),
+    ],
+
     'lrclib' => [
         'base_url' => env('LRCLIB_BASE_URL', 'https://lrclib.net'),
         'user_agent' => env('LRCLIB_USER_AGENT', 'Melodify/1.0 (local development)'),

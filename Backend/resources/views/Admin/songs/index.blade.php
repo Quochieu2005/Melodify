@@ -53,6 +53,7 @@
                         <th>Ảnh</th>
                         <th>Tên bài hát</th>
                         <th>Nghệ sĩ</th>
+                        <th>Quốc gia</th>
                         <th>Album</th>
                         <th>Thể loại</th>
                         <th>Chủ đề</th>
@@ -60,6 +61,7 @@
                         <th>Ngày phát hành</th>
                         <th>Thời lượng</th>
                         <th>Nổi bật</th>
+                        <th>Hot</th>
                         <th>Trạng thái</th>
                         <th class="admin-table-actions">Hành động</th>
                     </tr>
@@ -84,6 +86,7 @@
                                 @if(filled($song->slug))<small class="admin-table-subtext">{{ $song->slug }}</small>@endif
                             </td>
                             <td>{{ $row['artist'] ?: '—' }}</td>
+                            <td>{{ $song->country_code ? config('music.countries.'.$song->country_code, $song->country_code) : '—' }}</td>
                             <td>{{ $row['album'] ?: '—' }}</td>
                             <td>{{ $row['genre'] ?: '—' }}</td>
                             <td>{{ $row['topic'] ?: '—' }}</td>
@@ -91,6 +94,7 @@
                             <td>{{ $song->release_date?->format('d/m/Y') ?: '—' }}</td>
                             <td>{{ $seconds > 0 ? floor($seconds / 60).':'.str_pad((string) ($seconds % 60), 2, '0', STR_PAD_LEFT) : '—' }}</td>
                             <td><span class="ant-tag {{ (int) $song->is_featured === 1 ? 'ant-tag-blue' : 'ant-tag-default' }}">{{ (int) $song->is_featured === 1 ? 'Nổi bật' : 'Thường' }}</span></td>
+                            <td><span class="ant-tag {{ (int) $song->is_hot === 1 ? 'ant-tag-red' : 'ant-tag-default' }}">{{ (int) $song->is_hot === 1 ? 'Hot · 30s' : 'Full' }}</span></td>
                             <td>
                                 @php($statusLabel = ['published' => 'Đã phát hành', 'draft' => 'Bản nháp', 'blocked' => 'Đã chặn'][$song->status] ?? $song->status)
                                 <span class="admin-status-indicator {{ $song->status === 'published' ? 'is-active' : '' }}">
@@ -110,7 +114,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ 12 + ($canDelete ? 1 : 0) }}" class="admin-empty-state">
+                            <td colspan="{{ 14 + ($canDelete ? 1 : 0) }}" class="admin-empty-state">
                                 <strong>Chưa có bài hát</strong>
                                 <span>{{ $search !== '' ? 'Không tìm thấy bài hát phù hợp.' : 'Tạo hoặc nhập bài hát đầu tiên để bắt đầu quản lý.' }}</span>
                                 @if($canCreate)<a href="{{ route('admin.songs.create') }}" class="ant-btn">Thêm bài hát</a>@endif

@@ -29,6 +29,10 @@
                         <span>{{ $audioLabel }}</span>
                         <span class="admin-lyrics-separator">•</span>
                         <span data-audio-state>Đang chờ phát</span>
+                        @if((int) ($song->is_hot ?? 0) === 1)
+                            <span class="admin-lyrics-separator">•</span>
+                            <span class="ant-tag ant-tag-red">HOT · nghe thử 30s</span>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -51,6 +55,18 @@
                         <span data-lyrics-position>00:00</span>
                     </div>
                 </div>
+                @if((int) ($song->is_hot ?? 0) === 1)
+                    <div class="admin-lyrics-preview-player">
+                        <div class="admin-lyrics-preview-heading">
+                            <div>
+                                <strong>Audio nghe thử 30 giây</strong>
+                                <span>Kiểm tra đúng giới hạn dành cho người dùng của bài hot.</span>
+                            </div>
+                            <span class="ant-tag ant-tag-red">HOT · 30s</span>
+                        </div>
+                        <audio id="song-lyrics-preview-audio" class="admin-lyrics-preview-audio" preload="metadata" controls src="{{ $audioUrl }}" aria-label="Audio nghe thử 30 giây {{ $song->title }}"></audio>
+                    </div>
+                @endif
             @else
                 <div class="admin-lyrics-empty admin-lyrics-no-audio">Bài hát chưa có file âm thanh để xem thử lời.</div>
             @endif
@@ -227,6 +243,19 @@
     render();
     editor.addEventListener('input', render);
     if (!audio) return;
+
+    const previewAudio = document.querySelector('#song-lyrics-preview-audio');
+    const previewLimitSeconds = 30;
+    if (previewAudio) {
+        const enforcePreviewLimit = () => {
+            if (previewAudio.currentTime >= previewLimitSeconds) {
+                previewAudio.currentTime = previewLimitSeconds;
+                previewAudio.pause();
+            }
+        };
+        previewAudio.addEventListener('timeupdate', enforcePreviewLimit);
+        previewAudio.addEventListener('seeking', enforcePreviewLimit);
+    }
 
     const updatePlayer = () => {
         const now = formatTime(audio.currentTime);

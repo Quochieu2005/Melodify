@@ -1,4 +1,4 @@
-import { HomeTopicsSection, MorningCarousel, MusicDiscoverySections, RankingSection } from '@/components/home';
+import { AlbumHotSection, HomeTopicsSection, MorningCarousel, MusicDiscoverySections, RankingSection } from '@/components/home';
 
 export default function HomePage() {
   return (
@@ -6,6 +6,7 @@ export default function HomePage() {
       <div className="w-full max-w-[1582px]">
         <MorningCarousel />
         <HomeTopicsSection />
+        <AlbumHotSection />
         <RankingSection />
         <MusicDiscoverySections />
       </div>

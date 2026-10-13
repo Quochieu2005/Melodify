@@ -16,6 +16,7 @@ use App\Models\SongArtist;
 use App\Models\SongGenre;
 use App\Models\SongPlayEvent;
 use App\Models\SongShare;
+use App\Models\SongVideo;
 use App\Models\Topic;
 use App\Models\TopicSong;
 use App\Services\Music\LyricsClient;
@@ -112,14 +113,44 @@ class CatalogController extends Controller
 
     public function playlists(Request $request): JsonResponse
     {
-        return $this->collection(
-            $request,
-            Playlist::class,
-            ['active'],
-            fn (Playlist $playlist): array => $this->playlistData($playlist),
-            'name',
-            fn ($query) => $query->whereIn('visibility', ['public', 'unlisted']),
-        );
+        $topicFilter = trim((string) $request->input('topic', ''));
+        $genreFilter = trim((string) $request->input('genre', ''));
+        $topic = $topicFilter !== '' ? Topic::query()->where('slug', $topicFilter)->first() : null;
+        $genre = $genreFilter !== '' ? Genre::query()->where('slug', $genreFilter)->first() : null;
+        $topicId = $topic !== null ? (string) $topic->getKey() : ($topicFilter !== '' ? $topicFilter : null);
+        $genreId = $genre !== null ? (string) $genre->getKey() : ($genreFilter !== '' ? $genreFilter : null);
+        $perPage = min(max($request->integer('per_page', 20), 1), 50);
+        $query = Playlist::query()
+            ->whereIn('status', ['active'])
+            ->whereIn('visibility', ['public', 'unlisted']);
+
+        if ($request->filled('q')) {
+            $term = trim((string) $request->input('q'));
+            $query->where('name', 'like', "%{$term}%");
+        }
+
+        $items = $query
+            ->orderBy('sort_order')
+            ->orderByDesc('created_at')
+            ->get()
+            ->filter(function (Playlist $playlist) use ($topicId, $genreId): bool {
+                return ($topicId === null || $this->relationContainsId($playlist->topic_ids ?? [], $topicId))
+                    && ($genreId === null || $this->relationContainsId($playlist->genre_ids ?? [], $genreId));
+            })
+            ->values();
+        $page = max($request->integer('page', 1), 1);
+        $total = $items->count();
+        $pageItems = $items->forPage($page, $perPage)->values();
+
+        return response()->json([
+            'data' => $pageItems->map(fn (Playlist $playlist): array => $this->playlistData($playlist))->all(),
+            'meta' => [
+                'current_page' => $page,
+                'last_page' => max((int) ceil($total / $perPage), 1),
+                'per_page' => $perPage,
+                'total' => $total,
+            ],
+        ]);
     }
 
     public function playlist(string $slug): JsonResponse
@@ -154,6 +185,52 @@ class CatalogController extends Controller
         } catch (RuntimeException $exception) {
             return $this->externalApiError($exception);
         }
+    }
+
+    public function videos(Request $request): JsonResponse
+    {
+        $perPage = min(max($request->integer('per_page', 20), 1), 50);
+        $query = SongVideo::query()->where('status', 'active');
+
+        if ($request->filled('q')) {
+            $term = trim((string) $request->input('q'));
+            $query->where(function ($nestedQuery) use ($term): void {
+                $nestedQuery
+                    ->where('title', 'like', "%{$term}%")
+                    ->orWhere('slug', 'like', "%{$term}%");
+            });
+        }
+
+        $items = $query
+            ->orderBy('sort_order')
+            ->orderByDesc('created_at')
+            ->paginate($perPage);
+
+        return response()->json([
+            'data' => collect($items->items())->map(fn (SongVideo $video): array => $this->videoData($video))->values()->all(),
+            'meta' => [
+                'current_page' => $items->currentPage(),
+                'last_page' => $items->lastPage(),
+                'per_page' => $items->perPage(),
+                'total' => $items->total(),
+            ],
+        ]);
+    }
+
+    public function video(string $slug): JsonResponse
+    {
+        $video = SongVideo::query()->where('status', 'active')->where('slug', $slug)->first();
+        if (! $video) {
+            try {
+                $video = SongVideo::query()->where('status', 'active')->find($slug);
+            } catch (\Throwable) {
+                $video = null;
+            }
+        }
+
+        abort_unless($video, 404);
+
+        return response()->json(['data' => $this->videoData($video)]);
     }
 
     public function popularSongs(Request $request): JsonResponse
@@ -554,6 +631,8 @@ class CatalogController extends Controller
 
     private function playlistData(Playlist $playlist, bool $includeSongs = false): array
     {
+        $artists = $this->playlistArtists($playlist);
+
         $data = [
             'id' => (string) $playlist->getKey(),
             'name' => $playlist->name,
@@ -567,6 +646,16 @@ class CatalogController extends Controller
             'sort_order' => (int) ($playlist->sort_order ?? 0),
             'status' => $playlist->status,
             'song_count' => PlaylistSong::query()->where('playlist_id', (string) $playlist->getKey())->count(),
+            'artist_ids' => array_values(array_filter(array_map(
+                'strval',
+                collect((array) ($playlist->artist_ids ?? []))
+                    ->concat(collect($artists)->pluck('id'))
+                    ->unique()
+                    ->all(),
+            ))),
+            'artists' => $artists,
+            'genre_ids' => array_values(array_map('strval', (array) ($playlist->genre_ids ?? []))),
+            'topic_ids' => array_values(array_map('strval', (array) ($playlist->topic_ids ?? []))),
         ];
 
         if ($includeSongs) {
@@ -585,6 +674,104 @@ class CatalogController extends Controller
         return $data;
     }
 
+    /**
+     * A playlist can have its own artist_ids, but imported playlists often only
+     * have artists attached to their songs. Resolve both sources for one
+     * consistent response in the gallery and detail pages.
+     */
+    private function playlistArtists(Playlist $playlist): array
+    {
+        $artistIds = [];
+        $artistNames = [];
+        $seenArtistIds = [];
+        $seenArtistNames = [];
+
+        foreach ((array) ($playlist->artist_ids ?? []) as $artistId) {
+            $normalizedId = trim((string) $artistId);
+            if ($normalizedId !== '' && ! isset($seenArtistIds[$normalizedId])) {
+                $artistIds[] = $normalizedId;
+                $seenArtistIds[$normalizedId] = true;
+            }
+        }
+
+        $playlistSongs = PlaylistSong::query()
+            ->where('playlist_id', (string) $playlist->getKey())
+            ->orderBy('position')
+            ->get();
+
+        foreach ($playlistSongs as $playlistSong) {
+            $songId = (string) $playlistSong->song_id;
+            $song = Song::query()->find($songId);
+
+            foreach (SongArtist::query()->where('song_id', $songId)->get() as $artistLink) {
+                $normalizedId = trim((string) $artistLink->artist_id);
+                if ($normalizedId !== '' && ! isset($seenArtistIds[$normalizedId])) {
+                    $artistIds[] = $normalizedId;
+                    $seenArtistIds[$normalizedId] = true;
+                }
+            }
+
+            foreach (preg_split('/\s*,\s*|\s+feat\.\s+|\s+ft\.\s+/i', trim((string) ($song?->artist_name ?? '')), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $artistName) {
+                $normalizedName = mb_strtolower(trim($artistName));
+                if ($normalizedName !== '' && ! isset($seenArtistNames[$normalizedName])) {
+                    $artistNames[] = trim($artistName);
+                    $seenArtistNames[$normalizedName] = true;
+                }
+            }
+        }
+
+        $artists = [];
+        $seenResolvedNames = [];
+
+        foreach ($artistIds as $artistId) {
+            $artist = Artist::query()->find($artistId);
+            if (! $artist) {
+                continue;
+            }
+
+            $normalizedName = mb_strtolower(trim((string) $artist->name));
+            if ($normalizedName === '' || isset($seenResolvedNames[$normalizedName])) {
+                continue;
+            }
+
+            $artists[] = [
+                'id' => (string) $artist->getKey(),
+                'name' => $artist->name,
+                'slug' => $artist->slug,
+                'avatar_url' => $artist->avatar_url,
+            ];
+            $seenResolvedNames[$normalizedName] = true;
+        }
+
+        foreach ($artistNames as $artistName) {
+            $normalizedName = mb_strtolower(trim($artistName));
+            if ($normalizedName === '' || isset($seenResolvedNames[$normalizedName])) {
+                continue;
+            }
+
+            $artist = Artist::query()->where('name', $artistName)->first();
+            $artists[] = [
+                'id' => $artist ? (string) $artist->getKey() : null,
+                'name' => $artist?->name ?: $artistName,
+                'slug' => $artist?->slug,
+                'avatar_url' => $artist?->avatar_url,
+            ];
+            $seenResolvedNames[$normalizedName] = true;
+        }
+
+        return $artists;
+    }
+
+    private function relationContainsId(mixed $value, string $id): bool
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : [];
+        }
+
+        return in_array($id, array_map('strval', is_array($value) ? $value : []), true);
+    }
+
     private function nctTrackData(array $track): array
     {
         $id = (string) ($track['trackId'] ?? '');
@@ -600,12 +787,52 @@ class CatalogController extends Controller
             'slug' => Str::slug($title) ?: $id,
             'artist' => $artist,
             'duration_seconds' => isset($track['trackTimeMillis']) ? (int) round(((int) $track['trackTimeMillis']) / 1000) : null,
+            'is_hot' => 0,
+            'preview_limit_seconds' => null,
             'audio_url' => filled($id) ? route('api.v1.songs.external-audio', ['externalId' => $id]) : null,
             'stream_url' => filled($id) ? route('api.v1.songs.external-audio', ['externalId' => $id]) : null,
             'preview_url' => null,
             'cover_url' => $track['artworkUrl100'] ?? null,
+            'country_code' => $track['countryCode'] ?? null,
+            'country' => filled($track['countryCode'] ?? null) ? config('music.countries.'.$track['countryCode']) : null,
             'source_url' => $track['trackViewUrl'] ?? null,
             'external_source' => 'nhaccuatui',
+        ];
+    }
+
+    private function videoData(SongVideo $video): array
+    {
+        $streamUrl = $video->video_url;
+        $embedUrl = null;
+        $watchUrl = null;
+        $playerType = 'native';
+        if ($video->source === 'nhaccuatui' && filled($video->slug ?: $video->getKey())) {
+            $streamUrl = route('api.v1.videos.stream', ['slug' => $video->slug ?: $video->getKey()]);
+        }
+        if ($video->source === 'youtube' && filled($video->external_id)) {
+            $watchUrl = 'https://www.youtube.com/watch?v='.$video->external_id;
+            $embedUrl = 'https://www.youtube.com/embed/'.$video->external_id;
+            $streamUrl = $embedUrl;
+            $playerType = 'youtube';
+        }
+
+        return [
+            'id' => (string) $video->getKey(),
+            'slug' => $video->slug,
+            'title' => $video->title,
+            'video_url' => $streamUrl,
+            'embed_url' => $embedUrl,
+            'watch_url' => $watchUrl,
+            'player_type' => $playerType,
+            'youtube_video_id' => $video->source === 'youtube' ? $video->external_id : null,
+            'thumbnail_url' => $video->thumbnail_url,
+            'duration_seconds' => $video->duration_seconds !== null ? (int) $video->duration_seconds : null,
+            'source' => $video->source,
+            'external_id' => $video->external_id,
+            'external_source' => $video->external_source,
+            'source_url' => $video->source_url,
+            'artist_ids' => $video->artist_ids ?? [],
+            'artists' => $video->artists ?? [],
         ];
     }
 
@@ -660,6 +887,12 @@ class CatalogController extends Controller
             ->where('status', 'active')
             ->where('file_type', 'full')
             ->first();
+        $videos = SongVideo::query()
+            ->where('song_id', $songId)
+            ->where('status', 'active')
+            ->orderBy('sort_order')
+            ->orderBy('created_at')
+            ->get();
 
         $externalId = $audio?->external_id;
         if (blank($externalId) && $song->external_source === 'nhaccuatui') {
@@ -687,8 +920,46 @@ class CatalogController extends Controller
                 // Keep the last signed URL when NhacCuaTui is temporarily unavailable.
             }
         }
-        $artistLink = SongArtist::query()->where('song_id', $songId)->first();
-        $artist = $artistLink ? Artist::query()->find($artistLink->artist_id) : null;
+        $artistCredits = SongArtist::query()
+            ->where('song_id', $songId)
+            ->get()
+            ->map(function (SongArtist $artistLink): ?array {
+                $linkedArtist = Artist::query()->find($artistLink->artist_id);
+
+                return $linkedArtist ? [
+                    'id' => (string) $linkedArtist->getKey(),
+                    'name' => $linkedArtist->name,
+                    'slug' => $linkedArtist->slug,
+                    'avatar_url' => $linkedArtist->avatar_url,
+                ] : null;
+            })
+            ->filter()
+            ->values()
+            ->all();
+
+        $creditNames = collect($artistCredits)
+            ->pluck('name')
+            ->map(fn (string $name): string => mb_strtolower(trim($name)))
+            ->all();
+        $artistNames = preg_split('/\s*,\s*/', trim((string) $song->artist_name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        foreach ($artistNames as $artistName) {
+            $normalizedName = mb_strtolower(trim($artistName));
+            if ($normalizedName === '' || in_array($normalizedName, $creditNames, true)) {
+                continue;
+            }
+
+            $matchedArtist = Artist::query()->where('name', trim($artistName))->first();
+            $artistCredits[] = [
+                'id' => $matchedArtist ? (string) $matchedArtist->getKey() : null,
+                'name' => trim($artistName),
+                'slug' => $matchedArtist?->slug,
+                'avatar_url' => $matchedArtist?->avatar_url,
+            ];
+            $creditNames[] = $normalizedName;
+        }
+
+        $primaryArtist = $artistCredits[0] ?? null;
         $album = filled($song->album_id) ? Album::query()->find($song->album_id) : null;
         $genreLink = SongGenre::query()->where('song_id', $songId)->first();
         $genre = $genreLink ? Genre::query()->find($genreLink->genre_id) : null;
@@ -705,10 +976,11 @@ class CatalogController extends Controller
             'external_id' => $song->external_id,
             'title' => $song->title,
             'slug' => $song->slug,
-            'artist' => ($song->artist_name || $artist) ? [
-                'id' => $artist ? (string) $artist->getKey() : null,
-                'name' => $song->artist_name ?: $artist->name,
+            'artist' => ($song->artist_name || $primaryArtist) ? [
+                'id' => $primaryArtist['id'] ?? null,
+                'name' => $song->artist_name ?: $primaryArtist['name'],
             ] : null,
+            'artists' => $artistCredits,
             'album' => $album ? [
                 'id' => (string) $album->getKey(),
                 'title' => $album->title,
@@ -736,12 +1008,18 @@ class CatalogController extends Controller
                 ->all(),
             'duration_seconds' => $song->duration_seconds !== null ? (int) $song->duration_seconds : null,
             'is_featured' => (int) ($song->is_featured ?? 0),
+            'is_hot' => (int) ($song->is_hot ?? 0),
+            'preview_limit_seconds' => (int) ($song->is_hot ?? 0) === 1 ? 30 : null,
             'cover_url' => $song->cover_url,
             'audio_url' => $audioUrl,
             'stream_url' => $audioUrl,
             'preview_url' => $song->preview_url,
+            'video_url' => $videos->first() ? $this->videoData($videos->first())['video_url'] : null,
+            'videos' => $videos->map(fn (SongVideo $video): array => $this->videoData($video))->values()->all(),
             'source_url' => $song->external_url ?: $song->itunes_url,
             'external_source' => $song->external_source,
+            'country_code' => $song->country_code,
+            'country' => filled($song->country_code) ? config('music.countries.'.$song->country_code, $song->country_code) : null,
             'favorite_count' => $this->songFavoriteCount($song),
             'share_count' => $this->songShareCount($song),
             'status' => $song->status,

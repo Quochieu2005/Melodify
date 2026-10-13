@@ -3,11 +3,9 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Models\Genre;
-use App\Models\Song;
-use App\Models\SongGenre;
+use App\Models\Playlist;
 use App\Rules\PlainText;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class GenreController extends MediaCatalogController
@@ -46,8 +44,8 @@ class GenreController extends MediaCatalogController
             // must not be rejected just because another record uses this number.
             'sort_order' => ['required', 'integer', 'min:0', 'max:9999'],
             'status' => ['required', 'in:active,inactive'],
-            'song_ids' => ['nullable', 'array', 'max:500'],
-            'song_ids.*' => ['required', 'string', 'max:64', 'distinct'],
+            'playlist_ids' => ['nullable', 'array', 'max:500'],
+            'playlist_ids.*' => ['required', 'string', 'max:64', 'distinct'],
             'image' => [$item === null ? 'required_without:image_asset_id' : 'nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=4000,max_height=4000'],
             'image_asset_id' => [$item === null ? 'required_without:image' : 'nullable', 'string', 'alpha_dash', 'max:64'],
         ];
@@ -56,37 +54,29 @@ class GenreController extends MediaCatalogController
     public function show(string $id): View
     {
         $item = Genre::query()->findOrFail($id);
-        $songIds = SongGenre::query()->where('genre_id', (string) $item->getKey())->pluck('song_id')->all();
+        $playlists = $this->playlistsForRelation('genre_ids', (string) $item->getKey());
 
         return view('Admin.catalog.show', [
             'item' => $item,
             'resource' => $this->resource,
             'resourceTitle' => $this->title,
-            'songs' => $songIds === []
-                ? Song::query()->where('album_id', '__no_song__')->paginate(20)->withQueryString()
-                : Song::query()
-                    ->whereIn((new Song())->getKeyName(), $songIds)
-                    ->orderBy('title')
-                    ->paginate(20)
-                    ->withQueryString(),
+            'playlists' => $playlists,
         ]);
     }
 
     protected function supplementalFormData(?object $item): array
     {
         return [
-            'songs' => Song::query()->orderBy('title')->limit(500)->get(),
-            'selectedSongIds' => $item === null
-                ? []
-                : SongGenre::query()->where('genre_id', (string) $item->getKey())->pluck('song_id')->map(fn ($id): string => (string) $id)->all(),
+            'playlists' => $this->availablePlaylists(),
+            'selectedPlaylistIds' => $this->selectedPlaylistIds($item, 'genre_ids'),
         ];
     }
 
     protected function preparePayload(Request $request, array $data, ?object $item): array
     {
-        $this->validateSongIds($data['song_ids'] ?? []);
+        $this->validatePlaylistIds($data['playlist_ids'] ?? []);
         $data = parent::preparePayload($request, $data, $item);
-        unset($data['song_ids']);
+        unset($data['playlist_ids']);
 
         return $data;
     }
@@ -94,21 +84,13 @@ class GenreController extends MediaCatalogController
     protected function afterPersist(object $item, array $data): void
     {
         $genreId = (string) $item->getKey();
-        SongGenre::query()->where('genre_id', $genreId)->delete();
-
-        foreach (array_values(array_unique(array_map('strval', $data['song_ids'] ?? []))) as $songId) {
-            SongGenre::query()->create(['song_id' => $songId, 'genre_id' => $genreId]);
-        }
+        $this->syncPlaylistRelation('genre_ids', $genreId, $data['playlist_ids'] ?? []);
     }
 
-    private function validateSongIds(array $songIds): void
+    protected function validationMessages(): array
     {
-        foreach ($songIds as $songId) {
-            if (! Song::query()->find($songId)) {
-                throw ValidationException::withMessages([
-                    'song_ids' => 'Một bài hát đã chọn không còn tồn tại trong kho nhạc.',
-                ]);
-            }
-        }
+        return [
+            'playlist_ids.*.distinct' => 'Một playlist không được chọn trùng.',
+        ];
     }
 }

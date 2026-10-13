@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
+use App\Models\Playlist;
 use App\Rules\PlainText;
 use App\Services\MediaAssetService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -44,6 +46,113 @@ abstract class MediaCatalogController extends Controller
     protected function supplementalFormData(?object $item): array
     {
         return [];
+    }
+
+    /** @return mixed */
+    protected function availablePlaylists()
+    {
+        return Playlist::query()
+            ->orderBy('name')
+            ->limit(500)
+            ->get();
+    }
+
+    /** @return array<int, string> */
+    protected function selectedPlaylistIds(?object $item, string $relationField): array
+    {
+        if ($item === null) {
+            return [];
+        }
+
+        return Playlist::query()
+            ->get()
+            ->filter(fn (Playlist $playlist): bool => $this->relationContainsId($playlist->{$relationField} ?? [], (string) $item->getKey()))
+            ->pluck((new Playlist())->getKeyName())
+            ->map(fn ($id): string => (string) $id)
+            ->values()
+            ->all();
+    }
+
+    protected function playlistsForRelation(string $relationField, string $catalogId): LengthAwarePaginator
+    {
+        $items = Playlist::query()
+            ->get()
+            ->filter(fn (Playlist $playlist): bool => $this->relationContainsId($playlist->{$relationField} ?? [], $catalogId))
+            ->sortBy(fn (Playlist $playlist): string => sprintf('%010d|%s', (int) ($playlist->sort_order ?? 0), mb_strtolower((string) $playlist->name)))
+            ->values();
+        $perPage = 20;
+        $page = max((int) request()->input('page', 1), 1);
+
+        return new LengthAwarePaginator(
+            $items->forPage($page, $perPage)->values(),
+            $items->count(),
+            $perPage,
+            $page,
+            ['path' => request()->url(), 'query' => request()->query()],
+        );
+    }
+
+    /** @param array<int, string> $playlistIds */
+    protected function validatePlaylistIds(array $playlistIds): void
+    {
+        foreach ($playlistIds as $playlistId) {
+            if (! Playlist::query()->find($playlistId)) {
+                throw ValidationException::withMessages([
+                    'playlist_ids' => 'Một playlist đã chọn không còn tồn tại.',
+                ]);
+            }
+        }
+    }
+
+    /** @param array<int, string> $selectedPlaylistIds */
+    protected function syncPlaylistRelation(string $relationField, string $catalogId, array $selectedPlaylistIds): void
+    {
+        $selected = collect($selectedPlaylistIds)
+            ->map(fn ($id): string => (string) $id)
+            ->filter()
+            ->unique()
+            ->flip();
+        Playlist::query()
+            ->get()
+            ->filter(fn (Playlist $playlist): bool => $this->relationContainsId($playlist->{$relationField} ?? [], $catalogId) || $selected->has((string) $playlist->getKey()))
+            ->unique(fn (Playlist $playlist): string => (string) $playlist->getKey())
+            ->each(function (Playlist $playlist) use ($relationField, $catalogId, $selected): void {
+                $ids = collect($this->relationIds($playlist->{$relationField} ?? []))
+                    ->map(fn ($id): string => (string) $id)
+                    ->filter(fn (string $id): bool => $id !== $catalogId)
+                    ->values();
+
+                if ($selected->has((string) $playlist->getKey())) {
+                    $ids->push($catalogId);
+                }
+
+                $nextIds = $ids->unique()->values()->all();
+                $currentIds = collect($this->relationIds($playlist->{$relationField} ?? []))
+                    ->map(fn ($id): string => (string) $id)
+                    ->values()
+                    ->all();
+
+                if ($currentIds !== $nextIds) {
+                    $playlist->setAttribute($relationField, $nextIds);
+                    $playlist->save();
+                }
+            });
+    }
+
+    /** @return array<int, string> */
+    private function relationIds(mixed $value): array
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : [];
+        }
+
+        return array_values(array_map('strval', is_array($value) ? $value : []));
+    }
+
+    private function relationContainsId(mixed $value, string $id): bool
+    {
+        return in_array($id, $this->relationIds($value), true);
     }
 
     /** @param array<string, mixed> $data */

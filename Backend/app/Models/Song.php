@@ -10,12 +10,14 @@ class Song extends BaseModel
         'release_date' => 'date',
         'explicit' => 'boolean',
         'is_featured' => 'integer',
+        'is_hot' => 'integer',
     ];
 
     public function album() { return $this->belongsTo(Album::class, 'album_id'); }
     public function artistCredits() { return $this->hasMany(SongArtist::class, 'song_id'); }
     public function genreLinks() { return $this->hasMany(SongGenre::class, 'song_id'); }
     public function audioFiles() { return $this->hasMany(SongAudioFile::class, 'song_id'); }
+    public function videos() { return $this->hasMany(SongVideo::class, 'song_id'); }
     public function lyrics() { return $this->hasMany(Lyric::class, 'song_id'); }
     public function playlistSongs() { return $this->hasMany(PlaylistSong::class, 'song_id'); }
     public function favorites() { return $this->hasMany(Favorite::class, 'song_id'); }
