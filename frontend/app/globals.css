@@ -38,3 +38,14 @@ body {
   border-radius: 16px !important;
   clip-path: inset(0 round 16px) !important;
 }
+
+.lyric-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.lyric-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

@@ -9,6 +9,7 @@ import { getAlbum, type AlbumDetail, type Song, type SongArtistCredit } from '@/
 
 import styles from './AlbumDetailPage.module.css';
 import { ArtistLink, ArtistNames } from '@/components/artists';
+import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const fallbackCover = '/topics/genre/vpop_600.png';
@@ -119,7 +120,7 @@ function AlbumSongRow({ song, index, coverUrl, checked, onToggle, onPlay, isCurr
             {isCurrentTrack && isPlaying ? <span className={`${styles.equalizer} ${styles.equalizerOnCover}`}><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /></span> : <PlayIcon />}
           </button>
         </div>
-        <span className={`truncate text-[14px] font-bold ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{song.title}</span>
+        <Link href={songPath(song)} onClick={() => recordRecentItem(recentSongItem(song))} className={`truncate text-[14px] font-bold transition-colors hover:text-[#00d3e5] ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{song.title}</Link>
       </div>
       <ArtistNames artists={songArtists(song)} className="hidden truncate text-[13px] text-white/65 sm:block" />
       <span className="text-right text-[13px] text-white/75">{formatDuration(song.duration_seconds)}</span>

@@ -2,19 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useLoginModal } from '@/components/auth/LoginModalProvider';
+import UserAvatar from '@/components/auth/UserAvatar';
 
 function ProfileAvatar({ name, avatarUrl, large = false }: { name: string; avatarUrl: string | null; large?: boolean }) {
-  const initial = name.trim().charAt(0).toUpperCase() || 'M';
-
-  return (
-    <span
-      aria-hidden="true"
-      className={`grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#9a796d] font-bold text-white ${large ? 'size-[96px] text-4xl' : 'size-[72px] text-3xl'}`}
-      style={avatarUrl ? { backgroundImage: `url("${avatarUrl}")`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}
-    >
-      {!avatarUrl ? initial : null}
-    </span>
-  );
+  return <UserAvatar name={name} avatarUrl={avatarUrl} className={large ? 'size-[96px] text-4xl' : 'size-[72px] text-3xl'} fallbackClassName="bg-[#9a796d]" />;
 }
 
 function CollectionIcon({ type }: { type: 'favorite' | 'recent' | 'upload' }) {

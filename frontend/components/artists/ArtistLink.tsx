@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+import { recentArtistItem, recordRecentItem } from '@/lib/recent-history';
+
 export type ArtistReference = {
   id?: string | null;
   name: string;
@@ -18,7 +20,11 @@ export function ArtistLink({ artist, children, className = '' }: { artist: Artis
 
   if (!href) return <span className={className}>{children}</span>;
 
-  return <Link href={href} aria-label={`Xem nghệ sĩ ${artist.name}`} className={linkClassName}>{children}</Link>;
+  return <Link href={href} aria-label={`Xem nghệ sĩ ${artist.name}`} onClick={() => recordRecentArtist(artist)} className={linkClassName}>{children}</Link>;
+}
+
+function recordRecentArtist(artist: ArtistReference) {
+  recordRecentItem(recentArtistItem(artist));
 }
 
 export function ArtistNames({ artists, fallback = 'Nghệ sĩ chưa cập nhật', className = '' }: { artists: ArtistReference[]; fallback?: string; className?: string }) {

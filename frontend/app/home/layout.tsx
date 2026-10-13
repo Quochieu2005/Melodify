@@ -11,7 +11,7 @@ export default function HomeLayout({ children }: { children: ReactNode }) {
   return (
     <LoginModalProvider>
       <PlayerProvider>
-        <div className="min-h-screen bg-[#202a28] pb-[100px] text-white lg:flex">
+        <div className="min-h-screen bg-[#202a28] pb-[74px] text-white lg:flex">
           <Sidebar />
           <div className="min-w-0 flex-1 bg-[#202a28]">
             <Header />

@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
+
+import { recordRecentItem, songPath } from '@/lib/recent-history';
 
 type FavoriteSong = {
   title: string;
@@ -113,7 +116,7 @@ export default function FavoriteSongsPage() {
                 <span className="text-xs text-white/55 group-hover:text-cyan-300">{index + 1}</span>
                 <span className="flex min-w-0 items-center gap-3">
                   <Image src={song.cover} alt="" width={44} height={44} className="size-11 shrink-0 rounded-sm object-cover" />
-                  <span className="truncate text-sm font-bold uppercase text-white/95 group-hover:text-cyan-300">{song.title}</span>
+                  <Link href={songPath({ id: `favorite-${song.title}`, slug: null, title: song.title })} onClick={(event) => { event.stopPropagation(); recordRecentItem({ id: `favorite-${song.title}`, category: 'song', title: song.title, subtitle: song.artist, imageUrl: song.cover, href: songPath({ id: `favorite-${song.title}`, slug: null, title: song.title }), publisher: song.publisher }); }} className="truncate text-sm font-bold uppercase text-white/95 group-hover:text-cyan-300">{song.title}</Link>
                 </span>
                 <span className="truncate text-xs text-white/75">{song.publisher}</span>
                 <span className="truncate text-xs text-white/75">{song.artist}</span>

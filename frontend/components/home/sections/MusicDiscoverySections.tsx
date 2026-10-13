@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
 import { getHomeDiscovery, listPlaylists, type HomeDiscovery, type Playlist, type Song } from '@/lib/api';
+import { recentPlaylistItem, recordRecentItem, recentArtistItem, recentSongItem, songPath } from '@/lib/recent-history';
 
 import styles from './MusicDiscoverySections.module.css';
 
@@ -53,7 +54,7 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
   const href = `/playlist/${encodeURIComponent(playlist.slug || playlist.id)}`;
 
   return (
-    <Link href={href} className={`${styles.playlistCard} group block outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]`}>
+    <Link href={href} onClick={() => recordRecentItem(recentPlaylistItem(playlist))} className={`${styles.playlistCard} group block outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]`}>
       <div className="relative aspect-square overflow-hidden rounded-[10px] bg-[#18211f]">
         <div aria-hidden="true" className={`${styles.coverImage} h-full w-full bg-cover bg-center transition-transform duration-300 ease-out group-hover:scale-[1.045]`} style={{ backgroundImage: `url("${coverUrl}")` }} />
         <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
@@ -85,7 +86,7 @@ function PlayingBars() {
 
 function SongCard({ song, onPlay, isActive, isPlaying }: { song: Song; onPlay: () => void; isActive: boolean; isPlaying: boolean }) {
   const coverUrl = song.cover_url || '/topics/genre/vpop_600.png';
-  const artistCredits = song.artists?.filter((artist) => artist.name.trim()) ?? [];
+  const artistCredits = (song.artists?.length ? song.artists : song.artist ? [song.artist] : []).filter((artist) => artist.name.trim());
   const artistNames = artistCredits.map((artist) => artist.name).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật';
   const publisher = song.publisher || 'Melodify';
 
@@ -97,12 +98,12 @@ function SongCard({ song, onPlay, isActive, isPlaying }: { song: Song; onPlay: (
         <span aria-hidden={!isPlaying} className={`absolute inset-0 grid place-items-center bg-black/30 text-[#00d3e5] transition-opacity ${isPlaying ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>{isPlaying ? <PlayingBars /> : <PlayIcon />}</span>
       </button>
       <span className={`${styles.songCardContent} min-w-0 flex-1 overflow-hidden`}>
-        <button type="button" onClick={onPlay} className={`block w-full max-w-full truncate text-left text-[14px] font-bold leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] ${isActive ? 'text-[#00d3e5]' : 'text-white hover:text-[#00d3e5]'}`} title={song.title}>{song.title}</button>
+        <Link href={songPath(song)} onClick={() => recordRecentItem(recentSongItem(song))} className={`block w-full max-w-full truncate text-left text-[14px] font-bold leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] ${isActive ? 'text-[#00d3e5]' : 'text-white hover:text-[#00d3e5]'}`} title={song.title}>{song.title}</Link>
         <span className="mt-0.5 block max-w-full truncate text-[12px] leading-5 text-[#bdbfbe]" title={artistNames}>
           {artistCredits.length > 0 ? artistCredits.map((artist, index) => (
             <span key={`${artist.id ?? artist.name}-${index}`}>
               {index > 0 ? ', ' : null}
-              {artist.slug || artist.id ? <Link href={`/artist/${encodeURIComponent(artist.slug || artist.id || '')}`} className="transition-colors hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00d3e5]" onClick={(event) => event.stopPropagation()}>{artist.name}</Link> : artist.name}
+              {artist.id ? <Link href={`/artist/${encodeURIComponent(artist.id)}`} className="transition-colors hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00d3e5]" onClick={(event) => { event.stopPropagation(); recordRecentItem(recentArtistItem(artist)); }}>{artist.name}</Link> : artist.name}
             </span>
           )) : artistNames}
         </span>
@@ -148,7 +149,7 @@ function SongSection({ id, title, songs }: SongSectionProps) {
 function TrendingArtistsSection() {
   return (
     <section aria-labelledby="trending-artists-heading" className={`${styles.section} mt-14`}>
-      <SectionHeader id="trending-artists-heading" title="Nghệ Sĩ Thịnh Hành" />
+      <SectionHeader id="trending-artists-heading" title="Nghệ Sĩ Thịnh Hành" href="/trending-artist" />
       <div className={styles.artistTrack}>
         {artists.map((artist) => (
           <article key={artist.name} className={`${styles.artistCard} overflow-hidden rounded-[8px] bg-[#292b2b]`}>

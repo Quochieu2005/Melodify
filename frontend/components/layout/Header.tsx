@@ -7,7 +7,7 @@ import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import SearchBox from './SearchBox';
 import SettingsMenu from './SettingsMenu';
 import { useLoginModal } from '@/components/auth/LoginModalProvider';
-import type { AuthUser } from '@/lib/api';
+import UserAvatar from '@/components/auth/UserAvatar';
 
 const homeRoute = '/home';
 const roundButtonClass =
@@ -61,20 +61,6 @@ function IconButton({ label, children, onClick, disabled = false, className = 's
     <button type="button" aria-label={label} onClick={onClick} disabled={disabled} className={`${roundButtonClass} ${className}`}>
       {children}
     </button>
-  );
-}
-
-function UserAvatar({ user, className = 'size-9' }: { user: AuthUser; className?: string }) {
-  const initial = (user.name || user.username || 'M').trim().charAt(0).toUpperCase();
-
-  return (
-    <span
-      aria-hidden="true"
-      className={`grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#765d8d] font-bold text-white ${className}`}
-      style={user.avatar_url ? { backgroundImage: `url("${user.avatar_url}")`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}
-    >
-      {!user.avatar_url ? initial : null}
-    </span>
   );
 }
 
@@ -168,13 +154,13 @@ export default function Header() {
                 onClick={() => setIsAccountOpen((value) => !value)}
                 className="flex h-12 max-w-[220px] cursor-pointer items-center gap-2 rounded-full bg-white/8 px-2 pr-4 text-left outline-none transition-colors hover:bg-white/14 focus-visible:ring-2 focus-visible:ring-cyan-300"
               >
-                <UserAvatar user={user} />
+                <UserAvatar name={user.name} username={user.username} avatarUrl={user.avatar_url} />
                 <span className="hidden max-w-[140px] truncate text-sm font-bold text-white xl:block">{user.name || user.username}</span>
               </button>
               {isAccountOpen ? (
                 <div className="absolute right-0 top-[58px] w-[330px] rounded-2xl border border-white/10 bg-[#272727] p-3 text-white shadow-[0_18px_45px_rgba(0,0,0,0.42)]">
                   <button type="button" onClick={() => { setIsAccountOpen(false); router.push('/me'); }} className="mt-2 flex min-h-[76px] w-full items-center gap-4 rounded-xl border-b border-white/10 px-4 py-3 text-left outline-none hover:bg-white/8 focus-visible:ring-2 focus-visible:ring-cyan-300">
-                    <UserAvatar user={user} className="size-11" />
+                    <UserAvatar name={user.name} username={user.username} avatarUrl={user.avatar_url} className="size-11" />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold">{user.name || user.username}</p>
                       <p className="truncate text-xs text-white/50">{user.email || user.phone || 'Tài khoản Melodify'}</p>

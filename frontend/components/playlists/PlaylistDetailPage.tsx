@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePlayer } from '@/components/player';
 import { getPlaylist, type Playlist, type Song, type SongArtistCredit } from '@/lib/api';
 import { ArtistLink, ArtistNames } from '@/components/artists';
+import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 
 import styles from '@/components/albums/AlbumDetailPage.module.css';
 
@@ -134,7 +135,7 @@ function PlaylistSongRow({ song, index, coverUrl, checked, onToggle, onPlay, isC
             {isCurrentTrack && isPlaying ? <span className={`${styles.equalizer} ${styles.equalizerOnCover}`}><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /></span> : <PlayIcon />}
           </button>
         </div>
-        <span className={`truncate text-[14px] font-bold ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{song.title}</span>
+        <Link href={songPath(song)} onClick={() => recordRecentItem(recentSongItem(song))} className={`truncate text-[14px] font-bold transition-colors hover:text-[#00d3e5] ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{song.title}</Link>
       </div>
       <ArtistNames artists={songArtists(song)} className="hidden truncate text-[13px] text-white/65 sm:block" />
       <span className="text-right text-[13px] text-white/75">{formatDuration(song.duration_seconds)}</span>

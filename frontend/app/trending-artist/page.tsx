@@ -1,6 +1,10 @@
+'use client';
+
 import Image from 'next/image';
+import Link from 'next/link';
 
 import styles from './trending-artist.module.css';
+import { recordRecentItem, songPath } from '@/lib/recent-history';
 
 type Artist = {
   name: string;
@@ -58,7 +62,7 @@ function ArtistRow({ artist, rank }: { artist: Artist; rank: number }) {
       <span className="w-10 shrink-0 text-xl font-semibold text-white/75 sm:w-12">#{rank}</span>
       <Image src={artist.image} alt="" width={88} height={88} className="size-[72px] shrink-0 rounded-full object-cover sm:size-[88px]" />
       <div className="min-w-0">
-        <h2 className="truncate text-lg font-extrabold sm:text-[22px]">{artist.name}</h2>
+        <h2 className="truncate text-lg font-extrabold transition-colors hover:text-cyan-300 sm:text-[22px]"><Link href={`/artist/${encodeURIComponent(artist.name)}`} onClick={() => recordRecentItem({ id: `trending-artist-${artist.name}`, category: 'artist', title: artist.name, subtitle: 'Nghệ sĩ', imageUrl: artist.image, href: `/artist/${encodeURIComponent(artist.name)}` })}>{artist.name}</Link></h2>
         <p className="mt-2 text-sm font-semibold text-white/75">{artist.followers}</p>
       </div>
     </article>
@@ -95,7 +99,7 @@ export default function TrendingArtistPage() {
                 <article key={song.title} className="flex items-center gap-3">
                   <Image src={song.image} alt="" width={82} height={82} className="size-[82px] shrink-0 rounded-md object-cover" />
                   <div className="min-w-0">
-                    <h3 className="truncate text-sm font-bold text-[#d9d9d9] sm:text-base">{song.title}</h3>
+                    <h3 className="truncate text-sm font-bold text-[#d9d9d9] transition-colors hover:text-cyan-300 sm:text-base"><Link href={songPath({ id: `trending-song-${song.title}`, slug: null, title: song.title })} onClick={() => recordRecentItem({ id: `trending-song-${song.title}`, category: 'song', title: song.title, subtitle: song.artist, imageUrl: song.image, href: songPath({ id: `trending-song-${song.title}`, slug: null, title: song.title }), publisher: song.publisher })}>{song.title}</Link></h3>
                     <p className="mt-1 truncate text-xs text-white/60 sm:text-sm">{song.artist}</p>
                     <p className="mt-2 flex items-center gap-2 truncate text-xs font-semibold text-white/80">
                       <PublisherIcon color={song.publisherColor} />

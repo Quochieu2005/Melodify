@@ -1,8 +1,14 @@
 .page {
   position: relative;
+  overflow-x: hidden;
+  scrollbar-width: none;
   background:
     radial-gradient(ellipse at 50% -25%, rgba(28, 25, 83, 0.45), transparent 53%),
     #151515;
+}
+
+.page::-webkit-scrollbar {
+  display: none;
 }
 
 .heroMark {

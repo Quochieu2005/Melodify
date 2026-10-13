@@ -1,6 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
+
+import { ArtistNames } from '@/components/artists';
+import { songPath } from '@/lib/recent-history';
 
 import { usePlayer } from './PlayerProvider';
 
@@ -60,11 +64,22 @@ function formatTime(seconds: number) {
   return `${String(minutes).padStart(2, '0')}:${remainder}`;
 }
 
+function playerArtists(track: { artist: string; artists?: { id: string | null; name: string; slug?: string | null }[] }) {
+  if (track.artists?.length) return track.artists;
+
+  return track.artist
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name && name !== 'Nghệ sĩ chưa cập nhật')
+    .map((name) => ({ name }));
+}
+
 export default function MusicPlayer() {
   const { track, isPlaying, elapsed, duration, togglePlay, playPrevious, playNext, seek } = usePlayer();
   const [isLiked, setIsLiked] = useState(false);
   const displayDuration = duration || track?.durationSeconds || 0;
   const displayElapsed = Math.min(elapsed, displayDuration);
+  const visibleArtists = track ? playerArtists(track) : [];
 
   return (
     <div className="fixed bottom-0 left-0 z-50 h-[74px] w-full border-t border-white/[0.04] bg-[#242424] px-2.5 py-1.5 text-white shadow-[0_-12px_30px_rgba(0,0,0,0.2)] sm:px-3">
@@ -73,9 +88,9 @@ export default function MusicPlayer() {
           <div className="flex min-w-0 items-center gap-2.5">
             <div role="img" aria-label={`Ảnh bìa ${track.title}`} className="size-[46px] shrink-0 rounded-md bg-cover bg-center" style={{ backgroundImage: `url("${track.coverUrl}")` }} />
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold">{track.title}</p>
+              <Link href={songPath({ id: track.id, slug: track.slug ?? null, title: track.title })} className="block truncate text-sm font-bold transition-colors hover:text-[#00d3e5] focus-visible:text-[#00d3e5] focus-visible:outline-none">{track.title}</Link>
               <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                <p className="truncate text-xs text-white/60">{track.artist}</p>
+                {visibleArtists.length ? <ArtistNames artists={visibleArtists} className="truncate text-xs text-white/60" /> : <span className="truncate text-xs text-white/60">{track.artist}</span>}
                 {track.isHot ? <span className="shrink-0 rounded bg-[#ffcf66]/20 px-1 text-[9px] font-bold text-[#ffcf66]">30s</span> : null}
               </div>
             </div>
