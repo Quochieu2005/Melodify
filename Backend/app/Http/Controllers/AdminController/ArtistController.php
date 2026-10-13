@@ -27,10 +27,11 @@ class ArtistController extends CrudResourceController
         'status' => 'Trạng thái',
     ];
 
-    protected array $searchable = ['name', 'slug', 'bio'];
+    protected array $searchable = ['name', 'real_name', 'slug', 'bio'];
 
     protected array $fields = [
         'name' => ['label' => 'Tên nghệ sĩ', 'required' => true],
+        'real_name' => ['label' => 'Tên thật', 'type' => 'text'],
         'slug' => ['label' => 'Slug', 'required' => true],
         'user_id' => ['label' => 'Tài khoản liên kết', 'type' => 'select', 'placeholder' => 'Không liên kết tài khoản', 'option_model' => User::class, 'option_label' => 'email'],
         'bio' => ['label' => 'Giới thiệu', 'type' => 'textarea'],

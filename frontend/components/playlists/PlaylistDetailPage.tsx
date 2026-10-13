@@ -6,11 +6,13 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
 import { getPlaylist, type Playlist, type Song, type SongArtistCredit } from '@/lib/api';
+import { ArtistLink, ArtistNames } from '@/components/artists';
 
 import styles from '@/components/albums/AlbumDetailPage.module.css';
 
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const fallbackCover = '/topics/genre/vpop_600.png';
+const maxHeaderArtists = 3;
 
 function HeartIcon({ filled, solid = false }: { filled: boolean; solid?: boolean }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true" className={`size-6 ${solid ? 'fill-white stroke-white' : filled ? 'fill-[#ff6f91] stroke-[#ff6f91]' : 'fill-none stroke-current'} stroke-[1.8]`}><path d="M12 20.2 3.8 12A5.2 5.2 0 0 1 11.15 4.65L12 5.5l.85-.85A5.2 5.2 0 0 1 20.2 12L12 20.2Z" strokeLinecap="round" strokeLinejoin="round" /></svg>;
@@ -45,10 +47,21 @@ function formatDuration(seconds: number | null | undefined) {
 }
 
 function songArtists(song: Song) {
-  const artists = song.artists?.map((artist) => artist.name).filter(Boolean) ?? [];
+  const credits: SongArtistCredit[] = song.artists?.length ? song.artists : song.artist ? [song.artist] : [];
+  const linkedNames = credits
+    .filter((artist) => artist.id || artist.slug)
+    .map((artist) => artist.name.trim().toLocaleLowerCase());
 
-  if (artists.length > 0) return artists.join(', ');
-  return song.artist?.name || 'Nghệ sĩ chưa cập nhật';
+  const visibleCredits = credits.filter((artist) => {
+    if (artist.id || artist.slug) return true;
+
+    const normalizedName = artist.name.trim().toLocaleLowerCase();
+    const isCombinedCredit = /\b(?:feat|ft)\.?\b|\s[&x]\s/i.test(normalizedName);
+    return !isCombinedCredit || !linkedNames.some((name) => normalizedName.includes(name));
+  });
+
+  if (visibleCredits.length) return visibleCredits;
+  return song.artist ? [song.artist] : [];
 }
 
 function collectCollaborators(playlist: Playlist): SongArtistCredit[] {
@@ -81,7 +94,7 @@ function ArtistAvatar({ artist }: { artist: SongArtistCredit }) {
       role="img"
       aria-label={`Ảnh đại diện ${artist.name}`}
       className="grid aspect-square w-full place-items-center overflow-hidden rounded-full bg-[#565657] text-3xl font-bold text-white/75"
-      style={artist.avatar_url ? { backgroundImage: `url("${artist.avatar_url}")`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}
+      style={artist.avatar_url ? { backgroundImage: `url("${artist.avatar_url}")`, backgroundPosition: 'center 20%', backgroundSize: 'cover' } : undefined}
     >
       {!artist.avatar_url ? artist.name.trim().charAt(0).toUpperCase() : null}
     </div>
@@ -123,7 +136,7 @@ function PlaylistSongRow({ song, index, coverUrl, checked, onToggle, onPlay, isC
         </div>
         <span className={`truncate text-[14px] font-bold ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{song.title}</span>
       </div>
-      <span className="hidden truncate text-[13px] text-white/65 sm:block">{songArtists(song)}</span>
+      <ArtistNames artists={songArtists(song)} className="hidden truncate text-[13px] text-white/65 sm:block" />
       <span className="text-right text-[13px] text-white/75">{formatDuration(song.duration_seconds)}</span>
       <button type="button" aria-label={`Tùy chọn bài ${song.title}`} className={`${styles.rowMore} grid size-7 place-items-center rounded-full text-white/75 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5]`}><MoreHorizontalIcon /></button>
     </li>
@@ -187,7 +200,8 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
   const playlistIsPlaying = Boolean(track && isPlaying && playlistHasCurrentTrack);
   const coverUrl = playlist.cover_url || fallbackCover;
   const playlistArtists = playlist.artists ?? [];
-  const artistNames = playlistArtists.map((artist) => artist.name).filter(Boolean);
+  const visibleHeaderArtists = playlistArtists.slice(0, maxHeaderArtists);
+  const hasMoreArtists = playlistArtists.length > visibleHeaderArtists.length;
 
   const toggleSong = (songId: string) => {
     setSelectedIds((current) => current.includes(songId) ? current.filter((id) => id !== songId) : [...current, songId]);
@@ -245,6 +259,10 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
     setIsMoreOpen(false);
   };
 
+  const scrollToCollaborators = () => {
+    document.getElementById('playlist-collaborators')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <main className="min-h-[calc(100vh-80px)] overflow-x-hidden bg-[#202a28] px-5 pb-20 pt-7 text-white sm:px-8 lg:px-7">
       <div className="w-full max-w-[1582px]">
@@ -254,8 +272,11 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
           <div className="flex min-w-0 flex-col lg:h-[248px]">
             <p className="text-[13px] text-white/55">Playlist&nbsp; · &nbsp;{songs.length} Bài hát</p>
             <h1 className={`${lexend.className} mt-4 truncate text-[30px] font-bold leading-tight text-white sm:text-[34px]`}>{playlist.name}</h1>
-            {artistNames.length > 0 ? (
-              <p className="mt-4 truncate text-[14px] font-bold text-white">{artistNames.join(', ')}</p>
+            {visibleHeaderArtists.length > 0 ? (
+              <div className="mt-4 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 text-[14px] font-bold text-white">
+                <ArtistNames artists={visibleHeaderArtists} className="min-w-0 truncate" />
+                {hasMoreArtists ? <button type="button" onClick={scrollToCollaborators} className="shrink-0 text-white/60 transition-colors hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">và nhiều hơn</button> : null}
+              </div>
             ) : null}
             {playlist.description ? <p className="mt-3 max-w-2xl text-sm text-white/55">{playlist.description}</p> : null}
 
@@ -291,13 +312,15 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
         </section>
 
         {collaborators.length > 0 ? (
-          <section aria-labelledby="playlist-collaborators-heading" className="mt-14">
+          <section id="playlist-collaborators" aria-labelledby="playlist-collaborators-heading" className="scroll-mt-24 mt-14">
             <h2 id="playlist-collaborators-heading" className={`${lexend.className} text-[24px] font-bold text-white`}>Kết hợp từ các nghệ sĩ</h2>
             <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-7">
               {collaborators.map((artist) => (
                 <article key={artist.id || artist.name} className="min-w-0 text-center">
+                  <ArtistLink artist={artist} className="block">
                   <ArtistAvatar artist={artist} />
                   <h3 className="mt-3 truncate text-[14px] font-bold text-white">{artist.name}</h3>
+                  </ArtistLink>
                   <button type="button" className="mt-2 rounded-full border border-white/35 px-4 py-1.5 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10">Theo dõi</button>
                 </article>
               ))}

@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import type { Song } from '@/lib/api';
 
+const PLAYER_STORAGE_KEY = 'melodify_player_state';
+
 export type PlayerTrack = {
   id: string;
   title: string;
@@ -27,7 +29,25 @@ type PlayerContextValue = {
   seek: (seconds: number) => void;
 };
 
+type PersistedPlayerState = {
+  track: PlayerTrack;
+  queue: PlayerTrack[];
+  currentIndex: number;
+  elapsed: number;
+};
+
 const PlayerContext = createContext<PlayerContextValue | null>(null);
+
+function persistPlayerState(track: PlayerTrack, queue: PlayerTrack[], currentIndex: number, elapsed: number) {
+  if (typeof window === 'undefined') return;
+
+  window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify({
+    track,
+    queue: queue.length > 0 ? queue : [track],
+    currentIndex,
+    elapsed: Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0,
+  } satisfies PersistedPlayerState));
+}
 
 function toPlayerTrack(song: Song): PlayerTrack {
   const isHot = Number(song.is_hot ?? 0) === 1;
@@ -47,12 +67,27 @@ function toPlayerTrack(song: Song): PlayerTrack {
   };
 }
 
+function isPlayerTrack(value: unknown): value is PlayerTrack {
+  if (!value || typeof value !== 'object') return false;
+
+  const track = value as Partial<PlayerTrack>;
+  return typeof track.id === 'string'
+    && typeof track.title === 'string'
+    && typeof track.artist === 'string'
+    && typeof track.coverUrl === 'string'
+    && (typeof track.durationSeconds === 'number' || track.durationSeconds === null)
+    && (typeof track.audioUrl === 'string' || track.audioUrl === null)
+    && typeof track.isHot === 'boolean'
+    && (typeof track.previewLimitSeconds === 'number' || track.previewLimitSeconds === null);
+}
+
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const trackRef = useRef<PlayerTrack | null>(null);
   const queueRef = useRef<PlayerTrack[]>([]);
   const currentIndexRef = useRef(0);
   const playNextRef = useRef<() => void>(() => undefined);
+  const restoredElapsedRef = useRef(0);
   const [track, setTrack] = useState<PlayerTrack | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -60,9 +95,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const startTrack = useCallback((nextTrack: PlayerTrack) => {
     trackRef.current = nextTrack;
+    restoredElapsedRef.current = 0;
     setTrack(nextTrack);
     setElapsed(0);
     setDuration(nextTrack.durationSeconds ?? 0);
+
+    persistPlayerState(nextTrack, queueRef.current, currentIndexRef.current, 0);
 
     const audio = audioRef.current;
     if (!audio || !nextTrack.audioUrl) {
@@ -102,17 +140,36 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     audio.preload = 'metadata';
     audioRef.current = audio;
 
-    const handleTimeUpdate = () => setElapsed(Math.floor(audio.currentTime));
+    const persistCurrentPosition = () => {
+      const currentTrack = trackRef.current;
+      if (currentTrack) {
+        persistPlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime);
+      }
+    };
+    const handleTimeUpdate = () => {
+      setElapsed(Math.floor(audio.currentTime));
+      persistCurrentPosition();
+    };
     const handleLoadedMetadata = () => {
       if (Number.isFinite(audio.duration)) {
         const limit = trackRef.current?.previewLimitSeconds;
-        setDuration(Math.floor(limit === null || limit === undefined ? audio.duration : Math.min(audio.duration, limit)));
+        const nextDuration = Math.floor(limit === null || limit === undefined ? audio.duration : Math.min(audio.duration, limit));
+        setDuration(nextDuration);
+
+        if (restoredElapsedRef.current > 0) {
+          const resumeAt = Math.min(restoredElapsedRef.current, nextDuration);
+          audio.currentTime = resumeAt;
+          setElapsed(Math.floor(resumeAt));
+          restoredElapsedRef.current = 0;
+          persistCurrentPosition();
+        }
       }
     };
     const handleSeeking = () => {
       const limit = trackRef.current?.previewLimitSeconds;
       if (limit !== null && limit !== undefined && audio.currentTime > limit) {
         audio.currentTime = limit;
+        persistCurrentPosition();
       }
     };
     const handleLimitedPlayback = () => {
@@ -124,6 +181,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setElapsed(limit);
       setDuration(limit);
       setIsPlaying(false);
+      persistCurrentPosition();
     };
     const handleEnded = () => {
       if (currentIndexRef.current + 1 < queueRef.current.length) playNextRef.current();
@@ -136,6 +194,51 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     audio.addEventListener('seeking', handleSeeking);
     audio.addEventListener('ended', handleEnded);
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') persistCurrentPosition();
+    };
+
+    window.addEventListener('pagehide', persistCurrentPosition);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    if (typeof window !== 'undefined') {
+      try {
+        const savedState = JSON.parse(window.localStorage.getItem(PLAYER_STORAGE_KEY) || 'null') as Partial<PersistedPlayerState> | null;
+        const savedTrack = savedState?.track;
+        const savedQueue = Array.isArray(savedState?.queue) ? savedState.queue.filter(isPlayerTrack) : [];
+
+        if (isPlayerTrack(savedTrack)) {
+          const restoredQueue = savedQueue.length > 0 ? savedQueue : [savedTrack];
+          const restoredIndex = typeof savedState?.currentIndex === 'number'
+            ? Math.min(Math.max(0, savedState.currentIndex), restoredQueue.length - 1)
+            : 0;
+          const restoredTrack = restoredQueue[restoredIndex] || savedTrack;
+          const savedElapsed = typeof savedState?.elapsed === 'number' && Number.isFinite(savedState.elapsed)
+            ? Math.max(0, savedState.elapsed)
+            : 0;
+          const restoreLimit = restoredTrack.previewLimitSeconds ?? restoredTrack.durationSeconds;
+          const restoredElapsed = restoreLimit === null || restoreLimit === undefined
+            ? savedElapsed
+            : Math.min(savedElapsed, restoreLimit);
+
+          queueRef.current = restoredQueue;
+          currentIndexRef.current = restoredIndex;
+          trackRef.current = restoredTrack;
+          restoredElapsedRef.current = restoredElapsed;
+          setTrack(restoredTrack);
+          setElapsed(Math.floor(restoredElapsed));
+          setDuration(restoredTrack.durationSeconds ?? 0);
+
+          if (restoredTrack.audioUrl) {
+            audio.src = restoredTrack.audioUrl;
+            audio.load();
+          }
+        }
+      } catch {
+        window.localStorage.removeItem(PLAYER_STORAGE_KEY);
+      }
+    }
+
     return () => {
       audio.pause();
       audio.removeEventListener('timeupdate', handleTimeUpdate);
@@ -143,6 +246,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('seeking', handleSeeking);
       audio.removeEventListener('ended', handleEnded);
+      window.removeEventListener('pagehide', persistCurrentPosition);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       audioRef.current = null;
     };
   }, [playNext]);
@@ -164,6 +269,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (track.previewLimitSeconds !== null && audio.currentTime >= track.previewLimitSeconds) {
         audio.currentTime = 0;
         setElapsed(0);
+        persistPlayerState(track, queueRef.current, currentIndexRef.current, 0);
       }
       void audio.play()
         .then(() => setIsPlaying(true))
@@ -181,6 +287,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const nextTime = Math.min(Math.max(0, seconds), limit);
     audioRef.current.currentTime = nextTime;
     setElapsed(nextTime);
+    persistPlayerState(track, queueRef.current, currentIndexRef.current, nextTime);
   }, [duration, track]);
 
   const value = useMemo(() => ({

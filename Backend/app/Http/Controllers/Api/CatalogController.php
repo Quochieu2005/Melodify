@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Album;
 use App\Models\Artist;
+use App\Models\ArtistFollower;
 use App\Models\Banner;
 use App\Models\Genre;
 use App\Models\Favorite;
@@ -24,6 +25,7 @@ use App\Services\Music\NhacCuaTuiClient;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -185,6 +187,73 @@ class CatalogController extends Controller
         } catch (RuntimeException $exception) {
             return $this->externalApiError($exception);
         }
+    }
+
+    public function homeDiscovery(): JsonResponse
+    {
+        $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
+        $fullAudioBySong = SongAudioFile::query()
+            ->where('status', 'active')
+            ->where('file_type', 'full')
+            ->get()
+            ->filter(fn (SongAudioFile $audio): bool => ! (bool) $audio->premium_only)
+            ->keyBy(fn (SongAudioFile $audio): string => (string) $audio->song_id);
+
+        $freeFullSongs = Song::query()
+            ->where('status', 'published')
+            ->get()
+            ->filter(fn (Song $song): bool => $fullAudioBySong->has((string) $song->getKey()))
+            ->values();
+
+        $singleCandidates = $freeFullSongs
+            ->filter(fn (Song $song): bool => (int) ($song->is_hot ?? 0) === 0)
+            ->sortByDesc(fn (Song $song): int => (int) ($song->release_date?->getTimestamp() ?? $song->created_at?->getTimestamp() ?? 0))
+            ->take(50)
+            ->values();
+
+        $tiktokPlaylists = Playlist::query()
+            ->where('status', 'active')
+            ->whereIn('visibility', ['public', 'unlisted'])
+            ->get()
+            ->filter(function (Playlist $playlist): bool {
+                $searchable = Str::lower(trim((string) $playlist->name.' '.(string) $playlist->slug));
+
+                return Str::contains($searchable, 'tiktok');
+            })
+            ->values();
+        $tiktokPlaylistIds = $tiktokPlaylists->map(fn (Playlist $playlist): string => (string) $playlist->getKey())->all();
+        $tiktokSongIds = empty($tiktokPlaylistIds)
+            ? []
+            : PlaylistSong::query()
+                ->whereIn('playlist_id', $tiktokPlaylistIds)
+                ->get()
+                ->pluck('song_id')
+                ->map(fn (mixed $songId): string => (string) $songId)
+                ->unique()
+                ->flip()
+                ->all();
+        $tiktokSongs = $freeFullSongs
+            ->filter(fn (Song $song): bool => isset($tiktokSongIds[(string) $song->getKey()]))
+            ->values();
+
+        return response()->json([
+            'data' => [
+                'single_new_releases' => $this->dailySongOrder($singleCandidates, $dateKey.'|single')
+                    ->take(15)
+                    ->map(fn (Song $song): array => $this->localSongData($song))
+                    ->values()
+                    ->all(),
+                'tiktok_top_mix' => $this->dailySongOrder($tiktokSongs, $dateKey.'|tiktok')
+                    ->take(15)
+                    ->map(fn (Song $song): array => $this->localSongData($song))
+                    ->values()
+                    ->all(),
+            ],
+            'meta' => [
+                'date' => $dateKey,
+                'refresh_hours' => 24,
+            ],
+        ]);
     }
 
     public function videos(Request $request): JsonResponse
@@ -591,9 +660,11 @@ class CatalogController extends Controller
 
     private function artistData(Artist $artist, bool $includeFeaturedSongs = false): array
     {
+        $artistId = (string) $artist->getKey();
         $data = [
-            'id' => (string) $artist->getKey(),
+            'id' => $artistId,
             'name' => $artist->name,
+            'real_name' => $this->artistRealName($artist),
             'slug' => $artist->slug,
             'bio' => $artist->bio,
             'avatar_url' => $artist->avatar_url,
@@ -605,28 +676,106 @@ class CatalogController extends Controller
             return $data;
         }
 
-        $songIds = SongArtist::query()
-            ->where('artist_id', (string) $artist->getKey())
+        $linkedSongIds = SongArtist::query()
+            ->where('artist_id', $artistId)
             ->pluck('song_id')
             ->map(fn ($id): string => (string) $id)
             ->values()
             ->all();
+        $createdSongIds = Song::query()
+            ->where('created_by_artist_id', $artistId)
+            ->pluck((new Song())->getKeyName())
+            ->map(fn ($id): string => (string) $id)
+            ->values()
+            ->all();
+        $songIds = collect($linkedSongIds)
+            ->concat($createdSongIds)
+            ->unique()
+            ->values()
+            ->all();
 
-        $data['featured_songs'] = $songIds === []
+        $songs = $songIds === []
             ? []
             : Song::query()
                 ->whereIn((new Song())->getKeyName(), $songIds)
-                ->where('is_featured', 1)
-                ->where('status', 'published')
-                ->orderByDesc('release_date')
-                ->limit(20)
+                ->whereIn('status', ['published', 'draft'])
+                ->orderBy('title')
                 ->get()
                 ->map(fn (Song $song): array => $this->localSongData($song))
                 ->values()
                 ->all();
+
+        $data['songs'] = $songs;
+        $data['song_count'] = count($songs);
+        $data['featured_songs'] = collect($songs)
+            ->filter(fn (array $song): bool => (int) ($song['is_featured'] ?? 0) === 1)
+            ->take(20)
+            ->values()
+            ->all();
         $data['featured_song_count'] = count($data['featured_songs']);
+        $data['followers_count'] = ArtistFollower::query()
+            ->where('artist_id', $artistId)
+            ->count();
+
+        $data['albums'] = Album::query()
+            ->where('status', 'published')
+            ->get()
+            ->filter(fn (Album $album): bool => (string) ($album->artist_id ?? '') === $artistId
+                || in_array($artistId, array_map('strval', (array) ($album->artist_ids ?? [])), true))
+            ->map(fn (Album $album): array => $this->albumData($album))
+            ->values()
+            ->all();
+
+        $playlistIdsFromSongs = $songIds === []
+            ? []
+            : PlaylistSong::query()
+                ->whereIn('song_id', $songIds)
+                ->pluck('playlist_id')
+                ->map(fn ($id): string => (string) $id)
+                ->unique()
+                ->values()
+                ->all();
+
+        $data['playlists'] = Playlist::query()
+            ->where('status', 'active')
+            ->whereIn('visibility', ['public', 'unlisted'])
+            ->get()
+            ->filter(fn (Playlist $playlist): bool => in_array($artistId, array_map('strval', (array) ($playlist->artist_ids ?? [])), true)
+                || in_array((string) $playlist->getKey(), $playlistIdsFromSongs, true))
+            ->map(fn (Playlist $playlist): array => $this->playlistData($playlist))
+            ->values()
+            ->all();
+
+        $data['videos'] = SongVideo::query()
+            ->where('status', 'active')
+            ->get()
+            ->filter(fn (SongVideo $video): bool => in_array($artistId, array_map('strval', (array) ($video->artist_ids ?? [])), true)
+                || in_array((string) ($video->song_id ?? ''), $songIds, true))
+            ->map(fn (SongVideo $video): array => $this->videoData($video))
+            ->values()
+            ->all();
 
         return $data;
+    }
+
+    private function artistRealName(Artist $artist): ?string
+    {
+        $realName = trim((string) ($artist->real_name ?? $artist->full_name ?? ''));
+        if ($realName !== '') {
+            return $realName;
+        }
+
+        $bio = trim((string) ($artist->bio ?? ''));
+        if ($bio === '') {
+            return null;
+        }
+
+        $firstPart = trim((string) (preg_split('/\s*[,،]\s*/u', $bio, 2)[0] ?? ''));
+        if ($firstPart === '' || mb_strlen($firstPart) > 160 || preg_match('/^(ca sĩ|nghệ sĩ|nhóm|ban nhạc)\b/iu', $firstPart)) {
+            return null;
+        }
+
+        return $firstPart;
     }
 
     private function playlistData(Playlist $playlist, bool $includeSongs = false): array
@@ -836,6 +985,13 @@ class CatalogController extends Controller
         ];
     }
 
+    private function dailySongOrder(Collection $songs, string $seed): Collection
+    {
+        return $songs
+            ->sortBy(fn (Song $song): string => hash('sha256', $seed.'|'.(string) $song->getKey()))
+            ->values();
+    }
+
     private function lyricsData(array $track, ?array $lyrics): array
     {
         if (! $lyrics) {
@@ -981,6 +1137,10 @@ class CatalogController extends Controller
                 'name' => $song->artist_name ?: $primaryArtist['name'],
             ] : null,
             'artists' => $artistCredits,
+            'publisher' => $song->createdByAdmin?->name ?: $song->createdByArtist?->name ?: 'Melodify',
+            'release_date' => $song->release_date?->toDateString(),
+            'premium_only' => (bool) ($audio?->premium_only ?? false),
+            'has_full_audio' => $audio !== null,
             'album' => $album ? [
                 'id' => (string) $album->getKey(),
                 'title' => $album->title,

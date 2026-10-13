@@ -5,6 +5,8 @@ export type AlbumCard = {
   id: string;
   title: string;
   artist: string;
+  artistId: string | null;
+  artistSlug: string | null;
   coverUrl: string;
   slug: string | null;
 };
@@ -34,6 +36,8 @@ export function albumRecordToCard(record: AlbumRecord, index: number): AlbumCard
     id: record.id,
     title: record.title,
     artist: record.artist?.name || 'Nghệ sĩ chưa cập nhật',
+    artistId: record.artist?.id ?? record.artist_id,
+    artistSlug: record.artist?.slug ?? null,
     coverUrl: record.cover_url || fallbackCovers[index % fallbackCovers.length],
     slug: record.slug,
   };

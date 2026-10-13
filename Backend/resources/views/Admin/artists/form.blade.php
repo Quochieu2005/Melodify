@@ -50,6 +50,13 @@
                         </div>
 
                         <div class="admin-form-group">
+                            <label class="admin-form-label" for="artist-real-name">Tên thật</label>
+                            <input id="artist-real-name" name="real_name" value="{{ old('real_name', $item?->real_name) }}" maxlength="160" class="ant-input admin-form-input @error('real_name') is-invalid @enderror" placeholder="Ví dụ: Nguyễn Minh Hằng">
+                            <p class="admin-field-help">Tên pháp lý của nghệ sĩ, dùng trong phần thông tin chi tiết.</p>
+                            @error('real_name')<p class="admin-field-error">{{ $message }}</p>@enderror
+                        </div>
+
+                        <div class="admin-form-group">
                             <label class="admin-form-label" for="artist-slug">Slug <span>*</span></label>
                             <div class="admin-slug-input-row">
                                 <input id="artist-slug" name="slug" value="{{ old('slug', $item?->slug) }}" maxlength="140" pattern="[A-Za-z0-9_-]+" class="ant-input admin-form-input @error('slug') is-invalid @enderror" placeholder="tu-dong-theo-ten" required>

@@ -15,6 +15,10 @@ export type Song = {
   duration_seconds: number | null;
   artist: { id: string | null; name: string } | null;
   artists?: SongArtistCredit[];
+  publisher?: string | null;
+  release_date?: string | null;
+  premium_only?: boolean;
+  has_full_audio?: boolean;
   album?: { id: string; title: string } | null;
   genre?: { id: string; name: string } | null;
   topics?: { id: string; name: string; type: string | null }[];
@@ -62,14 +66,31 @@ export type Playlist = {
   songs?: Song[];
 };
 
+export type HomeDiscovery = {
+  single_new_releases: Song[];
+  tiktok_top_mix: Song[];
+};
+
 export type Artist = {
   id: string;
   name: string;
+  real_name?: string | null;
   slug: string | null;
   bio: string | null;
   avatar_url: string | null;
   verified: boolean;
   status: string;
+};
+
+export type ArtistDetail = Artist & {
+  songs?: Song[];
+  featured_songs?: Song[];
+  song_count?: number;
+  featured_song_count?: number;
+  followers_count?: number;
+  albums?: AlbumRecord[];
+  playlists?: Playlist[];
+  videos?: SongVideo[];
 };
 
 export type SongArtistCredit = {
@@ -447,6 +468,10 @@ export async function listPlaylists(options: { query?: string; type?: string; to
   return apiFetch<PaginatedResponse<Playlist>>(`/v1/playlists${query ? `?${query}` : ''}`);
 }
 
+export async function getHomeDiscovery() {
+  return apiFetch<{ data: HomeDiscovery; meta: { date: string; refresh_hours: number } }>('/v1/home/discovery');
+}
+
 export async function listAlbums(options: { query?: string; page?: number; perPage?: number } = {}) {
   const params = new URLSearchParams();
 
@@ -484,5 +509,5 @@ export async function listArtists(options: { query?: string; perPage?: number } 
 }
 
 export async function getArtist(artistId: string) {
-  return apiFetch<{ data: Artist }>(`/v1/artists/${encodeURIComponent(artistId)}`);
+  return apiFetch<{ data: ArtistDetail }>(`/v1/artists/${encodeURIComponent(artistId)}`);
 }

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 
 import { listAlbums } from '@/lib/api';
 import { albumRecordToCard, pickDailyAlbums, type AlbumCard } from '@/lib/album-data';
+import { ArtistLink } from '@/components/artists';
 import { vietnamDateKey } from '@/lib/topic-data';
 import styles from './AlbumGrid.module.css';
 
@@ -17,19 +18,19 @@ function PlayIcon() {
 
 function AlbumCard({ album }: { album: AlbumCard }) {
   return (
-    <Link href={`/album/${encodeURIComponent(album.slug ?? album.id)}`} aria-label={`Xem album ${album.title}`} className="group block w-full max-w-[240px] min-w-0">
-      <article>
-      <div className="relative aspect-square w-full overflow-hidden rounded-[8px] bg-[#30443f]">
-        <div role="img" aria-label={`Ảnh bìa ${album.title}`} className="h-full w-full bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.04]" style={{ backgroundImage: `url("${album.coverUrl}")` }} />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-70" />
-        <span aria-hidden="true" className="absolute bottom-3 right-3 grid size-10 translate-y-1 place-items-center rounded-full bg-[#00d3e5] text-[#07363a] opacity-0 shadow-lg transition-all group-hover:translate-y-0 group-hover:opacity-100">
-          <PlayIcon />
-        </span>
-      </div>
-      <h3 className="mt-3 truncate text-[14px] font-bold leading-5 text-white">{album.title}</h3>
-      <p className="mt-0.5 truncate text-[13px] text-white/65">{album.artist}</p>
-      </article>
-    </Link>
+    <article className="w-full max-w-[240px] min-w-0">
+      <Link href={`/album/${encodeURIComponent(album.slug ?? album.id)}`} aria-label={`Xem album ${album.title}`} className="group block outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] focus-visible:ring-offset-4 focus-visible:ring-offset-[#202a28]">
+        <div className="relative aspect-square w-full overflow-hidden rounded-[8px] bg-[#30443f]">
+          <div role="img" aria-label={`Ảnh bìa ${album.title}`} className="h-full w-full bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.04]" style={{ backgroundImage: `url("${album.coverUrl}")` }} />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-70" />
+          <span aria-hidden="true" className="absolute bottom-3 right-3 grid size-10 translate-y-1 place-items-center rounded-full bg-[#00d3e5] text-[#07363a] opacity-0 shadow-lg transition-all group-hover:translate-y-0 group-hover:opacity-100">
+            <PlayIcon />
+          </span>
+        </div>
+        <h3 className="mt-3 truncate text-[14px] font-bold leading-5 text-white">{album.title}</h3>
+      </Link>
+      <ArtistLink artist={{ id: album.artistId, name: album.artist, slug: album.artistSlug }} className="mt-0.5 block truncate text-[13px] text-white/65">{album.artist}</ArtistLink>
+    </article>
   );
 }
 

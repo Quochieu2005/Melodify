@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { getGenre, getTopic, listPlaylists, type GenreRecord, type Playlist, type TopicRecord } from '@/lib/api';
+import { ArtistNames } from '@/components/artists';
 import styles from '@/components/home/sections/AlbumGrid.module.css';
 
 const fallbackCover = '/topics/genre/vpop_600.png';
@@ -41,22 +42,23 @@ function playlistPath(playlist: Playlist) {
 function PlaylistCard({ playlist, fallbackImage }: { playlist: Playlist; fallbackImage: string }) {
   const coverUrl = playlist.cover_url || fallbackImage;
   const artistNames = playlist.artists?.map((artist) => artist.name).filter(Boolean) ?? [];
-  const playlistSubtitle = artistNames.length > 0
-    ? artistNames.join(', ')
-    : playlist.type_custom || playlist.type || 'Playlist';
 
   return (
-    <Link
-      href={playlistPath(playlist)}
-      aria-label={`Xem playlist ${playlist.name}`}
-      className="group block w-full max-w-[205px] min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] focus-visible:ring-offset-4 focus-visible:ring-offset-[#202a28]"
-    >
-      <article>
+    <article className="w-full max-w-[205px] min-w-0">
+      <Link
+        href={playlistPath(playlist)}
+        aria-label={`Xem playlist ${playlist.name}`}
+        className="group block outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] focus-visible:ring-offset-4 focus-visible:ring-offset-[#202a28]"
+      >
         <div role="img" aria-label={`Ảnh bìa ${playlist.name}`} className="aspect-square w-full overflow-hidden rounded-[8px] bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.02]" style={{ backgroundImage: `url("${coverUrl}")` }} />
         <h2 className="mt-3 truncate text-[14px] font-bold leading-5 text-white">{playlist.name}</h2>
-        <p className="mt-0.5 truncate text-[13px] text-white/65">{playlistSubtitle}</p>
-      </article>
-    </Link>
+      </Link>
+      {artistNames.length > 0 ? (
+        <ArtistNames artists={playlist.artists ?? []} className="mt-0.5 block truncate text-[13px] text-white/65" />
+      ) : (
+        <p className="mt-0.5 truncate text-[13px] text-white/65">{playlist.type_custom || playlist.type || 'Playlist'}</p>
+      )}
+    </article>
   );
 }
 

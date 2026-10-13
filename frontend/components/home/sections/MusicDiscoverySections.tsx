@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { Lexend } from 'next/font/google';
 import { useEffect, useMemo, useState } from 'react';
 
-import { listPlaylists, type Playlist } from '@/lib/api';
+import { usePlayer } from '@/components/player';
+import { getHomeDiscovery, listPlaylists, type HomeDiscovery, type Playlist, type Song } from '@/lib/api';
 
 import styles from './MusicDiscoverySections.module.css';
 
@@ -14,6 +15,12 @@ type PlaylistSectionProps = {
   id: string;
   title: string;
   playlists: Playlist[];
+};
+
+type SongSectionProps = {
+  id: string;
+  title: string;
+  songs: Song[];
 };
 
 const artists = [
@@ -68,6 +75,76 @@ function PlaylistSection({ id, title, playlists }: PlaylistSectionProps) {
   );
 }
 
+function ShuffleIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 fill-none stroke-current stroke-[2]"><path d="M17 3h4v4M3 7h3c4.5 0 5.5 10 10 10h5M17 21h4v-4M3 17h3c1.3 0 2.2-.7 3-1.7M14 8.7c.7-.9 1.7-1.7 3-1.7h4" /></svg>;
+}
+
+function PlayingBars() {
+  return <span aria-label="Đang phát" className={styles.playingBars}><span /><span /><span /><span /></span>;
+}
+
+function SongCard({ song, onPlay, isActive, isPlaying }: { song: Song; onPlay: () => void; isActive: boolean; isPlaying: boolean }) {
+  const coverUrl = song.cover_url || '/topics/genre/vpop_600.png';
+  const artistCredits = song.artists?.filter((artist) => artist.name.trim()) ?? [];
+  const artistNames = artistCredits.map((artist) => artist.name).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật';
+  const publisher = song.publisher || 'Melodify';
+
+  return (
+    <article className={`${styles.songCard} group flex min-w-0 items-center gap-3 rounded-[8px] p-2 text-left transition-colors hover:bg-white/[0.05] ${isActive ? 'bg-white/[0.08]' : ''}`}>
+      <button type="button" onClick={onPlay} aria-label={`Phát ${song.title}`} className="relative size-[72px] shrink-0 overflow-hidden rounded-[4px] bg-[#18211f] outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
+        <span aria-hidden="true" className="absolute inset-0 bg-cover bg-center transition-transform duration-300 ease-out group-hover:scale-[1.06]" style={{ backgroundImage: `url("${coverUrl}")` }} />
+        <span aria-hidden="true" className="absolute inset-0 bg-black/10" />
+        <span aria-hidden={!isPlaying} className={`absolute inset-0 grid place-items-center bg-black/30 text-[#00d3e5] transition-opacity ${isPlaying ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>{isPlaying ? <PlayingBars /> : <PlayIcon />}</span>
+      </button>
+      <span className={`${styles.songCardContent} min-w-0 flex-1 overflow-hidden`}>
+        <button type="button" onClick={onPlay} className={`block w-full max-w-full truncate text-left text-[14px] font-bold leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] ${isActive ? 'text-[#00d3e5]' : 'text-white hover:text-[#00d3e5]'}`} title={song.title}>{song.title}</button>
+        <span className="mt-0.5 block max-w-full truncate text-[12px] leading-5 text-[#bdbfbe]" title={artistNames}>
+          {artistCredits.length > 0 ? artistCredits.map((artist, index) => (
+            <span key={`${artist.id ?? artist.name}-${index}`}>
+              {index > 0 ? ', ' : null}
+              {artist.slug || artist.id ? <Link href={`/artist/${encodeURIComponent(artist.slug || artist.id || '')}`} className="transition-colors hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00d3e5]" onClick={(event) => event.stopPropagation()}>{artist.name}</Link> : artist.name}
+            </span>
+          )) : artistNames}
+        </span>
+        <span className="mt-0.5 flex min-w-0 max-w-full items-center gap-1 truncate text-[11px] uppercase leading-4 text-[#d1d3d2]" title={publisher}>
+          <span aria-hidden="true" className="size-3 shrink-0 rounded-full bg-white/90 shadow-[inset_0_0_0_2px_rgba(0,0,0,0.2)]" />
+          <span className="truncate">{publisher}</span>
+        </span>
+      </span>
+    </article>
+  );
+}
+
+function SongSection({ id, title, songs }: SongSectionProps) {
+  const { playSong, track, isPlaying } = usePlayer();
+
+  if (songs.length === 0) return null;
+
+  const playRandom = () => {
+    const song = songs[Math.floor(Math.random() * songs.length)];
+    if (song) playSong(song, songs);
+  };
+
+  return (
+    <section aria-labelledby={id} className={`${styles.section} mt-10 first:mt-0 sm:mt-12`}>
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <h2 id={id} className={`${lexend.className} text-[24px] font-bold leading-tight text-white sm:text-[28px]`}>{title}</h2>
+        <button type="button" onClick={playRandom} className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#3b4140] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#4a5250] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
+          Nghe ngẫu nhiên
+          <ShuffleIcon />
+        </button>
+      </div>
+      <div className={styles.songGrid}>
+        {songs.map((song) => {
+          const isActive = track?.id === song.id;
+
+          return <SongCard key={song.id} song={song} onPlay={() => playSong(song, songs)} isActive={isActive} isPlaying={isActive && isPlaying} />;
+        })}
+      </div>
+    </section>
+  );
+}
+
 function TrendingArtistsSection() {
   return (
     <section aria-labelledby="trending-artists-heading" className={`${styles.section} mt-14`}>
@@ -93,13 +170,17 @@ function TrendingArtistsSection() {
 
 export default function MusicDiscoverySections() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [discovery, setDiscovery] = useState<HomeDiscovery>({ single_new_releases: [], tiktok_top_mix: [] });
 
   useEffect(() => {
     let cancelled = false;
 
-    listPlaylists({ perPage: 50 })
-      .then((response) => { if (!cancelled) setPlaylists(response.data); })
-      .catch(() => { if (!cancelled) setPlaylists([]); });
+    Promise.allSettled([getHomeDiscovery(), listPlaylists({ perPage: 50 })]).then(([discoveryResult, playlistsResult]) => {
+      if (cancelled) return;
+
+      if (discoveryResult.status === 'fulfilled') setDiscovery(discoveryResult.value.data);
+      if (playlistsResult.status === 'fulfilled') setPlaylists(playlistsResult.value.data);
+    });
 
     return () => { cancelled = true; };
   }, []);
@@ -116,5 +197,10 @@ export default function MusicDiscoverySections() {
     ];
   }, [playlists]);
 
-  return <>{sections.map((section) => section.playlists.length > 0 ? <PlaylistSection key={section.id} {...section} /> : null)}<TrendingArtistsSection /></>;
+  return <>
+    <SongSection id="new-releases-heading" title="Single Mới Phát Hành" songs={discovery.single_new_releases} />
+    <SongSection id="tiktok-top-mix-heading" title="TikTok Top Mix" songs={discovery.tiktok_top_mix} />
+    {sections.map((section) => section.playlists.length > 0 ? <PlaylistSection key={section.id} {...section} /> : null)}
+    <TrendingArtistsSection />
+  </>;
 }
