@@ -155,9 +155,10 @@ export default function Header() {
             Nhập code
           </button>
 
-          <button type="button" onClick={() => router.push('/mua-vip')} className="hidden h-12 cursor-pointer rounded-full bg-[#071817] px-6 text-sm font-bold text-[#ffc36b] outline-none transition-colors hover:bg-black focus-visible:ring-2 focus-visible:ring-cyan-300 2xl:block">Trung tâm VIP</button>
-          <button type="button" onClick={openLogin} className="h-12 cursor-pointer rounded-full bg-[#08c6d9] px-5 text-sm font-bold text-[#07363a] outline-none transition-colors hover:bg-[#22d7e7] focus-visible:ring-2 focus-visible:ring-white">Đăng nhập</button>
-          <button type="button" className="hidden h-12 cursor-pointer rounded-full bg-[#071817] px-6 text-sm font-bold text-[#ffc36b] outline-none transition-colors hover:bg-black focus-visible:ring-2 focus-visible:ring-cyan-300 2xl:block">Trung tâm VIP</button>
+          <button type="button" onClick={() => router.push('/mua-vip')} className="hidden h-12 cursor-pointer rounded-full bg-[#071817] px-6 text-sm font-bold text-[#ffc36b] outline-none transition-colors hover:bg-black focus-visible:ring-2 focus-visible:ring-cyan-300 2xl:block">
+            Trung tâm VIP
+          </button>
+
           {user ? (
             <div ref={accountMenuRef} className="relative">
               <button
@@ -186,7 +187,9 @@ export default function Header() {
               ) : null}
             </div>
           ) : (
-            <button type="button" onClick={openLogin} className="h-12 cursor-pointer rounded-full bg-[#08c6d9] px-5 text-sm font-bold text-[#07363a] outline-none transition-colors hover:bg-[#22d7e7] focus-visible:ring-2 focus-visible:ring-white">Đăng nhập</button>
+            <button type="button" onClick={openLogin} className="h-12 cursor-pointer rounded-full bg-[#08c6d9] px-5 text-sm font-bold text-[#07363a] outline-none transition-colors hover:bg-[#22d7e7] focus-visible:ring-2 focus-visible:ring-white">
+              Đăng nhập
+            </button>
           )}
 
           <SettingsMenu />
