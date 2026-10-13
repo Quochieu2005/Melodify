@@ -43,6 +43,16 @@ const navigation = [
       </svg>
     ),
   },
+  {
+    label: 'Nghệ sĩ thịnh hành',
+    href: '/trending-artist',
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-2">
+        <path d="M4 19V9m5 10V5m6 14v-7m5 7V3" strokeLinecap="round" />
+        <path d="m3 6 5-2 6 3 7-4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
 ];
 
 const library = [

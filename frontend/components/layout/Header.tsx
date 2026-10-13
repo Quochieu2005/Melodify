@@ -115,12 +115,12 @@ export default function Header() {
             <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-2"><path d="M12 16V3m0 0L7.5 7.5M12 3l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </IconButton>
 
-          <button type="button" className="hidden h-12 cursor-pointer items-center gap-2 rounded-full bg-white/8 px-5 text-sm font-bold text-[#ffc36b] outline-none transition-colors hover:bg-white/14 focus-visible:ring-2 focus-visible:ring-cyan-300 xl:inline-flex">
+          <button type="button" onClick={() => router.push('/mua-vip')} className="hidden h-12 cursor-pointer items-center gap-2 rounded-full bg-white/8 px-5 text-sm font-bold text-[#ffc36b] outline-none transition-colors hover:bg-white/14 focus-visible:ring-2 focus-visible:ring-cyan-300 xl:inline-flex">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-none stroke-current stroke-2"><path d="M4 7h16v10H4V7Zm3 0v3m0 4v3m10-10v3m0 4v3" strokeLinecap="round" /></svg>
             Nhập code
           </button>
 
-          <button type="button" className="hidden h-12 cursor-pointer rounded-full bg-[#071817] px-6 text-sm font-bold text-[#ffc36b] outline-none transition-colors hover:bg-black focus-visible:ring-2 focus-visible:ring-cyan-300 2xl:block">Trung tâm VIP</button>
+          <button type="button" onClick={() => router.push('/mua-vip')} className="hidden h-12 cursor-pointer rounded-full bg-[#071817] px-6 text-sm font-bold text-[#ffc36b] outline-none transition-colors hover:bg-black focus-visible:ring-2 focus-visible:ring-cyan-300 2xl:block">Trung tâm VIP</button>
           <button type="button" onClick={openLogin} className="h-12 cursor-pointer rounded-full bg-[#08c6d9] px-5 text-sm font-bold text-[#07363a] outline-none transition-colors hover:bg-[#22d7e7] focus-visible:ring-2 focus-visible:ring-white">Đăng nhập</button>
 
           <SettingsMenu />
