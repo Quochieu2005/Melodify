@@ -6,6 +6,8 @@ export type Lyric = {
   language: string;
   content: string;
   is_synced: boolean;
+  plain_lyrics?: string | null;
+  synced_lyrics?: string | null;
 };
 
 export type Song = {

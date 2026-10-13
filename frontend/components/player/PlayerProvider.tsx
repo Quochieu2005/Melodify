@@ -2,14 +2,18 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import type { Song } from '@/lib/api';
+import type { Song, SongArtistCredit } from '@/lib/api';
+import { recordRecentItem, songPath } from '@/lib/recent-history';
 
-const PLAYER_STORAGE_KEY = 'melodify_player_state';
+const PLAYER_SESSION_KEY = 'melodify_player_state';
+const PLAYER_SYNC_CHANNEL = 'melodify_player_sync';
 
 export type PlayerTrack = {
   id: string;
+  slug?: string | null;
   title: string;
   artist: string;
+  artists?: SongArtistCredit[];
   coverUrl: string;
   durationSeconds: number | null;
   audioUrl: string | null;
@@ -36,17 +40,24 @@ type PersistedPlayerState = {
   elapsed: number;
 };
 
+type PlayerSyncMessage =
+  | { type: 'request-state'; source: string }
+  | { type: 'state'; source: string; state: PersistedPlayerState };
+
 const PlayerContext = createContext<PlayerContextValue | null>(null);
 
-function persistPlayerState(track: PlayerTrack, queue: PlayerTrack[], currentIndex: number, elapsed: number) {
-  if (typeof window === 'undefined') return;
+function persistPlayerState(track: PlayerTrack, queue: PlayerTrack[], currentIndex: number, elapsed: number): PersistedPlayerState | null {
+  if (typeof window === 'undefined') return null;
 
-  window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify({
+  const state = {
     track,
     queue: queue.length > 0 ? queue : [track],
     currentIndex,
     elapsed: Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0,
-  } satisfies PersistedPlayerState));
+  } satisfies PersistedPlayerState;
+
+  window.sessionStorage.setItem(PLAYER_SESSION_KEY, JSON.stringify(state));
+  return state;
 }
 
 function toPlayerTrack(song: Song): PlayerTrack {
@@ -55,8 +66,10 @@ function toPlayerTrack(song: Song): PlayerTrack {
 
   return {
     id: song.id,
+    slug: song.slug,
     title: song.title,
     artist: song.artists?.map((artist) => artist.name).filter(Boolean).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật',
+    artists: song.artists?.length ? song.artists : song.artist ? [song.artist] : [],
     coverUrl: song.cover_url || '/topics/genre/vpop_600.png',
     durationSeconds: song.duration_seconds === null || song.duration_seconds === undefined
       ? previewLimitSeconds
@@ -72,8 +85,10 @@ function isPlayerTrack(value: unknown): value is PlayerTrack {
 
   const track = value as Partial<PlayerTrack>;
   return typeof track.id === 'string'
+    && (typeof track.slug === 'string' || track.slug === null || typeof track.slug === 'undefined')
     && typeof track.title === 'string'
     && typeof track.artist === 'string'
+    && (typeof track.artists === 'undefined' || Array.isArray(track.artists))
     && typeof track.coverUrl === 'string'
     && (typeof track.durationSeconds === 'number' || track.durationSeconds === null)
     && (typeof track.audioUrl === 'string' || track.audioUrl === null)
@@ -88,19 +103,43 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const currentIndexRef = useRef(0);
   const playNextRef = useRef<() => void>(() => undefined);
   const restoredElapsedRef = useRef(0);
+  const tabIdRef = useRef<string | null>(null);
+  const syncChannelRef = useRef<BroadcastChannel | null>(null);
   const [track, setTrack] = useState<PlayerTrack | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  const broadcastState = useCallback((state: PersistedPlayerState | null) => {
+    const source = tabIdRef.current;
+    if (!state || !source || !syncChannelRef.current) return;
+
+    syncChannelRef.current.postMessage({
+      type: 'state',
+      source,
+      state,
+    } satisfies PlayerSyncMessage);
+  }, []);
+
   const startTrack = useCallback((nextTrack: PlayerTrack) => {
+    recordRecentItem({
+      id: nextTrack.id,
+      category: 'song',
+      title: nextTrack.title,
+      subtitle: nextTrack.artist,
+      imageUrl: nextTrack.coverUrl,
+      href: songPath({ id: nextTrack.id, slug: nextTrack.slug ?? null, title: nextTrack.title }),
+      publisher: 'Melodify',
+      durationSeconds: nextTrack.durationSeconds,
+      artists: nextTrack.artists,
+    });
     trackRef.current = nextTrack;
     restoredElapsedRef.current = 0;
     setTrack(nextTrack);
     setElapsed(0);
     setDuration(nextTrack.durationSeconds ?? 0);
 
-    persistPlayerState(nextTrack, queueRef.current, currentIndexRef.current, 0);
+    broadcastState(persistPlayerState(nextTrack, queueRef.current, currentIndexRef.current, 0));
 
     const audio = audioRef.current;
     if (!audio || !nextTrack.audioUrl) {
@@ -114,7 +153,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     void audio.play()
       .then(() => setIsPlaying(true))
       .catch(() => setIsPlaying(false));
-  }, []);
+  }, [broadcastState]);
 
   const playAt = useCallback((index: number) => {
     const nextTrack = queueRef.current[index];
@@ -139,11 +178,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const audio = new Audio();
     audio.preload = 'metadata';
     audioRef.current = audio;
+    const syncChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(PLAYER_SYNC_CHANNEL);
+    syncChannelRef.current = syncChannel;
+    const tabId = tabIdRef.current || `player-tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    tabIdRef.current = tabId;
+    let lastBroadcastAt = 0;
 
     const persistCurrentPosition = () => {
       const currentTrack = trackRef.current;
       if (currentTrack) {
-        persistPlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime);
+        const state = persistPlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime);
+        const now = Date.now();
+        if (now - lastBroadcastAt >= 1000) {
+          lastBroadcastAt = now;
+          broadcastState(state);
+        }
       }
     };
     const handleTimeUpdate = () => {
@@ -185,7 +234,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     };
     const handleEnded = () => {
       if (currentIndexRef.current + 1 < queueRef.current.length) playNextRef.current();
-      else setIsPlaying(false);
+      else {
+        setIsPlaying(false);
+        persistCurrentPosition();
+      }
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
@@ -201,9 +253,81 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     window.addEventListener('pagehide', persistCurrentPosition);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    if (typeof window !== 'undefined') {
+    let cancelled = false;
+    const applySyncedState = (savedState: PersistedPlayerState) => {
+      const savedTrack = savedState.track;
+      const savedQueue = savedState.queue.filter(isPlayerTrack);
+      if (!isPlayerTrack(savedTrack)) return;
+
+      const restoredQueue = savedQueue.length > 0 ? savedQueue : [savedTrack];
+      const restoredIndex = Math.min(Math.max(0, savedState.currentIndex), restoredQueue.length - 1);
+      const restoredTrack = restoredQueue[restoredIndex] || savedTrack;
+      const restoreLimit = restoredTrack.previewLimitSeconds ?? restoredTrack.durationSeconds;
+      const restoredElapsed = restoreLimit === null || restoreLimit === undefined
+        ? Math.max(0, savedState.elapsed)
+        : Math.min(Math.max(0, savedState.elapsed), restoreLimit);
+
+      const isSameTrack = trackRef.current?.id === restoredTrack.id;
+      if (isSameTrack) {
+        audio.pause();
+        queueRef.current = restoredQueue;
+        currentIndexRef.current = restoredIndex;
+        trackRef.current = restoredTrack;
+        setTrack(restoredTrack);
+        setElapsed(Math.floor(restoredElapsed));
+        setDuration(restoredTrack.durationSeconds ?? 0);
+        setIsPlaying(false);
+        return;
+      }
+
+      audio.pause();
+      queueRef.current = restoredQueue;
+      currentIndexRef.current = restoredIndex;
+      trackRef.current = restoredTrack;
+      restoredElapsedRef.current = restoredElapsed;
+      setTrack(restoredTrack);
+      setElapsed(Math.floor(restoredElapsed));
+      setDuration(restoredTrack.durationSeconds ?? 0);
+      setIsPlaying(false);
+
+      if (restoredTrack.audioUrl) {
+        audio.src = restoredTrack.audioUrl;
+        audio.load();
+      }
+    };
+
+    const handleSyncMessage = (event: MessageEvent<PlayerSyncMessage>) => {
+      const message = event.data;
+      if (!message || message.source === tabId) return;
+
+      if (message.type === 'request-state') {
+        const currentTrack = trackRef.current;
+        if (!currentTrack || !syncChannel) return;
+
+        const state = persistPlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime);
+        if (state) {
+          syncChannel.postMessage({
+            type: 'state',
+            source: tabId,
+            state,
+          } satisfies PlayerSyncMessage);
+        }
+        return;
+      }
+
+      if (message.type === 'state' && message.state && isPlayerTrack(message.state.track) && Array.isArray(message.state.queue)) {
+        applySyncedState(message.state);
+        persistPlayerState(message.state.track, message.state.queue, message.state.currentIndex, message.state.elapsed);
+      }
+    };
+
+    syncChannel?.addEventListener('message', handleSyncMessage);
+
+    const restoreSavedState = () => {
+      if (cancelled || typeof window === 'undefined') return;
+
       try {
-        const savedState = JSON.parse(window.localStorage.getItem(PLAYER_STORAGE_KEY) || 'null') as Partial<PersistedPlayerState> | null;
+        const savedState = JSON.parse(window.sessionStorage.getItem(PLAYER_SESSION_KEY) || 'null') as Partial<PersistedPlayerState> | null;
         const savedTrack = savedState?.track;
         const savedQueue = Array.isArray(savedState?.queue) ? savedState.queue.filter(isPlayerTrack) : [];
 
@@ -234,10 +358,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             audio.load();
           }
         }
+
+        syncChannel?.postMessage({ type: 'request-state', source: tabId } satisfies PlayerSyncMessage);
       } catch {
-        window.localStorage.removeItem(PLAYER_STORAGE_KEY);
+        window.sessionStorage.removeItem(PLAYER_SESSION_KEY);
       }
-    }
+    };
+
+    queueMicrotask(restoreSavedState);
 
     return () => {
       audio.pause();
@@ -248,9 +376,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener('ended', handleEnded);
       window.removeEventListener('pagehide', persistCurrentPosition);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      syncChannel?.removeEventListener('message', handleSyncMessage);
+      syncChannel?.close();
+      syncChannelRef.current = null;
+      cancelled = true;
       audioRef.current = null;
     };
-  }, [playNext]);
+  }, [broadcastState, playNext]);
 
   const playSong = useCallback((song: Song, queue: Song[] = [song]) => {
     const nextQueue = queue.length > 0 ? queue.map(toPlayerTrack) : [toPlayerTrack(song)];
@@ -269,16 +401,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (track.previewLimitSeconds !== null && audio.currentTime >= track.previewLimitSeconds) {
         audio.currentTime = 0;
         setElapsed(0);
-        persistPlayerState(track, queueRef.current, currentIndexRef.current, 0);
+        broadcastState(persistPlayerState(track, queueRef.current, currentIndexRef.current, 0));
       }
       void audio.play()
-        .then(() => setIsPlaying(true))
+        .then(() => {
+          setIsPlaying(true);
+          broadcastState(persistPlayerState(track, queueRef.current, currentIndexRef.current, audio.currentTime));
+        })
         .catch(() => setIsPlaying(false));
     } else {
       audio.pause();
       setIsPlaying(false);
+      broadcastState(persistPlayerState(track, queueRef.current, currentIndexRef.current, audio.currentTime));
     }
-  }, [track]);
+  }, [broadcastState, track]);
 
   const seek = useCallback((seconds: number) => {
     if (!audioRef.current || !track) return;
@@ -287,8 +423,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const nextTime = Math.min(Math.max(0, seconds), limit);
     audioRef.current.currentTime = nextTime;
     setElapsed(nextTime);
-    persistPlayerState(track, queueRef.current, currentIndexRef.current, nextTime);
-  }, [duration, track]);
+    broadcastState(persistPlayerState(track, queueRef.current, currentIndexRef.current, nextTime));
+  }, [broadcastState, duration, track]);
 
   const value = useMemo(() => ({
     track,

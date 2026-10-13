@@ -43,16 +43,6 @@ const navigation = [
       </svg>
     ),
   },
-  {
-    label: 'Nghệ sĩ thịnh hành',
-    href: '/trending-artist',
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-2">
-        <path d="M4 19V9m5 10V5m6 14v-7m5 7V3" strokeLinecap="round" />
-        <path d="m3 6 5-2 6 3 7-4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
 ];
 
 const library = [
@@ -72,7 +62,7 @@ const library = [
   },
 ];
 
-function Navigation({ items, onLogin, isAuthenticated }: { items: typeof navigation; onLogin: () => void; isAuthenticated: boolean }) {
+function Navigation({ items, onLogin, isAuthenticated, isLibrary = false }: { items: typeof navigation; onLogin: () => void; isAuthenticated: boolean; isLibrary?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -96,9 +86,11 @@ function Navigation({ items, onLogin, isAuthenticated }: { items: typeof navigat
             aria-current={item.active || pathname === item.href ? 'page' : undefined}
             className={[
               'flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-violet-300',
-              item.active || pathname === item.href
-                ? 'bg-violet-500 text-white shadow-[0_8px_24px_rgba(124,92,255,0.24)]'
-                : 'text-[#b8b2ca] hover:bg-white/7 hover:text-white',
+              isLibrary
+                ? 'text-[#b8b2ca] hover:bg-transparent hover:text-white'
+                : item.active || pathname === item.href
+                  ? 'bg-violet-500 text-white shadow-[0_8px_24px_rgba(124,92,255,0.24)]'
+                  : 'text-[#b8b2ca] hover:bg-white/7 hover:text-white',
             ].join(' ')}
           >
             <span className="grid size-6 place-items-center text-lg">{item.icon}</span>
@@ -125,7 +117,7 @@ export default function Sidebar() {
 
       <section aria-labelledby="library-title" className="mt-7 px-3">
         <h2 id="library-title" className="px-3 text-xs font-semibold tracking-[0.08em] text-[#8f88a7]">Thư viện</h2>
-        <div className="mt-3"><Navigation items={library} onLogin={openLogin} isAuthenticated={Boolean(user)} /></div>
+        <div className="mt-3"><Navigation items={library} onLogin={openLogin} isAuthenticated={Boolean(user)} isLibrary /></div>
       </section>
 
       <div className="mt-auto p-5">

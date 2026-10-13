@@ -1,6 +1,10 @@
+'use client';
+
 import { Lexend } from 'next/font/google';
+import Link from 'next/link';
 
 import styles from './RankingSection.module.css';
+import { recordRecentItem, songPath } from '@/lib/recent-history';
 
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 
@@ -137,7 +141,7 @@ function RankingBoardCard({ board }: { board: RankingBoard }) {
               </div>
 
               <div className="min-w-0">
-                <p className="truncate text-[14px] font-medium text-white" style={{ color: '#ffffff', fontSize: '14px', fontWeight: 500 }}>{song.title}</p>
+          <Link href={songPath({ id: `ranking-${song.title}`, slug: null, title: song.title })} onClick={() => recordRecentItem({ id: `ranking-${song.title}`, category: 'song', title: song.title, subtitle: song.artist, imageUrl: song.image, href: songPath({ id: `ranking-${song.title}`, slug: null, title: song.title }), publisher: song.publisher })} className="truncate text-[14px] font-medium text-white transition-colors hover:text-cyan-300" style={{ color: '#ffffff', fontSize: '14px', fontWeight: 500 }}>{song.title}</Link>
                 <p className="mt-1 flex min-w-0 items-center gap-1 truncate text-[12px] text-[#8f8f8f]" style={{ color: '#8f8f8f', fontSize: '12px' }}>
                   <span className="shrink-0 rounded-[3px] bg-black/30 px-1 text-[10px] font-bold text-white/65">Lossless</span>
                   <span className="truncate">{song.artist}</span>

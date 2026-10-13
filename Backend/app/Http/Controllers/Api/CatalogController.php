@@ -1029,6 +1029,13 @@ class CatalogController extends Controller
             }
         }
 
+        if (! $song) {
+            $normalizedSlug = Str::slug($slug);
+            $song = Song::query()->get()->first(
+                fn (Song $candidate): bool => Str::slug((string) $candidate->title) === $normalizedSlug,
+            );
+        }
+
         return $song ?: Song::query()
             ->whereIn('external_source', ['nhaccuatui', 'itunes'])
             ->where('external_id', $slug)

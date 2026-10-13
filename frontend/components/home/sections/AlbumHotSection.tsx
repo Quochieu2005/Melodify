@@ -8,6 +8,7 @@ import { listAlbums } from '@/lib/api';
 import { albumRecordToCard, pickDailyAlbums, type AlbumCard } from '@/lib/album-data';
 import { ArtistLink } from '@/components/artists';
 import { vietnamDateKey } from '@/lib/topic-data';
+import { recordRecentItem } from '@/lib/recent-history';
 import styles from './AlbumGrid.module.css';
 
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
@@ -19,7 +20,7 @@ function PlayIcon() {
 function AlbumCard({ album }: { album: AlbumCard }) {
   return (
     <article className="w-full max-w-[240px] min-w-0">
-      <Link href={`/album/${encodeURIComponent(album.slug ?? album.id)}`} aria-label={`Xem album ${album.title}`} className="group block outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] focus-visible:ring-offset-4 focus-visible:ring-offset-[#202a28]">
+      <Link href={`/album/${encodeURIComponent(album.slug ?? album.id)}`} aria-label={`Xem album ${album.title}`} onClick={() => recordRecentItem({ id: album.id, category: 'album', title: album.title, subtitle: album.artist, imageUrl: album.coverUrl, href: `/album/${encodeURIComponent(album.slug ?? album.id)}` })} className="group block outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] focus-visible:ring-offset-4 focus-visible:ring-offset-[#202a28]">
         <div className="relative aspect-square w-full overflow-hidden rounded-[8px] bg-[#30443f]">
           <div role="img" aria-label={`Ảnh bìa ${album.title}`} className="h-full w-full bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.04]" style={{ backgroundImage: `url("${album.coverUrl}")` }} />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-70" />

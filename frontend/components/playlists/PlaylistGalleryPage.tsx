@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { getGenre, getTopic, listPlaylists, type GenreRecord, type Playlist, type TopicRecord } from '@/lib/api';
 import { ArtistNames } from '@/components/artists';
 import styles from '@/components/home/sections/AlbumGrid.module.css';
+import { recentPlaylistItem, recordRecentItem } from '@/lib/recent-history';
 
 const fallbackCover = '/topics/genre/vpop_600.png';
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
@@ -47,6 +48,7 @@ function PlaylistCard({ playlist, fallbackImage }: { playlist: Playlist; fallbac
     <article className="w-full max-w-[205px] min-w-0">
       <Link
         href={playlistPath(playlist)}
+        onClick={() => recordRecentItem(recentPlaylistItem(playlist))}
         aria-label={`Xem playlist ${playlist.name}`}
         className="group block outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] focus-visible:ring-offset-4 focus-visible:ring-offset-[#202a28]"
       >
@@ -72,6 +74,7 @@ export default function PlaylistGalleryPage({ topicSlug, topicKind = 'topic' }: 
     let cancelled = false;
 
     const load = async () => {
+      setIsLoading(true);
       try {
         const filter = topicSlug
           ? topicKind === 'genre' ? { genre: topicSlug } : { topic: topicSlug }
@@ -98,7 +101,6 @@ export default function PlaylistGalleryPage({ topicSlug, topicKind = 'topic' }: 
       }
     };
 
-    setIsLoading(true);
     void load();
 
     return () => { cancelled = true; };

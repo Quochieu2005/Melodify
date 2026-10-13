@@ -16,6 +16,7 @@ import {
 
 import styles from '@/components/albums/AlbumDetailPage.module.css';
 import { ArtistNames, type ArtistReference } from './ArtistLink';
+import { recentAlbumItem, recentPlaylistItem, recentVideoItem, recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const fallbackCover = '/topics/genre/vpop_600.png';
@@ -80,7 +81,7 @@ function ArtistSongRow({ song, index, artist, onPlay, isCurrentTrack, isPlaying 
             {isCurrentTrack && isPlaying ? <span className={`${styles.equalizer} ${styles.equalizerOnCover}`}><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /></span> : <PlayIcon />}
           </button>
         </div>
-        <span className={`truncate text-[14px] font-bold ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{song.title}</span>
+        <Link href={songPath(song)} onClick={() => recordRecentItem(recentSongItem(song))} className={`truncate text-[14px] font-bold transition-colors hover:text-[#00d3e5] ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{song.title}</Link>
       </div>
       <ArtistNames artists={artists} className="hidden truncate text-[13px] text-white/65 sm:block" />
       <span className="text-right text-[13px] text-white/75">{formatDuration(song.duration_seconds)}</span>
@@ -93,7 +94,7 @@ function AlbumCard({ album }: { album: AlbumRecord }) {
 
   return (
     <article className="min-w-0">
-      <Link href={href} aria-label={`Xem album ${album.title}`} className="group block">
+      <Link href={href} aria-label={`Xem album ${album.title}`} onClick={() => recordRecentItem(recentAlbumItem(album))} className="group block">
         <div role="img" aria-label={`Ảnh bìa ${album.title}`} className="aspect-square w-full overflow-hidden rounded-lg bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.02]" style={{ backgroundImage: `url("${album.cover_url || fallbackCover}")` }} />
         <h3 className="mt-3 truncate text-[14px] font-bold text-white">{album.title}</h3>
       </Link>
@@ -108,7 +109,7 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
 
   return (
     <article className="min-w-0">
-      <Link href={href} aria-label={`Xem playlist ${playlist.name}`} className="group block">
+      <Link href={href} aria-label={`Xem playlist ${playlist.name}`} onClick={() => recordRecentItem(recentPlaylistItem(playlist))} className="group block">
         <div role="img" aria-label={`Ảnh bìa ${playlist.name}`} className="aspect-square w-full overflow-hidden rounded-lg bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.02]" style={{ backgroundImage: `url("${playlist.cover_url || fallbackCover}")` }} />
         <h3 className="mt-3 truncate text-[14px] font-bold text-white">{playlist.name}</h3>
       </Link>
@@ -129,7 +130,7 @@ function VideoCard({ video }: { video: SongVideo }) {
     </div>
   );
 
-  return video.watch_url || video.video_url ? <a href={video.watch_url || video.video_url || '#'} target="_blank" rel="noreferrer" aria-label={`Xem video ${video.title}`}>{card}</a> : card;
+  return video.watch_url || video.video_url ? <a href={video.watch_url || video.video_url || '#'} target="_blank" rel="noreferrer" onClick={() => recordRecentItem(recentVideoItem(video))} aria-label={`Xem video ${video.title}`}>{card}</a> : card;
 }
 
 function ArtistBioCard({ artist, onViewMore }: { artist: ArtistDetail; onViewMore: () => void }) {
