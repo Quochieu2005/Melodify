@@ -71,6 +71,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/lyrics', [SongViewController::class, 'lyricsIndex'])->name('lyrics.index');
             Route::get('/songs/{song}/lyrics', [SongViewController::class, 'showLyrics'])->name('songs.lyrics');
             Route::get('/songs/{song}/audio', [AudioController::class, 'stream'])->name('songs.audio');
+            Route::post('/songs/{song}/lyrics/sync', [SongViewController::class, 'syncFromSources'])->name('songs.lyrics.sync');
             Route::put('/songs/{song}/lyrics', [SongViewController::class, 'updateLyrics'])->name('songs.lyrics.update');
             Route::delete('/songs/bulk', [SongController::class, 'destroyBulk'])->name('songs.bulk-destroy');
             Route::delete('/songs/all', [SongController::class, 'destroyAll'])->name('songs.destroy-all');

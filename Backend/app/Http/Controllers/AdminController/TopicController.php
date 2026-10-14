@@ -5,6 +5,7 @@ namespace App\Http\Controllers\AdminController;
 use App\Models\Topic;
 use App\Models\Playlist;
 use App\Rules\PlainText;
+use App\Services\CatalogGroupService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -33,7 +34,7 @@ class TopicController extends MediaCatalogController
         'type_custom' => ['label' => 'Tên kiểu chủ đề', 'type' => 'text'],
         'slug' => ['label' => 'Slug', 'help' => 'Để trống để tự tạo theo tên; slug không được trùng.'],
         'description' => ['label' => 'Mô tả', 'type' => 'textarea'],
-        'sort_order' => ['label' => 'Thứ tự hiển thị', 'type' => 'number', 'default' => 0, 'required' => true],
+        'sort_order' => ['label' => 'Thứ tự hiển thị', 'type' => 'number', 'default' => 1, 'required' => true],
         'status' => ['label' => 'Trạng thái', 'type' => 'select', 'required' => true, 'options' => ['active' => 'Hoạt động', 'inactive' => 'Tạm ẩn']],
     ];
 
@@ -94,7 +95,7 @@ class TopicController extends MediaCatalogController
             'type_custom' => ['nullable', 'required_if:type,custom', 'string', 'min:1', 'max:80', new PlainText()],
             'slug' => ['nullable', 'alpha_dash', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', new PlainText()],
             'description' => ['nullable', 'string', 'max:2000', new PlainText()],
-            'sort_order' => ['required', 'integer', 'min:0', 'max:9999'],
+            'sort_order' => ['required', 'integer', 'min:1', 'max:9999'],
             'status' => ['required', 'in:active,inactive'],
             'playlist_ids' => ['nullable', 'array', 'max:500'],
             'playlist_ids.*' => ['required', 'string', 'max:64', 'distinct'],
@@ -118,6 +119,27 @@ class TopicController extends MediaCatalogController
     protected function defaultSortOrderGroup(): ?string
     {
         return 'topic';
+    }
+
+    protected function sortOrderGroupForItem(object $item): ?string
+    {
+        $type = trim((string) ($item->type ?? '')) ?: 'topic';
+
+        if ($type === 'custom') {
+            return 'custom:'.trim((string) ($item->type_custom ?? ''));
+        }
+
+        return $type;
+    }
+
+    protected function autoAssignSortOrderOnCreate(): bool
+    {
+        return true;
+    }
+
+    protected function autoAssignSortOrderOnGroupChange(): bool
+    {
+        return true;
     }
 
     /** @param mixed $query */
@@ -150,22 +172,11 @@ class TopicController extends MediaCatalogController
     {
         $suggestions = [];
 
-        foreach (array_keys(config('topics.types', [])) as $type) {
-            if ($type !== 'custom') {
-                $suggestions[$type] = $this->nextSortOrder($type);
+        foreach (app(CatalogGroupService::class)->topicFormGroups() as $group) {
+            if ($group['value'] !== 'custom') {
+                $suggestions[$group['value']] = $this->nextSortOrder($group['value']);
             }
         }
-
-        Topic::query()
-            ->where('type', 'custom')
-            ->get(['type_custom'])
-            ->pluck('type_custom')
-            ->map(fn ($name): string => trim((string) $name))
-            ->filter()
-            ->unique()
-            ->each(function (string $name) use (&$suggestions): void {
-                $suggestions['custom:'.$name] = $this->nextSortOrder('custom:'.$name);
-            });
 
         return $suggestions;
     }
@@ -189,9 +200,24 @@ class TopicController extends MediaCatalogController
 
         if (($data['type'] ?? null) !== 'custom') {
             $data['type_custom'] = null;
+        } else {
+            $data['type_custom'] = trim((string) ($data['type_custom'] ?? ''));
         }
 
         return $data;
+    }
+
+    protected function normalizeRequest(Request $request): void
+    {
+        parent::normalizeRequest($request);
+
+        $type = trim((string) $request->input('type', ''));
+        if (str_starts_with($type, 'custom:')) {
+            $request->merge([
+                'type' => 'custom',
+                'type_custom' => trim(substr($type, 7)),
+            ]);
+        }
     }
 
     protected function supplementalFormData(?object $item): array
@@ -199,6 +225,7 @@ class TopicController extends MediaCatalogController
         return [
             'playlists' => $this->availablePlaylists(),
             'selectedPlaylistIds' => $this->selectedPlaylistIds($item, 'topic_ids'),
+            'topicGroupOptions' => app(CatalogGroupService::class)->topicFormGroups(),
         ];
     }
 
@@ -215,6 +242,12 @@ class TopicController extends MediaCatalogController
     {
         $topicId = (string) $item->getKey();
         $this->syncPlaylistRelation('topic_ids', $topicId, $data['playlist_ids'] ?? []);
+        app(CatalogGroupService::class)->forget();
+    }
+
+    protected function afterDelete(object $item): void
+    {
+        app(CatalogGroupService::class)->forget();
     }
 
     protected function validationMessages(): array

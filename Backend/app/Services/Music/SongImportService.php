@@ -341,17 +341,34 @@ class SongImportService
             }
         }
 
-        if (! $lyrics) {
+        if (blank($lyrics['plainLyrics'] ?? null) || blank($lyrics['syncedLyrics'] ?? null)) {
+            $fallbackLyrics = null;
             try {
-                $lyrics = $this->lyricsClient->find(
+                $fallbackLyrics = $this->lyricsClient->find(
                     (string) ($track['trackName'] ?? ''),
                     (string) ($track['artistName'] ?? ''),
                     $track['collectionName'] ?? null,
                     isset($track['trackTimeMillis']) ? (int) round(((int) $track['trackTimeMillis']) / 1000) : null,
                 );
             } catch (RuntimeException) {
-                return;
+                $fallbackLyrics = null;
             }
+
+            if ($fallbackLyrics) {
+                $lyrics = [
+                    'plainLyrics' => filled($lyrics['plainLyrics'] ?? null)
+                        ? $lyrics['plainLyrics']
+                        : ($fallbackLyrics['plainLyrics'] ?? null),
+                    'syncedLyrics' => filled($lyrics['syncedLyrics'] ?? null)
+                        ? $lyrics['syncedLyrics']
+                        : ($fallbackLyrics['syncedLyrics'] ?? null),
+                    'source' => $lyrics['source'] ?? ($fallbackLyrics['source'] ?? 'LRCLIB'),
+                ];
+            }
+        }
+
+        if (filled($lyrics['syncedLyrics'] ?? null) && preg_match('/\[\d+:\d+(?:\.\d+)?\]/', (string) $lyrics['syncedLyrics']) !== 1) {
+            $lyrics['syncedLyrics'] = null;
         }
 
         if (! $lyrics || (! filled($lyrics['plainLyrics'] ?? null) && ! filled($lyrics['syncedLyrics'] ?? null))) {

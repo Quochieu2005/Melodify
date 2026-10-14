@@ -723,10 +723,87 @@
     margin-top: 3px;
 }
 .admin-lyrics-preview-audio {
-    display: block;
-    height: 34px;
-    max-width: 100%;
-    width: 100%;
+    display: none;
+}
+.admin-lyrics-preview-controls {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    min-width: 0;
+}
+.admin-lyrics-preview-toggle,
+.admin-lyrics-preview-mute {
+    align-items: center;
+    background: var(--admin-surface, #fff);
+    border: 1px solid var(--admin-border);
+    border-radius: 50%;
+    color: var(--admin-text);
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 30px;
+    height: 30px;
+    justify-content: center;
+    padding: 0;
+    transition: background .18s ease, border-color .18s ease, color .18s ease;
+    width: 30px;
+}
+.admin-lyrics-preview-toggle:hover,
+.admin-lyrics-preview-mute:hover {
+    background: var(--admin-primary, #13c2c2);
+    border-color: var(--admin-primary, #13c2c2);
+    color: #fff;
+}
+.admin-lyrics-preview-seek {
+    accent-color: var(--admin-primary, #13c2c2);
+    flex: 1 1 auto;
+    min-width: 80px;
+}
+.admin-lyrics-preview-controls .admin-lyrics-time {
+    color: var(--admin-text-muted);
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+.admin-lyrics-editor-label {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+}
+.admin-lyrics-editor-label .admin-form-label {
+    margin-bottom: 0;
+}
+.admin-lyrics-generate-button {
+    border-color: color-mix(in srgb, var(--admin-primary, #13c2c2) 55%, var(--admin-border));
+    color: var(--admin-primary, #08979c);
+    font-size: 12px;
+    padding: 4px 9px;
+}
+.admin-lyrics-generate-button:hover {
+    background: color-mix(in srgb, var(--admin-primary, #13c2c2) 10%, transparent);
+    border-color: var(--admin-primary, #13c2c2);
+    color: var(--admin-primary, #08979c);
+}
+.admin-lyrics-source-button {
+    border-color: var(--admin-primary, #13c2c2);
+    color: var(--admin-primary, #08979c);
+}
+.admin-lyrics-source-button:hover {
+    background: var(--admin-primary, #13c2c2);
+    border-color: var(--admin-primary, #13c2c2);
+    color: #fff;
+}
+@media (max-width: 600px) {
+    .admin-lyrics-preview-controls {
+        gap: 7px;
+    }
+    .admin-lyrics-preview-seek {
+        min-width: 60px;
+    }
+    .admin-lyrics-editor-label {
+        align-items: flex-start;
+        flex-direction: column;
+    }
 }
 .admin-lyrics-player small {
     color: var(--admin-text-muted);

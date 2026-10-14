@@ -203,8 +203,9 @@ abstract class MediaCatalogController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $this->normalizeSortOrderInput($request);
+        $this->normalizeRequest($request);
         $data = $request->validate($this->rules(null), $this->validationMessages());
+        $this->applyAutomaticSortOrder($data);
         $this->validateSortOrder($data, null);
         $payload = $this->preparePayload($request, $data, null);
         $item = ($this->model)::query()->create($payload);
@@ -230,8 +231,9 @@ abstract class MediaCatalogController extends Controller
     public function update(Request $request, string $id): RedirectResponse
     {
         $item = ($this->model)::query()->findOrFail($id);
-        $this->normalizeSortOrderInput($request);
+        $this->normalizeRequest($request);
         $data = $request->validate($this->rules($item), $this->validationMessages());
+        $this->applyAutomaticSortOrder($data, $item);
         $this->validateSortOrder($data, $item);
         $item->update($this->preparePayload($request, $data, $item));
         $this->afterPersist($item, $data);
@@ -244,6 +246,7 @@ abstract class MediaCatalogController extends Controller
     {
         $item = ($this->model)::query()->findOrFail($id);
         $item->delete();
+        $this->afterDelete($item);
 
         return back()->with('success', "Đã xóa {$this->title}. Ảnh vẫn được giữ trong kho ảnh dùng chung.");
     }
@@ -274,6 +277,7 @@ abstract class MediaCatalogController extends Controller
 
         foreach ($items as $item) {
             $item->delete();
+            $this->afterDelete($item);
         }
 
         return back()->with('success', "Đã xóa {$items->count()} {$this->title} đã chọn.");
@@ -289,6 +293,7 @@ abstract class MediaCatalogController extends Controller
 
         foreach ($items as $item) {
             $item->delete();
+            $this->afterDelete($item);
         }
 
         return back()->with('success', "Đã xóa toàn bộ {$items->count()} {$this->title}.");
@@ -335,13 +340,48 @@ abstract class MediaCatalogController extends Controller
         $query = $model::query();
         $this->applySortOrderScope($query, $group);
 
-        return ((int) ($query->max('sort_order') ?? -1)) + 1;
+        // Every group starts at 1. The previous -1 fallback made a new group
+        // start at 0, which did not match the admin ordering shown to users.
+        return ((int) ($query->max('sort_order') ?? 0)) + 1;
     }
 
     /** @param array<string, mixed> $data */
     protected function sortOrderGroup(array $data): ?string
     {
         return null;
+    }
+
+    protected function sortOrderGroupForItem(object $item): ?string
+    {
+        return null;
+    }
+
+    protected function autoAssignSortOrderOnCreate(): bool
+    {
+        return false;
+    }
+
+    protected function autoAssignSortOrderOnGroupChange(): bool
+    {
+        return false;
+    }
+
+    /** @param array<string, mixed> $data */
+    protected function applyAutomaticSortOrder(array &$data, ?object $current = null): void
+    {
+        $group = $this->sortOrderGroup($data);
+
+        if ($current === null && $this->autoAssignSortOrderOnCreate()) {
+            $data['sort_order'] = $this->nextSortOrder($group);
+
+            return;
+        }
+
+        if ($current !== null
+            && $this->autoAssignSortOrderOnGroupChange()
+            && $group !== $this->sortOrderGroupForItem($current)) {
+            $data['sort_order'] = $this->nextSortOrder($group);
+        }
     }
 
     protected function defaultSortOrderGroup(): ?string
@@ -388,6 +428,11 @@ abstract class MediaCatalogController extends Controller
         }
     }
 
+    protected function normalizeRequest(Request $request): void
+    {
+        $this->normalizeSortOrderInput($request);
+    }
+
     protected function normalizeSortOrderInput(Request $request): void
     {
         $value = trim((string) $request->input('sort_order', ''));
@@ -406,6 +451,10 @@ abstract class MediaCatalogController extends Controller
         }
 
         return $data;
+    }
+
+    protected function afterDelete(object $item): void
+    {
     }
 
     protected function resolveSlug(?string $provided, string $name, mixed $ignoreId = null): string

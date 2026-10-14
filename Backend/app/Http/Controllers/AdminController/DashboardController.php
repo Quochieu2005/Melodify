@@ -93,6 +93,56 @@ class DashboardController extends Controller
         })->sortByDesc('plays')->values();
 
         $engagementRankings = $this->engagementRankings($playCountBySong);
+        $adminRankingCards = [
+            [
+                'title' => 'Playlist được nghe nhiều nhất',
+                'description' => 'Tổng lượt nghe các bài hát trong playlist · 30 ngày gần nhất.',
+                'items' => $engagementRankings['playlists']['plays'] ?? collect(),
+                'metric' => 'plays',
+                'unit' => 'lượt nghe',
+                'tone' => 'cyan',
+            ],
+            [
+                'title' => 'Playlist được yêu thích',
+                'description' => 'Tổng lượt yêu thích trên các bài hát trong playlist.',
+                'items' => $engagementRankings['playlists']['favorites'] ?? collect(),
+                'metric' => 'favorites',
+                'unit' => 'yêu thích',
+                'tone' => 'violet',
+            ],
+            [
+                'title' => 'Playlist được chia sẻ nhiều nhất',
+                'description' => 'Tổng lượt chia sẻ trên các bài hát trong playlist.',
+                'items' => $engagementRankings['playlists']['shares'] ?? collect(),
+                'metric' => 'shares',
+                'unit' => 'chia sẻ',
+                'tone' => 'amber',
+            ],
+            [
+                'title' => 'Nghệ sĩ có lượt xem cao nhất',
+                'description' => 'Tổng lượt nghe các bài hát của nghệ sĩ · 30 ngày gần nhất.',
+                'items' => $engagementRankings['artists']['plays'] ?? collect(),
+                'metric' => 'plays',
+                'unit' => 'lượt xem',
+                'tone' => 'mint',
+            ],
+            [
+                'title' => 'Nghệ sĩ được yêu thích',
+                'description' => 'Tổng lượt yêu thích trên các bài hát của nghệ sĩ.',
+                'items' => $engagementRankings['artists']['favorites'] ?? collect(),
+                'metric' => 'favorites',
+                'unit' => 'yêu thích',
+                'tone' => 'pink',
+            ],
+            [
+                'title' => 'Nghệ sĩ được chia sẻ nhiều nhất',
+                'description' => 'Tổng lượt chia sẻ trên các bài hát của nghệ sĩ.',
+                'items' => $engagementRankings['artists']['shares'] ?? collect(),
+                'metric' => 'shares',
+                'unit' => 'chia sẻ',
+                'tone' => 'blue',
+            ],
+        ];
 
         return view('Admin.dashboard', [
             'stats' => [
@@ -108,6 +158,7 @@ class DashboardController extends Controller
             'userTrend' => $userTrend,
             'topSongs' => $topSongs,
             'engagementRankings' => $engagementRankings,
+            'adminRankingCards' => $adminRankingCards,
         ]);
     }
 

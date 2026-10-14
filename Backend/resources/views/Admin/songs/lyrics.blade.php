@@ -8,6 +8,12 @@
             <h1 class="admin-page-title">Lời bài hát</h1>
             <p class="admin-page-description">Xem lời thường, lời đồng bộ theo thời gian và nghe bài hát.</p>
         </div>
+        <div class="admin-page-header-actions">
+            <form method="POST" action="{{ route('admin.songs.lyrics.sync', $song->getKey()) }}">
+                @csrf
+                <button type="submit" class="ant-btn admin-lyrics-source-button">Tải LRC đồng bộ từ nguồn</button>
+            </form>
+        </div>
     </div>
 
     <div class="admin-lyrics-grid">
@@ -39,7 +45,7 @@
 
             @if(filled($audioUrl))
                 <div class="admin-lyrics-player">
-                    <audio id="song-lyrics-audio" class="admin-lyrics-native-audio" preload="metadata" src="{{ $audioUrl }}" aria-label="Audio {{ $song->title }}"></audio>
+                    <audio id="song-lyrics-audio" class="admin-lyrics-native-audio" preload="metadata" src="{{ $audioUrl }}" data-audio-duration-seconds="{{ (int) ($audioFile?->duration_seconds ?? 0) }}" aria-label="Audio {{ $song->title }}"></audio>
                     <div class="admin-lyrics-player-controls">
                         <button type="button" class="admin-lyrics-play" data-audio-toggle aria-label="Phát bài hát">
                             <span data-play-icon>▶</span>
@@ -64,7 +70,14 @@
                             </div>
                             <span class="ant-tag ant-tag-red">HOT · 30s</span>
                         </div>
-                        <audio id="song-lyrics-preview-audio" class="admin-lyrics-preview-audio" preload="metadata" controls src="{{ $audioUrl }}" aria-label="Audio nghe thử 30 giây {{ $song->title }}"></audio>
+                        <audio id="song-lyrics-preview-audio" class="admin-lyrics-preview-audio" preload="metadata" src="{{ $audioUrl }}" aria-label="Audio nghe thử 30 giây {{ $song->title }}"></audio>
+                        <div class="admin-lyrics-preview-controls" data-preview-controls>
+                            <button type="button" class="admin-lyrics-preview-toggle" data-preview-toggle aria-label="Phát audio nghe thử">▶</button>
+                            <span class="admin-lyrics-time" data-preview-current>00:00</span>
+                            <input class="admin-lyrics-preview-seek" data-preview-seek type="range" min="0" max="30" step="0.01" value="0" aria-label="Vị trí audio nghe thử">
+                            <span class="admin-lyrics-time">00:30</span>
+                            <button type="button" class="admin-lyrics-preview-mute" data-preview-mute aria-label="Tắt tiếng audio nghe thử">⌁</button>
+                        </div>
                     </div>
                 @endif
             @else
@@ -83,7 +96,7 @@
                     </div>
                 </div>
                 <div class="admin-lyrics-lines" data-lyrics-lines aria-live="polite">
-                    <span class="admin-lyrics-empty">{{ filled($lyric?->synced_lyrics) ? 'Đang tải lời đồng bộ...' : 'Chưa có lời đồng bộ có mốc thời gian.' }}</span>
+                    <span class="admin-lyrics-empty">{{ ($hasTimedLyrics ?? false) ? 'Đang tải lời đồng bộ...' : 'Chưa có lời đồng bộ có mốc thời gian.' }}</span>
                 </div>
             </div>
         </article>
@@ -96,14 +109,18 @@
                 <span class="ant-tag ant-tag-green">Có thể sửa</span>
             </div>
             <div class="admin-form-group">
-                <label class="admin-form-label" for="song-lyrics">Lời bài hát</label>
-                <textarea id="song-lyrics" name="plain_lyrics" rows="12" maxlength="50000" class="ant-input admin-form-input @error('plain_lyrics') is-invalid @enderror" placeholder="Nhập lời bài hát...">{{ old('plain_lyrics', $lyric?->plain_lyrics ?? ($lyric?->synced_lyrics ? null : $lyric?->content)) }}</textarea>
+                <div class="admin-lyrics-editor-label">
+                    <label class="admin-form-label" for="song-lyrics">Lời thường (không có mốc thời gian)</label>
+                    <button type="button" class="ant-btn admin-lyrics-generate-button" data-generate-synced-lyrics>Ước tính mốc từ lời thường</button>
+                </div>
+                <textarea id="song-lyrics" name="plain_lyrics" rows="12" maxlength="50000" class="ant-input admin-form-input @error('plain_lyrics') is-invalid @enderror" placeholder="Nhập lời thường từ API hoặc nhập thủ công...">{{ old('plain_lyrics', $lyric?->plain_lyrics ?? ($lyric?->synced_lyrics ? null : $lyric?->content)) }}</textarea>
+                <p class="admin-field-help" data-sync-generator-status>Lời thường từ API chỉ là phần chữ, không có thời gian. Nút trên chỉ tạo mốc tạm để chỉnh thủ công.</p>
                 @error('plain_lyrics')<p class="admin-field-error">{{ $message }}</p>@enderror
             </div>
             <div class="admin-form-group">
-                <label class="admin-form-label" for="song-synced-lyrics">Lời đồng bộ theo thời gian</label>
-                <textarea id="song-synced-lyrics" name="synced_lyrics" rows="12" maxlength="80000" class="ant-input admin-form-input @error('synced_lyrics') is-invalid @enderror" placeholder="[00:12.50]Dòng lời đầu tiên...">{{ old('synced_lyrics', $lyric?->synced_lyrics) }}</textarea>
-                <p class="admin-field-help">Dùng định dạng LRC, ví dụ: [00:12.50]Dòng lời. Nếu có mốc từng từ dạng &lt;00:12.50&gt;từ, hệ thống sẽ chạy từng từ.</p>
+                <label class="admin-form-label" for="song-synced-lyrics">Lời đồng bộ (LRC có mốc thời gian)</label>
+                <textarea id="song-synced-lyrics" name="synced_lyrics" rows="12" maxlength="80000" class="ant-input admin-form-input @error('synced_lyrics') is-invalid @enderror" placeholder="API sẽ điền LRC nếu nguồn có; ví dụ [00:12.50]Dòng lời...">{{ old('synced_lyrics', $lyric?->synced_lyrics) }}</textarea>
+                <p class="admin-field-help">Đây là dữ liệu riêng với lời thường. Chỉ nội dung có mốc dạng [00:12.50] mới được chạy theo audio; mốc từng từ dạng &lt;00:12.50&gt;từ sẽ chạy chi tiết hơn.</p>
                 @error('synced_lyrics')<p class="admin-field-error">{{ $message }}</p>@enderror
             </div>
             <div class="admin-form-group admin-lyrics-audio-editor">
@@ -134,8 +151,11 @@
 <script>
 (() => {
     const audio = document.querySelector('#song-lyrics-audio');
+    const plainEditor = document.querySelector('#song-lyrics');
     const editor = document.querySelector('#song-synced-lyrics');
     const linesHost = document.querySelector('[data-lyrics-lines]');
+    const generateSyncedLyrics = document.querySelector('[data-generate-synced-lyrics]');
+    const syncGeneratorStatus = document.querySelector('[data-sync-generator-status]');
     const toggle = document.querySelector('[data-audio-toggle]');
     const playIcon = document.querySelector('[data-play-icon]');
     const playLabel = document.querySelector('[data-play-label]');
@@ -155,6 +175,56 @@
         const seconds = String(total % 60).padStart(2, '0');
         return `${String(minutes).padStart(2, '0')}:${seconds}`;
     };
+
+    const formatLrcTime = (value) => {
+        const safeValue = Math.max(0, Number(value) || 0);
+        const minutes = Math.floor(safeValue / 60);
+        const seconds = (safeValue % 60).toFixed(2).padStart(5, '0');
+        return `[${String(minutes).padStart(2, '0')}:${seconds}]`;
+    };
+
+    const getAudioDuration = () => {
+        const loadedDuration = Number(audio?.duration);
+        if (Number.isFinite(loadedDuration) && loadedDuration > 0) return loadedDuration;
+
+        const savedDuration = Number(audio?.dataset.audioDurationSeconds);
+        return Number.isFinite(savedDuration) && savedDuration > 0 ? savedDuration : 0;
+    };
+
+    generateSyncedLyrics?.addEventListener('click', () => {
+        const sourceLines = (plainEditor?.value || '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+        if (!sourceLines.length) {
+            if (syncGeneratorStatus) syncGeneratorStatus.textContent = 'Hãy nhập lời bài hát trước khi tạo đồng bộ.';
+            plainEditor?.focus();
+            return;
+        }
+
+        if (editor?.value.trim() && !window.confirm('Lời đồng bộ hiện tại sẽ bị thay thế. Bạn có muốn tiếp tục không?')) return;
+
+        const duration = getAudioDuration();
+        if (!duration) {
+            if (syncGeneratorStatus) syncGeneratorStatus.textContent = 'Chưa đọc được thời lượng audio. Hãy chờ audio tải xong rồi thử lại.';
+            audio?.load();
+            return;
+        }
+
+        const firstLineAt = Math.min(1, Math.max(0, duration - 1));
+        const lastLineAt = Math.max(firstLineAt, duration - 1);
+        const step = sourceLines.length > 1 ? (lastLineAt - firstLineAt) / (sourceLines.length - 1) : 0;
+        const generated = sourceLines
+            .map((line, index) => `${formatLrcTime(firstLineAt + (step * index))}${line}`)
+            .join('\n');
+
+        if (editor) {
+            editor.value = generated;
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        if (syncGeneratorStatus) syncGeneratorStatus.textContent = `Đã tạo ${sourceLines.length} mốc thời gian ước tính. Hãy nghe và chỉnh lại nếu cần.`;
+    });
 
     const scrollToLine = (row, behavior = 'smooth') => {
         if (!row) return;
@@ -245,16 +315,47 @@
     if (!audio) return;
 
     const previewAudio = document.querySelector('#song-lyrics-preview-audio');
+    const previewToggle = document.querySelector('[data-preview-toggle]');
+    const previewSeek = document.querySelector('[data-preview-seek]');
+    const previewCurrent = document.querySelector('[data-preview-current]');
+    const previewMute = document.querySelector('[data-preview-mute]');
     const previewLimitSeconds = 30;
     if (previewAudio) {
-        const enforcePreviewLimit = () => {
-            if (previewAudio.currentTime >= previewLimitSeconds) {
+        const updatePreviewPlayer = () => {
+            const previewTime = Math.min(previewLimitSeconds, Math.max(0, previewAudio.currentTime || 0));
+            if (previewCurrent) previewCurrent.textContent = formatTime(previewTime);
+            if (previewSeek) previewSeek.value = String(previewTime);
+            if (previewTime >= previewLimitSeconds) {
                 previewAudio.currentTime = previewLimitSeconds;
                 previewAudio.pause();
             }
+            if (previewToggle) previewToggle.textContent = previewAudio.paused ? '▶' : '❚❚';
         };
-        previewAudio.addEventListener('timeupdate', enforcePreviewLimit);
-        previewAudio.addEventListener('seeking', enforcePreviewLimit);
+
+        previewToggle?.addEventListener('click', () => {
+            if (previewAudio.paused) {
+                if (previewAudio.currentTime >= previewLimitSeconds) previewAudio.currentTime = 0;
+                previewAudio.play().catch(() => {});
+            } else {
+                previewAudio.pause();
+            }
+        });
+        previewSeek?.addEventListener('input', () => {
+            previewAudio.currentTime = Math.min(previewLimitSeconds, Number(previewSeek.value));
+            updatePreviewPlayer();
+        });
+        previewMute?.addEventListener('click', () => {
+            previewAudio.muted = !previewAudio.muted;
+            previewMute.textContent = previewAudio.muted ? '×' : '⌁';
+            previewMute.setAttribute('aria-label', previewAudio.muted ? 'Bật tiếng audio nghe thử' : 'Tắt tiếng audio nghe thử');
+        });
+        previewAudio.addEventListener('loadedmetadata', updatePreviewPlayer);
+        previewAudio.addEventListener('timeupdate', updatePreviewPlayer);
+        previewAudio.addEventListener('seeking', updatePreviewPlayer);
+        previewAudio.addEventListener('play', updatePreviewPlayer);
+        previewAudio.addEventListener('pause', updatePreviewPlayer);
+        previewAudio.addEventListener('ended', updatePreviewPlayer);
+        updatePreviewPlayer();
     }
 
     const updatePlayer = () => {

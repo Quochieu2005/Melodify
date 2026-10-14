@@ -430,11 +430,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const topicType = document.querySelector('[data-topic-type]');
     const topicTypeCustomField = document.querySelector('[data-topic-type-custom-field]');
     const topicTypeCustom = document.querySelector('[data-topic-type-custom]');
+    let previousTopicType = topicType?.value || '';
     const syncTopicTypeCustom = () => {
-        const isCustom = topicType?.value === 'custom';
-        if (topicTypeCustomField) topicTypeCustomField.hidden = !isCustom;
-        if (topicTypeCustom) topicTypeCustom.required = isCustom;
-        if (!isCustom && topicTypeCustom) topicTypeCustom.value = '';
+        const value = topicType?.value || '';
+        const existingGroup = value.startsWith('custom:') ? value.slice(7) : '';
+        const isCustom = value === 'custom' || existingGroup !== '';
+        const isNewCustom = value === 'custom';
+        if (topicTypeCustomField) topicTypeCustomField.hidden = !isNewCustom;
+        if (topicTypeCustom) {
+            topicTypeCustom.required = isNewCustom;
+            if (existingGroup) {
+                topicTypeCustom.value = existingGroup;
+            } else if (!isCustom || previousTopicType.startsWith('custom:')) {
+                topicTypeCustom.value = '';
+            }
+        }
+        previousTopicType = value;
     };
     topicType?.addEventListener('change', syncTopicTypeCustom);
     syncTopicTypeCustom();
@@ -442,11 +453,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const playlistType = document.querySelector('[data-playlist-type]');
     const playlistTypeCustomField = document.querySelector('[data-playlist-type-custom-field]');
     const playlistTypeCustom = document.querySelector('[data-playlist-type-custom]');
+    let previousPlaylistType = playlistType?.value || '';
     const syncPlaylistTypeCustom = () => {
-        const isCustom = playlistType?.value === 'custom';
-        if (playlistTypeCustomField) playlistTypeCustomField.hidden = !isCustom;
-        if (playlistTypeCustom) playlistTypeCustom.required = isCustom;
-        if (!isCustom && playlistTypeCustom) playlistTypeCustom.value = '';
+        const value = playlistType?.value || '';
+        const existingGroup = value.startsWith('custom:') ? value.slice(7) : '';
+        const isCustom = value === 'custom' || existingGroup !== '';
+        const isNewCustom = value === 'custom';
+        if (playlistTypeCustomField) playlistTypeCustomField.hidden = !isNewCustom;
+        if (playlistTypeCustom) {
+            playlistTypeCustom.required = isNewCustom;
+            if (existingGroup) {
+                playlistTypeCustom.value = existingGroup;
+            } else if (!isCustom || previousPlaylistType.startsWith('custom:')) {
+                playlistTypeCustom.value = '';
+            }
+        }
+        previousPlaylistType = value;
     };
     playlistType?.addEventListener('change', syncPlaylistTypeCustom);
     syncPlaylistTypeCustom();

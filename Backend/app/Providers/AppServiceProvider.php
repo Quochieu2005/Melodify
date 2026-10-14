@@ -3,10 +3,9 @@
 namespace App\Providers;
 
 use App\Models\User;
-use App\Models\Topic;
-use App\Models\Playlist;
 use App\Models\AdminNotification;
 use App\Services\AdminNotificationService;
+use App\Services\CatalogGroupService;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
@@ -51,32 +50,16 @@ class AppServiceProvider extends ServiceProvider
         }
 
         View::composer('layouts.partials.sidebar.menu', function ($view): void {
-            $loadCustomTypes = static function (string $model) {
-                try {
-                    return collect(Cache::remember(
-                        'sidebar-custom-types:'.md5($model),
-                        now()->addMinutes(5),
-                        fn (): array => $model::query()
-                            ->where('type', 'custom')
-                            ->get()
-                            ->pluck('type_custom')
-                            ->map(fn ($type): string => trim((string) $type))
-                            ->filter()
-                            ->unique()
-                            ->sort()
-                            ->values()
-                            ->all(),
-                    ));
-                } catch (Throwable) {
-                    // Sidebar vẫn hiển thị được nếu kho dữ liệu tạm thời không kết nối.
-                    return collect();
-                }
-            };
-
-            $view->with([
-                'sidebarTopicCustomTypes' => $loadCustomTypes(Topic::class),
-                'sidebarPlaylistCustomTypes' => $loadCustomTypes(Playlist::class),
-            ]);
+            try {
+                $groups = app(CatalogGroupService::class);
+                $view->with([
+                    'sidebarTopicCustomTypes' => $groups->customTypeNames(\App\Models\Topic::class),
+                    'sidebarPlaylistCustomTypes' => $groups->customTypeNames(\App\Models\Playlist::class),
+                ]);
+            } catch (Throwable) {
+                // Sidebar vẫn hiển thị được nếu kho dữ liệu tạm thời không kết nối.
+                $view->with(['sidebarTopicCustomTypes' => collect(), 'sidebarPlaylistCustomTypes' => collect()]);
+            }
         });
 
         View::composer('layouts.partials.header.notifications', function ($view): void {

@@ -13,6 +13,7 @@ use App\Models\SongArtist;
 use App\Models\SongShare;
 use App\Rules\PlainText;
 use App\Services\CloudinaryService;
+use App\Services\Music\LyricsClient;
 use App\Services\Music\NhacCuaTuiClient;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -67,7 +68,7 @@ class SongViewController extends Controller
                     'song' => $song,
                     'lyric' => $lyric,
                     'has_plain_lyrics' => filled($lyric?->plain_lyrics) || (blank($lyric?->synced_lyrics) && filled($lyric?->content)),
-                    'has_synced_lyrics' => filled($lyric?->synced_lyrics),
+                    'has_synced_lyrics' => $this->hasTimedLyrics($lyric),
                     'has_full_audio' => $audio !== null,
                     'has_audio' => $audio !== null || filled($song->preview_url),
                 ];
@@ -117,14 +118,17 @@ class SongViewController extends Controller
             }
         }
 
-        if ($lyric && $song->external_source === 'nhaccuatui'
-            && (blank($lyric->synced_lyrics) || preg_match('#^https?://.+\.lrc(?:\?.*)?$#i', (string) $lyric->synced_lyrics) === 1)
-            && filled($song->external_id)) {
+        if (filled($externalId) && (! $lyric || blank($lyric->plain_lyrics) || blank($lyric->synced_lyrics))) {
             try {
-                $externalLyrics = $nhaccuatui->getLyrics((string) $song->external_id);
-                if (filled($externalLyrics['syncedLyrics'] ?? null)) {
-                    $lyric->synced_lyrics = $externalLyrics['syncedLyrics'];
-                    $lyric->is_synced = true;
+                $externalLyrics = $nhaccuatui->getLyrics((string) $externalId);
+                if ($externalLyrics && (filled($externalLyrics['plainLyrics'] ?? null) || filled($externalLyrics['syncedLyrics'] ?? null))) {
+                    $lyric ??= new Lyric([
+                        'song_id' => (string) $song->getKey(),
+                        'language' => 'unknown',
+                    ]);
+                    $lyric->plain_lyrics = $lyric->plain_lyrics ?: ($externalLyrics['plainLyrics'] ?? null);
+                    $lyric->synced_lyrics = $lyric->synced_lyrics ?: ($externalLyrics['syncedLyrics'] ?? null);
+                    $lyric->is_synced = $this->hasTimedLyrics($lyric);
                     $lyric->content = $lyric->plain_lyrics ?: $lyric->synced_lyrics;
                     $lyric->source = 'NhacCuaTui';
                     $lyric->save();
@@ -137,12 +141,81 @@ class SongViewController extends Controller
         return view('Admin.songs.lyrics', [
             'song' => $song,
             'lyric' => $lyric,
+            'hasTimedLyrics' => $this->hasTimedLyrics($lyric),
             'audioFile' => $audioFile,
             'audioUrl' => $audioFile?->source === 'nhaccuatui'
                 ? route('admin.songs.audio', $song->getKey())
                 : ($audioFile?->file_url ?: $song->preview_url),
             'audioLabel' => filled($audioFile?->file_url) ? 'Bản đầy đủ' : 'Bản nghe thử',
         ]);
+    }
+
+    public function syncFromSources(string $id, NhacCuaTuiClient $nhaccuatui, LyricsClient $lyricsClient): RedirectResponse
+    {
+        $song = Song::query()->findOrFail($id);
+        $audioFile = SongAudioFile::query()
+            ->where('song_id', (string) $song->getKey())
+            ->where('status', 'active')
+            ->where('file_type', 'full')
+            ->first();
+        $lyric = Lyric::query()->where('song_id', (string) $song->getKey())->first()
+            ?: new Lyric([
+                'song_id' => (string) $song->getKey(),
+                'language' => 'unknown',
+            ]);
+        $externalId = $audioFile?->external_id;
+        if (blank($externalId) && $song->external_source === 'nhaccuatui') {
+            $externalId = $song->external_id;
+        }
+
+        $syncedLyrics = null;
+        $plainLyrics = null;
+        $source = null;
+
+        if (filled($externalId)) {
+            try {
+                $externalLyrics = $nhaccuatui->getLyrics((string) $externalId);
+                $syncedLyrics = trim((string) ($externalLyrics['syncedLyrics'] ?? '')) ?: null;
+                $plainLyrics = trim((string) ($externalLyrics['plainLyrics'] ?? '')) ?: null;
+                $source = $syncedLyrics ? 'NhacCuaTui' : null;
+            } catch (Throwable) {
+                // Try the provider-independent fallback below.
+            }
+        }
+
+        if (blank($syncedLyrics) || blank($plainLyrics)) {
+            try {
+                $externalLyrics = $lyricsClient->find(
+                    (string) $song->title,
+                    (string) $song->artist_name,
+                    $song->album?->title,
+                    (int) ($audioFile?->duration_seconds ?: $song->duration_seconds ?: 0),
+                );
+                $providerSyncedLyrics = trim((string) data_get($externalLyrics, 'syncedLyrics', data_get($externalLyrics, 'synced_lyrics', ''))) ?: null;
+                $providerPlainLyrics = trim((string) data_get($externalLyrics, 'plainLyrics', data_get($externalLyrics, 'plain_lyrics', ''))) ?: null;
+                $plainLyrics ??= $providerPlainLyrics;
+                $syncedLyrics ??= $providerSyncedLyrics;
+                $source = $syncedLyrics && blank($source) ? 'LRCLIB' : $source;
+            } catch (Throwable) {
+                // Report the user-facing failure below instead of breaking the lyrics page.
+            }
+        }
+
+        if (blank($syncedLyrics) || preg_match('/\[\d+:\d+(?:\.\d+)?\]/', (string) $syncedLyrics) !== 1) {
+            return back()->withErrors([
+                'synced_lyrics' => 'Nguồn lời hiện chỉ có lời thường hoặc chưa có LRC đồng bộ. Lời thường không thể tự khớp chính xác theo giọng hát; hãy nhập LRC có mốc thời gian hoặc chỉnh từng mốc thủ công.',
+            ]);
+        }
+
+        $lyric->content = $plainLyrics ?: ($lyric->plain_lyrics ?: $syncedLyrics);
+        $lyric->plain_lyrics = $plainLyrics ?: $lyric->plain_lyrics;
+        $lyric->synced_lyrics = $syncedLyrics;
+        $lyric->is_synced = true;
+        $lyric->source = $source ?: 'External';
+        $lyric->save();
+
+        return redirect()->route('admin.songs.lyrics', $song->getKey())
+            ->with('success', 'Đã tải lời LRC đồng bộ thật từ '.($source ?: 'nguồn bên ngoài').'.');
     }
 
     public function updateLyrics(Request $request, string $id, CloudinaryService $cloudinary): RedirectResponse
@@ -157,6 +230,11 @@ class SongViewController extends Controller
         ]);
         $plainLyrics = trim((string) ($data['plain_lyrics'] ?? ''));
         $syncedLyrics = trim((string) ($data['synced_lyrics'] ?? ''));
+        if ($syncedLyrics !== '' && preg_match('/\[\d+:\d+(?:\.\d+)?\]/', $syncedLyrics) !== 1) {
+            return back()->withErrors([
+                'synced_lyrics' => 'Lời đồng bộ phải là LRC có mốc thời gian, ví dụ [00:12.50]Dòng lời.',
+            ])->withInput();
+        }
         $songId = (string) $song->getKey();
         $fullAudio = SongAudioFile::query()
             ->where('song_id', $songId)
@@ -211,7 +289,7 @@ class SongViewController extends Controller
         $lyric->content = $plainLyrics !== '' ? $plainLyrics : $syncedLyrics;
         $lyric->plain_lyrics = $plainLyrics !== '' ? $plainLyrics : null;
         $lyric->synced_lyrics = $syncedLyrics !== '' ? $syncedLyrics : null;
-        $lyric->is_synced = $syncedLyrics !== '';
+        $lyric->is_synced = $this->hasTimedLyrics($lyric);
         $lyric->source = 'Admin';
         $lyric->save();
 
@@ -238,6 +316,12 @@ class SongViewController extends Controller
         $audio->status = 'active';
         $audio->source = $data['source'] ?? 'admin';
         $audio->save();
+    }
+
+    private function hasTimedLyrics(?Lyric $lyric): bool
+    {
+        return filled($lyric?->synced_lyrics)
+            && preg_match('/\[\d+:\d+(?:\.\d+)?\]/', (string) $lyric->synced_lyrics) === 1;
     }
 
     public function index(Request $request): View
@@ -328,7 +412,7 @@ class SongViewController extends Controller
                     'shares' => $sharesBySong->get($songId, 0),
                     'has_lyrics' => $lyric !== null,
                     'has_plain_lyrics' => filled($lyric?->plain_lyrics) || (blank($lyric?->synced_lyrics) && filled($lyric?->content)),
-                    'has_synced_lyrics' => filled($lyric?->synced_lyrics),
+                    'has_synced_lyrics' => $this->hasTimedLyrics($lyric),
                     'has_audio' => $hasFullAudio || filled($song->preview_url),
                     'has_full_audio' => $hasFullAudio,
                 ];
