@@ -113,29 +113,33 @@ if (sortOrderForm && sortOrderInput && sortOrderType) {
         suggestions = {};
     }
 
-    let userChangedOrder = false;
-    let lastSuggestedOrder = sortOrderInput.value;
-
     const groupKey = () => {
         const type = sortOrderType.value || '';
+        if (type.startsWith('custom:')) return type;
         if (type === 'custom') return `custom:${sortOrderCustom?.value.trim() || ''}`;
         return type;
     };
 
+    const isEditing = sortOrderForm.dataset.sortOrderEditing === '1';
+    const initialGroup = groupKey();
+    const initialOrder = sortOrderInput.value;
+
     const syncSortOrder = () => {
-        if (userChangedOrder) return;
         const key = groupKey();
-        const nextOrder = Object.prototype.hasOwnProperty.call(suggestions, key)
-            ? suggestions[key]
-            : 0;
+        const selectedOption = sortOrderType.options[sortOrderType.selectedIndex];
+        const optionSuggestion = Number(selectedOption?.dataset.nextSortOrder);
+        const fallbackOrder = Number.isInteger(optionSuggestion) && optionSuggestion > 0
+            ? optionSuggestion
+            : 1;
+        const nextOrder = isEditing && key === initialGroup
+            ? initialOrder
+            : (Object.prototype.hasOwnProperty.call(suggestions, key)
+                ? suggestions[key]
+                : fallbackOrder);
         sortOrderInput.value = String(nextOrder);
-        lastSuggestedOrder = sortOrderInput.value;
     };
 
-    sortOrderInput.addEventListener('input', () => {
-        userChangedOrder = sortOrderInput.value !== lastSuggestedOrder;
-    });
     sortOrderType.addEventListener('change', syncSortOrder);
     sortOrderCustom?.addEventListener('input', syncSortOrder);
-    syncSortOrder();
+    if (!isEditing) syncSortOrder();
 }

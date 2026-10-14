@@ -37,8 +37,8 @@
                         <th>Ảnh</th>
                         <th>Bài hát</th>
                         <th>Nghệ sĩ</th>
-                        <th>Lời thường</th>
-                        <th>Lời đồng bộ</th>
+                        <th>Lời thường (chữ, không mốc)</th>
+                        <th>Lời đồng bộ (LRC có mốc)</th>
                         <th>Audio</th>
                         <th>Thao tác</th>
                     </tr>
@@ -46,6 +46,8 @@
                 <tbody class="ant-table-tbody">
                     @forelse($items as $item)
                         @php($song = $item['song'])
+                        @php($hasPlainLyrics = $item['has_plain_lyrics'])
+                        @php($hasSyncedLyrics = $item['has_synced_lyrics'])
                         <tr>
                             <td>
                                 <div class="admin-table-avatar admin-song-cover">
@@ -63,8 +65,8 @@
                                 </a>
                             </td>
                             <td>{{ $song->artist_name ?: 'Chưa có nghệ sĩ' }}</td>
-                            <td><span class="admin-lyrics-status {{ $item['has_plain_lyrics'] ? 'is-ready' : '' }}">{{ $item['has_plain_lyrics'] ? 'Đã lưu' : 'Chưa có' }}</span></td>
-                            <td><span class="admin-lyrics-status {{ $item['has_synced_lyrics'] ? 'is-ready' : '' }}">{{ $item['has_synced_lyrics'] ? 'Có mốc thời gian' : 'Chưa có' }}</span></td>
+                            <td><span class="admin-lyrics-status {{ $hasPlainLyrics ? 'is-ready' : '' }}">{{ $hasPlainLyrics ? ($hasSyncedLyrics ? 'Đã lưu' : 'Chỉ có lời thường') : 'Chưa có lời thường' }}</span></td>
+                            <td><span class="admin-lyrics-status {{ $hasSyncedLyrics ? 'is-ready' : '' }}">{{ $hasSyncedLyrics ? 'Có mốc thời gian' : ($hasPlainLyrics ? 'Chưa có LRC' : 'Chưa có lời đồng bộ') }}</span></td>
                             <td><span class="admin-lyrics-status {{ $item['has_audio'] ? 'is-ready' : '' }}">{{ $item['has_full_audio'] ? 'Đầy đủ' : ($item['has_audio'] ? 'Nghe thử' : 'Chưa có') }}</span></td>
                             <td>
                                 <a href="{{ route('admin.songs.lyrics', $song->getKey()) }}" class="ant-btn ant-btn-primary admin-lyrics-open-button">Mở lyric</a>

@@ -11,6 +11,7 @@ use App\Models\Genre;
 use App\Models\Topic;
 use App\Models\User;
 use App\Rules\PlainText;
+use App\Services\CatalogGroupService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -49,7 +50,7 @@ class PlaylistController extends MediaCatalogController
         'description' => ['label' => 'Mô tả', 'type' => 'textarea'],
         'is_system' => ['label' => 'Playlist hệ thống', 'type' => 'checkbox', 'help' => 'Playlist hệ thống không gắn với người dùng cụ thể.'],
         'visibility' => ['label' => 'Quyền hiển thị', 'type' => 'select', 'required' => true, 'options' => ['public' => 'Công khai', 'private' => 'Riêng tư', 'unlisted' => 'Không công khai']],
-        'sort_order' => ['label' => 'Thứ tự hiển thị', 'type' => 'number', 'default' => 0, 'required' => true],
+        'sort_order' => ['label' => 'Thứ tự hiển thị', 'type' => 'number', 'default' => 1, 'required' => true],
         'status' => ['label' => 'Trạng thái', 'type' => 'select', 'required' => true, 'options' => ['active' => 'Hoạt động', 'inactive' => 'Tạm ẩn']],
     ];
 
@@ -103,6 +104,7 @@ class PlaylistController extends MediaCatalogController
             'selectedSongIds' => [],
             'defaultSortOrder' => $this->nextSortOrder($this->defaultSortOrderGroup()),
             'sortOrderByGroup' => $this->sortOrderSuggestions(),
+            'playlistGroupOptions' => app(CatalogGroupService::class)->playlistFormGroups(),
             ...$this->relationOptions(),
             'selectedArtistIds' => [],
             'selectedGenreIds' => [],
@@ -131,6 +133,7 @@ class PlaylistController extends MediaCatalogController
             'selectedGenreIds' => $this->selectedIds($item, 'genre_ids'),
             'selectedTopicIds' => $this->selectedIds($item, 'topic_ids'),
             'sortOrderByGroup' => $this->sortOrderSuggestions(),
+            'playlistGroupOptions' => app(CatalogGroupService::class)->playlistFormGroups(),
         ]));
     }
 
@@ -163,14 +166,16 @@ class PlaylistController extends MediaCatalogController
 
     public function store(Request $request): RedirectResponse
     {
-        $this->normalizeSortOrderInput($request);
+        $this->normalizeRequest($request);
         $data = $request->validate($this->rules(null), $this->validationMessages());
+        $this->applyAutomaticSortOrder($data);
         $this->validateSortOrder($data, null);
         $this->validateSongIds($data['song_ids'] ?? []);
         $data['artist_ids'] = $this->artistIdsForSongs($data['song_ids'] ?? []);
         $this->validateRelationIds($data);
         $playlist = Playlist::query()->create($this->preparePayload($request, $data, null));
         $this->syncSongs($playlist, $data['song_ids'] ?? []);
+        app(CatalogGroupService::class)->forget();
 
         return redirect()->route("admin.{$this->resource}.index")
             ->with('success', "Đã tạo {$this->title} thành công.");
@@ -179,14 +184,16 @@ class PlaylistController extends MediaCatalogController
     public function update(Request $request, string $id): RedirectResponse
     {
         $item = Playlist::query()->findOrFail($id);
-        $this->normalizeSortOrderInput($request);
+        $this->normalizeRequest($request);
         $data = $request->validate($this->rules($item), $this->validationMessages());
+        $this->applyAutomaticSortOrder($data, $item);
         $this->validateSortOrder($data, $item);
         $this->validateSongIds($data['song_ids'] ?? []);
         $data['artist_ids'] = $this->artistIdsForSongs($data['song_ids'] ?? []);
         $this->validateRelationIds($data);
         $item->update($this->preparePayload($request, $data, $item));
         $this->syncSongs($item, $data['song_ids'] ?? []);
+        app(CatalogGroupService::class)->forget();
 
         return redirect()->route("admin.{$this->resource}.index")
             ->with('success', "Đã cập nhật {$this->title}.");
@@ -197,6 +204,7 @@ class PlaylistController extends MediaCatalogController
         $item = Playlist::query()->findOrFail($id);
         PlaylistSong::query()->where('playlist_id', (string) $item->getKey())->delete();
         $item->delete();
+        $this->afterDelete($item);
 
         return back()->with('success', "Đã xóa {$this->title}.");
     }
@@ -215,7 +223,7 @@ class PlaylistController extends MediaCatalogController
             'sort_order' => [
                 'required',
                 'integer',
-                'min:0',
+                'min:1',
                 'max:9999',
             ],
             'status' => ['required', 'in:active,inactive'],
@@ -244,9 +252,43 @@ class PlaylistController extends MediaCatalogController
         return $type !== '' ? $type : null;
     }
 
+    protected function normalizeRequest(Request $request): void
+    {
+        parent::normalizeRequest($request);
+
+        $type = trim((string) $request->input('type', ''));
+        if (str_starts_with($type, 'custom:')) {
+            $request->merge([
+                'type' => 'custom',
+                'type_custom' => trim(substr($type, 7)),
+            ]);
+        }
+    }
+
     protected function defaultSortOrderGroup(): ?string
     {
         return 'mood_today';
+    }
+
+    protected function sortOrderGroupForItem(object $item): ?string
+    {
+        $type = trim((string) ($item->type ?? ''));
+
+        if ($type === 'custom') {
+            return 'custom:'.trim((string) ($item->type_custom ?? ''));
+        }
+
+        return $type !== '' ? $type : null;
+    }
+
+    protected function autoAssignSortOrderOnCreate(): bool
+    {
+        return true;
+    }
+
+    protected function autoAssignSortOrderOnGroupChange(): bool
+    {
+        return true;
     }
 
     /** @param mixed $query */
@@ -271,24 +313,18 @@ class PlaylistController extends MediaCatalogController
     {
         $suggestions = [];
 
-        foreach (array_keys(config('playlists.types', [])) as $type) {
-            if ($type !== 'custom') {
-                $suggestions[$type] = $this->nextSortOrder($type);
+        foreach (app(CatalogGroupService::class)->playlistFormGroups() as $group) {
+            if ($group['value'] !== 'custom') {
+                $suggestions[$group['value']] = $this->nextSortOrder($group['value']);
             }
         }
 
-        Playlist::query()
-            ->where('type', 'custom')
-            ->get(['type_custom'])
-            ->pluck('type_custom')
-            ->map(fn ($name): string => trim((string) $name))
-            ->filter()
-            ->unique()
-            ->each(function (string $name) use (&$suggestions): void {
-                $suggestions['custom:'.$name] = $this->nextSortOrder('custom:'.$name);
-            });
-
         return $suggestions;
+    }
+
+    protected function afterDelete(object $item): void
+    {
+        app(CatalogGroupService::class)->forget();
     }
 
     protected function normalizePayload(array $data, Request $request): array
@@ -297,6 +333,8 @@ class PlaylistController extends MediaCatalogController
 
         if (($data['type'] ?? null) !== 'custom') {
             $data['type_custom'] = null;
+        } else {
+            $data['type_custom'] = trim((string) ($data['type_custom'] ?? ''));
         }
 
         if ($data['is_system'] ?? false) {

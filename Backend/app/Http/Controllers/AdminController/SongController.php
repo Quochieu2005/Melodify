@@ -240,16 +240,29 @@ class SongController extends CrudResourceController
                 $lyrics = null;
             }
 
-            if (! $lyrics) {
+            if (blank($lyrics['plainLyrics'] ?? null) || blank($lyrics['syncedLyrics'] ?? null)) {
+                $fallbackLyrics = null;
                 try {
-                    $lyrics = $lyricsClient->find(
+                    $fallbackLyrics = $lyricsClient->find(
                         (string) ($track['trackName'] ?? ''),
                         (string) ($track['artistName'] ?? ''),
                         $track['collectionName'] ?? null,
                         isset($track['trackTimeMillis']) ? (int) round(((int) $track['trackTimeMillis']) / 1000) : null,
                     );
                 } catch (RuntimeException) {
-                    $lyrics = null;
+                    $fallbackLyrics = null;
+                }
+
+                if ($fallbackLyrics) {
+                    $lyrics = [
+                        'plainLyrics' => filled($lyrics['plainLyrics'] ?? null)
+                            ? $lyrics['plainLyrics']
+                            : ($fallbackLyrics['plainLyrics'] ?? null),
+                        'syncedLyrics' => filled($lyrics['syncedLyrics'] ?? null)
+                            ? $lyrics['syncedLyrics']
+                            : ($fallbackLyrics['syncedLyrics'] ?? null),
+                        'source' => $lyrics['source'] ?? ($fallbackLyrics['source'] ?? 'LRCLIB'),
+                    ];
                 }
             }
 
@@ -454,6 +467,9 @@ class SongController extends CrudResourceController
     {
         $plainLyrics = trim((string) $plainLyrics);
         $syncedLyrics = trim((string) $syncedLyrics);
+        if ($syncedLyrics !== '' && preg_match('/\[\d+:\d+(?:\.\d+)?\]/', $syncedLyrics) !== 1) {
+            $syncedLyrics = '';
+        }
 
         if ($plainLyrics === '' && $syncedLyrics === '') {
             Lyric::query()->where('song_id', (string) $song->getKey())->delete();
