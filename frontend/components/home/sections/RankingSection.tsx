@@ -170,9 +170,9 @@ export default function RankingSection() {
         <h2 id="ranking-heading" className={`${lexend.className} text-[24px] font-bold leading-none text-white`} style={{ color: '#ffffff', fontFamily: 'Lexend, sans-serif', fontSize: '24px', fontWeight: 700 }}>
           Bảng Xếp Hạng
         </h2>
-        <button type="button" className="cursor-pointer text-[14px] font-medium text-[#bdbdbd] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202a28]" style={{ color: '#bdbdbd', fontSize: '14px', fontWeight: 500 }}>
-          Thêm
-        </button>
+        <Link href="/charts" className="cursor-pointer text-[14px] font-medium text-[#bdbdbd] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202a28]" style={{ color: '#bdbdbd', fontSize: '14px', fontWeight: 500 }}>
+          More
+        </Link>
       </div>
 
       <div aria-label="Cuộn ngang để xem thêm bảng xếp hạng" role="region" tabIndex={0} className="h-[442px] w-full overflow-x-auto overflow-y-hidden [scrollbar-width:none] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 [&::-webkit-scrollbar]:hidden">

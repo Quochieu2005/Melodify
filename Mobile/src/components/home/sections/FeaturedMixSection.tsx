@@ -9,9 +9,9 @@ export function FeaturedMixSection({ onPlay }: FeaturedMixSectionProps) {
     <View style={styles.card}>
       <View style={styles.orb} />
       <View style={styles.copy}>
-        <Text style={styles.label}>Mix dành cho bạn</Text>
-        <Text style={styles.title}>Đêm nay, nghe gì?</Text>
-        <Text style={styles.description}>Một set nhạc dịu, sâu và vừa đủ để bạn thả lỏng.</Text>
+        <Text style={styles.label}>MELODIFY MIX</Text>
+        <Text style={styles.title}>Âm nhạc dành cho bạn</Text>
+        <Text style={styles.description}>Khám phá những giai điệu mới được tuyển chọn riêng cho hôm nay.</Text>
         <Pressable accessibilityLabel="Phát mix Đêm nay, nghe gì" onPress={() => onPlay('Đêm nay, nghe gì?')} style={styles.button}>
           <Text style={styles.buttonIcon}>▶</Text>
           <Text style={styles.buttonText}>Phát ngay</Text>
@@ -24,15 +24,15 @@ export function FeaturedMixSection({ onPlay }: FeaturedMixSectionProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#D9FF45',
-    borderRadius: 28,
-    minHeight: 262,
+    backgroundColor: '#7C5CFF',
+    borderRadius: 18,
+    minHeight: 220,
     overflow: 'hidden',
     padding: 24,
     position: 'relative',
   },
   orb: {
-    backgroundColor: '#B8E71F',
+    backgroundColor: '#B16CFF',
     borderRadius: 120,
     height: 210,
     opacity: 0.85,
@@ -43,21 +43,21 @@ const styles = StyleSheet.create({
   },
   copy: { maxWidth: 255, zIndex: 1 },
   label: {
-    color: '#35420D',
+    color: '#EDE7FF',
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   title: {
-    color: '#10140C',
-    fontSize: 34,
+    color: '#FFFFFF',
+    fontSize: 30,
     fontWeight: '900',
     letterSpacing: -1.2,
     lineHeight: 36,
     marginTop: 14,
   },
   description: {
-    color: '#35420D',
+    color: '#EDE7FF',
     fontSize: 14,
     lineHeight: 20,
     marginTop: 10,
@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
   button: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: '#12150F',
+    backgroundColor: '#151329',
     borderRadius: 22,
     flexDirection: 'row',
     gap: 8,
@@ -73,11 +73,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 11,
   },
-  buttonIcon: { color: '#D9FF45', fontSize: 12 },
+  buttonIcon: { color: '#00D3E5', fontSize: 12 },
   buttonText: { color: '#F5F6F0', fontSize: 13, fontWeight: '800' },
   mixNumber: {
     bottom: 18,
-    color: '#8BAE16',
+    color: '#B9A9FF',
     fontSize: 68,
     fontWeight: '900',
     position: 'absolute',
