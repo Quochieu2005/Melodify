@@ -3,7 +3,7 @@
 import { Lexend } from 'next/font/google';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { listGenres, listTopics } from '@/lib/api';
+import { getHomeBootstrap } from '@/lib/api';
 import {
   fallbackHomeTopics,
   genreRecordToCard,
@@ -26,13 +26,10 @@ export default function HomeTopicsSection() {
 
     const loadDailyTopics = async () => {
       try {
-        const [topicResponse, genreResponse] = await Promise.all([
-          listTopics({ perPage: 50 }),
-          listGenres({ perPage: 50 }),
-        ]);
+        const response = await getHomeBootstrap();
         const allTopics = [
-          ...genreResponse.data.map(genreRecordToCard),
-          ...topicResponse.data.map(topicRecordToCard),
+          ...response.data.genres.map(genreRecordToCard),
+          ...response.data.topics.map(topicRecordToCard),
         ];
 
         if (!cancelled) setTopics(pickDailyTopics(allTopics.length ? allTopics : fallbackHomeTopics, 12, dateKey));

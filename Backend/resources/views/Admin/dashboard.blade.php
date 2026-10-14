@@ -270,5 +270,108 @@
                 </div>
             </article>
         </section>
+
+        @php
+            $adminRankingCards = [
+                [
+                    'title' => 'Playlist được nghe nhiều nhất',
+                    'description' => 'Tổng lượt nghe các bài hát trong playlist · 30 ngày gần nhất.',
+                    'items' => $engagementRankings['playlists']['plays'] ?? collect(),
+                    'metric' => 'plays',
+                    'unit' => 'lượt nghe',
+                    'tone' => 'cyan',
+                ],
+                [
+                    'title' => 'Playlist được yêu thích',
+                    'description' => 'Tổng lượt yêu thích trên các bài hát trong playlist.',
+                    'items' => $engagementRankings['playlists']['favorites'] ?? collect(),
+                    'metric' => 'favorites',
+                    'unit' => 'yêu thích',
+                    'tone' => 'violet',
+                ],
+                [
+                    'title' => 'Playlist được chia sẻ nhiều nhất',
+                    'description' => 'Tổng lượt chia sẻ trên các bài hát trong playlist.',
+                    'items' => $engagementRankings['playlists']['shares'] ?? collect(),
+                    'metric' => 'shares',
+                    'unit' => 'chia sẻ',
+                    'tone' => 'amber',
+                ],
+                [
+                    'title' => 'Nghệ sĩ có lượt xem cao nhất',
+                    'description' => 'Tổng lượt nghe các bài hát của nghệ sĩ · 30 ngày gần nhất.',
+                    'items' => $engagementRankings['artists']['plays'] ?? collect(),
+                    'metric' => 'plays',
+                    'unit' => 'lượt xem',
+                    'tone' => 'mint',
+                ],
+                [
+                    'title' => 'Nghệ sĩ được yêu thích',
+                    'description' => 'Tổng lượt yêu thích trên các bài hát của nghệ sĩ.',
+                    'items' => $engagementRankings['artists']['favorites'] ?? collect(),
+                    'metric' => 'favorites',
+                    'unit' => 'yêu thích',
+                    'tone' => 'pink',
+                ],
+                [
+                    'title' => 'Nghệ sĩ được chia sẻ nhiều nhất',
+                    'description' => 'Tổng lượt chia sẻ trên các bài hát của nghệ sĩ.',
+                    'items' => $engagementRankings['artists']['shares'] ?? collect(),
+                    'metric' => 'shares',
+                    'unit' => 'chia sẻ',
+                    'tone' => 'blue',
+                ],
+            ];
+        @endphp
+
+        <section class="admin-dashboard-insights" aria-labelledby="dashboard-insights-title">
+            <div class="admin-dashboard-section-heading">
+                <div>
+                    <span class="admin-dashboard-panel-kicker">Xếp hạng nội dung</span>
+                    <h2 id="dashboard-insights-title">Playlist & nghệ sĩ nổi bật</h2>
+                    <p>Yêu thích và chia sẻ được tổng hợp từ các bài hát liên quan.</p>
+                </div>
+            </div>
+            <div class="admin-dashboard-insights-grid">
+                @foreach ($adminRankingCards as $ranking)
+                    <article class="ant-card ant-card-bordered admin-dashboard-panel admin-dashboard-insight-card"
+                        data-tone="{{ $ranking['tone'] }}">
+                        <div class="admin-dashboard-panel-heading">
+                            <div>
+                                <h3>{{ $ranking['title'] }}</h3>
+                                <p>{{ $ranking['description'] }}</p>
+                            </div>
+                        </div>
+                        <div class="admin-dashboard-insight-list">
+                            @forelse ($ranking['items'] as $index => $item)
+                                <div class="admin-dashboard-insight-row">
+                                    <span class="admin-dashboard-ranking-number">{{ str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT) }}</span>
+                                    <div class="admin-dashboard-insight-avatar">
+                                        @if (filled($item['image_url']))
+                                            <img src="{{ $item['image_url'] }}" alt="" loading="lazy" decoding="async">
+                                        @else
+                                            <x-anticon name="{{ str_contains($ranking['title'], 'Nghệ sĩ') ? 'team' : 'unordered-list' }}" aria-hidden="true" />
+                                        @endif
+                                    </div>
+                                    <div class="admin-dashboard-insight-copy">
+                                        <strong>{{ $item['name'] }}</strong>
+                                        <span>{{ $item['subtitle'] }}</span>
+                                    </div>
+                                    <span class="admin-dashboard-insight-value">
+                                        {{ number_format((int) $item[$ranking['metric']]) }}
+                                        <small>{{ $ranking['unit'] }}</small>
+                                    </span>
+                                </div>
+                            @empty
+                                <div class="admin-dashboard-empty admin-dashboard-empty-compact">
+                                    <x-anticon name="dashboard" aria-hidden="true" />
+                                    <span>Chưa có dữ liệu cho bảng xếp hạng này.</span>
+                                </div>
+                            @endforelse
+                        </div>
+                    </article>
+                @endforeach
+            </div>
+        </section>
     </div>
 @endsection

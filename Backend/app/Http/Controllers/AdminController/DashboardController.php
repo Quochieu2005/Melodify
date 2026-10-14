@@ -4,11 +4,17 @@ namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
 use App\Models\Artist;
+use App\Models\Favorite;
 use App\Models\Payment;
+use App\Models\Playlist;
+use App\Models\PlaylistSong;
 use App\Models\Song;
+use App\Models\SongArtist;
 use App\Models\SongPlayEvent;
+use App\Models\SongShare;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
@@ -86,6 +92,8 @@ class DashboardController extends Controller
             ];
         })->sortByDesc('plays')->values();
 
+        $engagementRankings = $this->engagementRankings($playCountBySong);
+
         return view('Admin.dashboard', [
             'stats' => [
                 'songs' => Song::query()->count(),
@@ -99,7 +107,116 @@ class DashboardController extends Controller
             'paymentTrend' => $paymentTrend,
             'userTrend' => $userTrend,
             'topSongs' => $topSongs,
+            'engagementRankings' => $engagementRankings,
         ]);
+    }
+
+    /** @return array{playlists: array<string, Collection>, artists: array<string, Collection>} */
+    private function engagementRankings(Collection $playCounts): array
+    {
+        $favoriteCounts = Favorite::query()
+            ->get(['song_id'])
+            ->groupBy(fn (Favorite $favorite): string => (string) $favorite->song_id)
+            ->map(fn (Collection $items): int => $items->count());
+        $shareCounts = SongShare::query()
+            ->get(['song_id'])
+            ->groupBy(fn (SongShare $share): string => (string) $share->song_id)
+            ->map(fn (Collection $items): int => $items->count());
+
+        $playlistLinks = PlaylistSong::query()
+            ->get(['playlist_id', 'song_id'])
+            ->groupBy(fn (PlaylistSong $link): string => (string) $link->playlist_id);
+        $playlistIds = $playlistLinks->keys()->map(fn ($id): string => (string) $id)->values()->all();
+        $playlistKey = (new Playlist())->getKeyName();
+        $playlists = $playlistIds === []
+            ? collect()
+            : Playlist::query()->whereIn($playlistKey, $playlistIds)->get();
+
+        $playlistCards = $playlists->map(function (Playlist $playlist) use ($playlistLinks, $playCounts, $favoriteCounts, $shareCounts): array {
+            $songIds = $playlistLinks
+                ->get((string) $playlist->getKey(), collect())
+                ->pluck('song_id')
+                ->map(fn ($id): string => (string) $id);
+
+            return $this->engagementCard(
+                $playlist->name ?: 'Playlist chưa đặt tên',
+                $playlist->type_custom ?: config('playlists.types.'.($playlist->type ?? ''), 'Playlist'),
+                $playlist->cover_url ?? null,
+                $songIds,
+                $playCounts,
+                $favoriteCounts,
+                $shareCounts,
+            );
+        });
+
+        $artistLinks = SongArtist::query()
+            ->get(['artist_id', 'song_id'])
+            ->groupBy(fn (SongArtist $link): string => (string) $link->artist_id);
+        $artistIds = $artistLinks->keys()->map(fn ($id): string => (string) $id)->values()->all();
+        $artistKey = (new Artist())->getKeyName();
+        $artists = $artistIds === []
+            ? collect()
+            : Artist::query()->whereIn($artistKey, $artistIds)->get();
+
+        $artistCards = $artists->map(function (Artist $artist) use ($artistLinks, $playCounts, $favoriteCounts, $shareCounts): array {
+            $songIds = $artistLinks
+                ->get((string) $artist->getKey(), collect())
+                ->pluck('song_id')
+                ->map(fn ($id): string => (string) $id);
+
+            return $this->engagementCard(
+                $artist->name ?: 'Nghệ sĩ chưa đặt tên',
+                'Tổng hợp từ các bài hát của nghệ sĩ',
+                $artist->avatar_url ?? $artist->image_url ?? null,
+                $songIds,
+                $playCounts,
+                $favoriteCounts,
+                $shareCounts,
+            );
+        });
+
+        return [
+            'playlists' => [
+                'plays' => $this->rankEngagementCards($playlistCards, 'plays'),
+                'favorites' => $this->rankEngagementCards($playlistCards, 'favorites'),
+                'shares' => $this->rankEngagementCards($playlistCards, 'shares'),
+            ],
+            'artists' => [
+                'plays' => $this->rankEngagementCards($artistCards, 'plays'),
+                'favorites' => $this->rankEngagementCards($artistCards, 'favorites'),
+                'shares' => $this->rankEngagementCards($artistCards, 'shares'),
+            ],
+        ];
+    }
+
+    /** @param Collection<int, string> $songIds */
+    private function engagementCard(
+        string $name,
+        string $subtitle,
+        ?string $imageUrl,
+        Collection $songIds,
+        Collection $playCounts,
+        Collection $favoriteCounts,
+        Collection $shareCounts,
+    ): array {
+        return [
+            'name' => $name,
+            'subtitle' => $subtitle,
+            'image_url' => $imageUrl,
+            'plays' => $songIds->sum(fn (string $id): int => (int) $playCounts->get($id, 0)),
+            'favorites' => $songIds->sum(fn (string $id): int => (int) $favoriteCounts->get($id, 0)),
+            'shares' => $songIds->sum(fn (string $id): int => (int) $shareCounts->get($id, 0)),
+        ];
+    }
+
+    /** @param Collection<int, array<string, mixed>> $cards */
+    private function rankEngagementCards(Collection $cards, string $metric): Collection
+    {
+        return $cards
+            ->filter(fn (array $card): bool => (int) ($card[$metric] ?? 0) > 0)
+            ->sortByDesc($metric)
+            ->take(5)
+            ->values();
     }
 
     private function dayKey(mixed $value): string

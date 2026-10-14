@@ -2,8 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import type { Song, SongArtistCredit } from '@/lib/api';
+import { AUTH_TOKEN_STORAGE_KEY, recordSongView, type Song, type SongArtistCredit } from '@/lib/api';
 import { recordRecentItem, songPath } from '@/lib/recent-history';
+import { useLoginModal } from '@/components/auth/LoginModalProvider';
 
 const PLAYER_SESSION_KEY = 'melodify_player_state';
 const PLAYER_SYNC_CHANNEL = 'melodify_player_sync';
@@ -18,6 +19,7 @@ export type PlayerTrack = {
   durationSeconds: number | null;
   audioUrl: string | null;
   isHot: boolean;
+  premiumOnly: boolean;
   previewLimitSeconds: number | null;
 };
 
@@ -26,6 +28,7 @@ type PlayerContextValue = {
   isPlaying: boolean;
   elapsed: number;
   duration: number;
+  notice: string | null;
   playSong: (song: Song, queue?: Song[]) => void;
   togglePlay: () => void;
   playPrevious: () => void;
@@ -60,9 +63,26 @@ function persistPlayerState(track: PlayerTrack, queue: PlayerTrack[], currentInd
   return state;
 }
 
-function toPlayerTrack(song: Song): PlayerTrack {
+function audioUrlWithAccessToken(audioUrl: string | null, premiumOnly: boolean, isPremium: boolean): string | null {
+  if (!audioUrl || !premiumOnly || !isPremium || typeof window === 'undefined') return audioUrl;
+
+  const token = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  if (!token) return audioUrl;
+
+  const separator = audioUrl.includes('?') ? '&' : '?';
+  return `${audioUrl}${separator}access_token=${encodeURIComponent(token)}`;
+}
+
+function toPlayerTrack(song: Song, isPremium: boolean): PlayerTrack {
   const isHot = Number(song.is_hot ?? 0) === 1;
-  const previewLimitSeconds = isHot ? (song.preview_limit_seconds ?? 30) : null;
+  const premiumOnly = Boolean(song.premium_only);
+  const previewLimitSeconds = premiumOnly && isPremium
+    ? null
+    : isHot || premiumOnly ? (song.preview_limit_seconds ?? 30) : null;
+  const rawAudioUrl = premiumOnly && !isPremium
+    ? song.preview_url || null
+    : song.audio_url || song.stream_url || song.preview_url || null;
+  const audioUrl = audioUrlWithAccessToken(rawAudioUrl, premiumOnly, isPremium);
 
   return {
     id: song.id,
@@ -74,8 +94,9 @@ function toPlayerTrack(song: Song): PlayerTrack {
     durationSeconds: song.duration_seconds === null || song.duration_seconds === undefined
       ? previewLimitSeconds
       : previewLimitSeconds === null ? song.duration_seconds : Math.min(song.duration_seconds, previewLimitSeconds),
-    audioUrl: song.audio_url || song.stream_url || song.preview_url || null,
+    audioUrl,
     isHot,
+    premiumOnly,
     previewLimitSeconds,
   };
 }
@@ -93,10 +114,12 @@ function isPlayerTrack(value: unknown): value is PlayerTrack {
     && (typeof track.durationSeconds === 'number' || track.durationSeconds === null)
     && (typeof track.audioUrl === 'string' || track.audioUrl === null)
     && typeof track.isHot === 'boolean'
+    && typeof track.premiumOnly === 'boolean'
     && (typeof track.previewLimitSeconds === 'number' || track.previewLimitSeconds === null);
 }
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
+  const { user, openLogin } = useLoginModal();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const trackRef = useRef<PlayerTrack | null>(null);
   const queueRef = useRef<PlayerTrack[]>([]);
@@ -105,10 +128,38 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const restoredElapsedRef = useRef(0);
   const tabIdRef = useRef<string | null>(null);
   const syncChannelRef = useRef<BroadcastChannel | null>(null);
+  const isPremiumRef = useRef(false);
+  const userRef = useRef(user);
+  const openLoginRef = useRef(openLogin);
+  const noticeTimerRef = useRef<number | null>(null);
   const [track, setTrack] = useState<PlayerTrack | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const isPremium = Number(user?.is_premium ?? 0) === 1;
+    isPremiumRef.current = isPremium;
+    userRef.current = user;
+    openLoginRef.current = openLogin;
+
+    if (!isPremium && trackRef.current?.premiumOnly) {
+      audioRef.current?.pause();
+      trackRef.current = null;
+      queueRef.current = [];
+      setTrack(null);
+      setElapsed(0);
+      setDuration(0);
+      setIsPlaying(false);
+    }
+  }, [openLogin, user]);
+
+  const showNotice = useCallback((message: string) => {
+    setNotice(message);
+    if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 4000);
+  }, []);
 
   const broadcastState = useCallback((state: PersistedPlayerState | null) => {
     const source = tabIdRef.current;
@@ -122,6 +173,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const startTrack = useCallback((nextTrack: PlayerTrack) => {
+    if (nextTrack.premiumOnly && !isPremiumRef.current && !nextTrack.audioUrl) {
+      showNotice(userRef.current ? 'Bài hát này cần tài khoản VIP đã nạp để nghe full.' : 'Hãy đăng nhập và nạp VIP để nghe bài hát này full.');
+      if (!userRef.current) openLoginRef.current();
+      audioRef.current?.pause();
+      trackRef.current = null;
+      queueRef.current = [];
+      setTrack(null);
+      setElapsed(0);
+      setDuration(0);
+      setIsPlaying(false);
+      return;
+    }
+
     recordRecentItem({
       id: nextTrack.id,
       category: 'song',
@@ -150,10 +214,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     audio.pause();
     audio.src = nextTrack.audioUrl;
     audio.load();
+    void recordSongView(nextTrack.slug || nextTrack.id, undefined, 'player').catch(() => undefined);
     void audio.play()
       .then(() => setIsPlaying(true))
       .catch(() => setIsPlaying(false));
-  }, [broadcastState]);
+  }, [broadcastState, showNotice]);
 
   const playAt = useCallback((index: number) => {
     const nextTrack = queueRef.current[index];
@@ -258,6 +323,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const savedTrack = savedState.track;
       const savedQueue = savedState.queue.filter(isPlayerTrack);
       if (!isPlayerTrack(savedTrack)) return;
+      if (savedTrack.premiumOnly && !isPremiumRef.current) return;
 
       const restoredQueue = savedQueue.length > 0 ? savedQueue : [savedTrack];
       const restoredIndex = Math.min(Math.max(0, savedState.currentIndex), restoredQueue.length - 1);
@@ -331,7 +397,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const savedTrack = savedState?.track;
         const savedQueue = Array.isArray(savedState?.queue) ? savedState.queue.filter(isPlayerTrack) : [];
 
-        if (isPlayerTrack(savedTrack)) {
+        if (isPlayerTrack(savedTrack) && (!savedTrack.premiumOnly || isPremiumRef.current)) {
           const restoredQueue = savedQueue.length > 0 ? savedQueue : [savedTrack];
           const restoredIndex = typeof savedState?.currentIndex === 'number'
             ? Math.min(Math.max(0, savedState.currentIndex), restoredQueue.length - 1)
@@ -385,7 +451,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [broadcastState, playNext]);
 
   const playSong = useCallback((song: Song, queue: Song[] = [song]) => {
-    const nextQueue = queue.length > 0 ? queue.map(toPlayerTrack) : [toPlayerTrack(song)];
+    const nextQueue = queue.length > 0
+      ? queue.map((item) => toPlayerTrack(item, isPremiumRef.current))
+      : [toPlayerTrack(song, isPremiumRef.current)];
     const index = Math.max(0, nextQueue.findIndex((item) => item.id === song.id));
 
     queueRef.current = nextQueue;
@@ -395,7 +463,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio || !track?.audioUrl) return;
+    if (!audio || !track?.audioUrl) {
+      if (track?.premiumOnly && !isPremiumRef.current) {
+        showNotice(userRef.current ? 'Bài hát này cần tài khoản VIP đã nạp để nghe full.' : 'Hãy đăng nhập và nạp VIP để nghe bài hát này full.');
+        if (!userRef.current) openLoginRef.current();
+      }
+      return;
+    }
 
     if (audio.paused) {
       if (track.previewLimitSeconds !== null && audio.currentTime >= track.previewLimitSeconds) {
@@ -414,7 +488,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setIsPlaying(false);
       broadcastState(persistPlayerState(track, queueRef.current, currentIndexRef.current, audio.currentTime));
     }
-  }, [broadcastState, track]);
+  }, [broadcastState, showNotice, track]);
 
   const seek = useCallback((seconds: number) => {
     if (!audioRef.current || !track) return;
@@ -431,12 +505,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     isPlaying,
     elapsed,
     duration,
+    notice,
     playSong,
     togglePlay,
     playPrevious,
     playNext,
     seek,
-  }), [duration, elapsed, isPlaying, playNext, playPrevious, playSong, seek, togglePlay, track]);
+  }), [duration, elapsed, isPlaying, notice, playNext, playPrevious, playSong, seek, togglePlay, track]);
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }

@@ -4,7 +4,7 @@ import { Lexend } from 'next/font/google';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import { listAlbums } from '@/lib/api';
+import { getHomeBootstrap } from '@/lib/api';
 import { albumRecordToCard, pickDailyAlbums, type AlbumCard } from '@/lib/album-data';
 import { ArtistLink } from '@/components/artists';
 import { vietnamDateKey } from '@/lib/topic-data';
@@ -45,8 +45,8 @@ export default function AlbumHotSection() {
 
     const loadDailyAlbums = async () => {
       try {
-        const response = await listAlbums({ perPage: 50 });
-        const cards = response.data.map(albumRecordToCard);
+        const response = await getHomeBootstrap();
+        const cards = response.data.albums.map(albumRecordToCard);
 
         if (!cancelled) setAlbums(pickDailyAlbums(cards, 6, dateKey));
       } catch {

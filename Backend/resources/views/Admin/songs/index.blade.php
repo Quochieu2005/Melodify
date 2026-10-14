@@ -1,7 +1,7 @@
 @extends('layouts.admin')
 
 @section('content')
-<section class="admin-page">
+<section class="admin-page admin-songs-page">
     @php($currentAdmin = auth('admin')->user())
     @php($canCreate = $currentAdmin?->hasAdminResourcePermission('songs', 'create'))
     @php($canUpdate = $currentAdmin?->hasAdminResourcePermission('songs', 'update'))

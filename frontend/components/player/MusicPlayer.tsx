@@ -75,13 +75,14 @@ function playerArtists(track: { artist: string; artists?: { id: string | null; n
 }
 
 export default function MusicPlayer() {
-  const { track, isPlaying, elapsed, duration, togglePlay, playPrevious, playNext, seek } = usePlayer();
+  const { track, isPlaying, elapsed, duration, notice, togglePlay, playPrevious, playNext, seek } = usePlayer();
   const [isLiked, setIsLiked] = useState(false);
   const displayDuration = duration || track?.durationSeconds || 0;
   const displayElapsed = Math.min(elapsed, displayDuration);
   const visibleArtists = track ? playerArtists(track) : [];
 
   return (
+    <>
     <div className="fixed bottom-0 left-0 z-50 h-[74px] w-full border-t border-white/[0.04] bg-[#242424] px-2.5 py-1.5 text-white shadow-[0_-12px_30px_rgba(0,0,0,0.2)] sm:px-3">
       <div className="grid h-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 lg:grid-cols-[minmax(240px,350px)_minmax(280px,1fr)_minmax(220px,350px)] lg:gap-4">
         {track ? (
@@ -91,7 +92,7 @@ export default function MusicPlayer() {
               <Link href={songPath({ id: track.id, slug: track.slug ?? null, title: track.title })} className="block truncate text-sm font-bold transition-colors hover:text-[#00d3e5] focus-visible:text-[#00d3e5] focus-visible:outline-none">{track.title}</Link>
               <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                 {visibleArtists.length ? <ArtistNames artists={visibleArtists} className="truncate text-xs text-white/60" /> : <span className="truncate text-xs text-white/60">{track.artist}</span>}
-                {track.isHot ? <span className="shrink-0 rounded bg-[#ffcf66]/20 px-1 text-[9px] font-bold text-[#ffcf66]">30s</span> : null}
+                {track.previewLimitSeconds !== null ? <span className="shrink-0 rounded bg-[#ffcf66]/20 px-1 text-[9px] font-bold text-[#ffcf66]">30s</span> : null}
               </div>
             </div>
             <div className="ml-auto hidden items-center gap-2 sm:flex">
@@ -131,5 +132,7 @@ export default function MusicPlayer() {
         </div>
       </div>
     </div>
+    {notice ? <div role="status" className="fixed bottom-[88px] right-4 z-[60] max-w-[min(90vw,380px)] rounded-xl border border-cyan-200/20 bg-[#173d35] px-4 py-3 text-sm font-semibold text-cyan-50 shadow-2xl">{notice}</div> : null}
+    </>
   );
 }
