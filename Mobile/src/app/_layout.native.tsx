@@ -1,5 +1,5 @@
-import AppTabs from '@/components/app-tabs';
+import { Slot } from 'expo-router';
 
 export default function NativeLayout() {
-  return <AppTabs />;
+  return <Slot />;
 }
