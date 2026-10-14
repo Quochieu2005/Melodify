@@ -103,6 +103,73 @@ class TopicController extends MediaCatalogController
         ];
     }
 
+    /** @param array<string, mixed> $data */
+    protected function sortOrderGroup(array $data): ?string
+    {
+        $type = trim((string) ($data['type'] ?? '')) ?: 'topic';
+
+        if ($type === 'custom') {
+            return 'custom:'.trim((string) ($data['type_custom'] ?? ''));
+        }
+
+        return $type;
+    }
+
+    protected function defaultSortOrderGroup(): ?string
+    {
+        return 'topic';
+    }
+
+    /** @param mixed $query */
+    protected function applySortOrderScope($query, ?string $group): void
+    {
+        if ($group === null || $group === '') {
+            return;
+        }
+
+        if (str_starts_with($group, 'custom:')) {
+            $query->where('type', 'custom')
+                ->where('type_custom', substr($group, 7));
+
+            return;
+        }
+
+        if ($group === 'topic') {
+            $query->where(function ($nestedQuery): void {
+                $nestedQuery->where('type', 'topic')->orWhereNull('type');
+            });
+
+            return;
+        }
+
+        $query->where('type', $group);
+    }
+
+    /** @return array<string, int> */
+    protected function sortOrderSuggestions(): array
+    {
+        $suggestions = [];
+
+        foreach (array_keys(config('topics.types', [])) as $type) {
+            if ($type !== 'custom') {
+                $suggestions[$type] = $this->nextSortOrder($type);
+            }
+        }
+
+        Topic::query()
+            ->where('type', 'custom')
+            ->get(['type_custom'])
+            ->pluck('type_custom')
+            ->map(fn ($name): string => trim((string) $name))
+            ->filter()
+            ->unique()
+            ->each(function (string $name) use (&$suggestions): void {
+                $suggestions['custom:'.$name] = $this->nextSortOrder('custom:'.$name);
+            });
+
+        return $suggestions;
+    }
+
     public function show(string $id): View
     {
         $item = Topic::query()->findOrFail($id);

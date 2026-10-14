@@ -195,6 +195,8 @@ abstract class MediaCatalogController extends Controller
             'item' => null,
             'fields' => $this->resolvedFields(),
             'mediaAssets' => app(MediaAssetService::class)->latest(),
+            'defaultSortOrder' => $this->nextSortOrder($this->defaultSortOrderGroup()),
+            'sortOrderByGroup' => $this->sortOrderSuggestions(),
             ...$this->supplementalFormData(null),
         ]));
     }
@@ -203,6 +205,7 @@ abstract class MediaCatalogController extends Controller
     {
         $this->normalizeSortOrderInput($request);
         $data = $request->validate($this->rules(null), $this->validationMessages());
+        $this->validateSortOrder($data, null);
         $payload = $this->preparePayload($request, $data, null);
         $item = ($this->model)::query()->create($payload);
         $this->afterPersist($item, $data);
@@ -219,6 +222,7 @@ abstract class MediaCatalogController extends Controller
             'item' => $item,
             'fields' => $this->resolvedFields(),
             'mediaAssets' => app(MediaAssetService::class)->latest(),
+            'sortOrderByGroup' => $this->sortOrderSuggestions(),
             ...$this->supplementalFormData($item),
         ]));
     }
@@ -228,6 +232,7 @@ abstract class MediaCatalogController extends Controller
         $item = ($this->model)::query()->findOrFail($id);
         $this->normalizeSortOrderInput($request);
         $data = $request->validate($this->rules($item), $this->validationMessages());
+        $this->validateSortOrder($data, $item);
         $item->update($this->preparePayload($request, $data, $item));
         $this->afterPersist($item, $data);
 
@@ -322,6 +327,65 @@ abstract class MediaCatalogController extends Controller
         unset($data['image_asset_id'], $data['image']);
 
         return $data;
+    }
+
+    protected function nextSortOrder(?string $group = null): int
+    {
+        $model = $this->model;
+        $query = $model::query();
+        $this->applySortOrderScope($query, $group);
+
+        return ((int) ($query->max('sort_order') ?? -1)) + 1;
+    }
+
+    /** @param array<string, mixed> $data */
+    protected function sortOrderGroup(array $data): ?string
+    {
+        return null;
+    }
+
+    protected function defaultSortOrderGroup(): ?string
+    {
+        return null;
+    }
+
+    /** @param mixed $query */
+    protected function applySortOrderScope($query, ?string $group): void
+    {
+        // Resources without groups (for example genres) keep a global order.
+    }
+
+    /** @return array<string, int> */
+    protected function sortOrderSuggestions(): array
+    {
+        $group = $this->defaultSortOrderGroup();
+
+        return $group === null ? [] : [$group => $this->nextSortOrder($group)];
+    }
+
+    /** @param array<string, mixed> $data */
+    protected function validateSortOrder(array $data, ?object $current): void
+    {
+        if (! array_key_exists('sort_order', $data)) {
+            return;
+        }
+
+        $sortOrder = (int) $data['sort_order'];
+        $model = $this->model;
+        $query = $model::query()->where('sort_order', $sortOrder);
+        $this->applySortOrderScope($query, $this->sortOrderGroup($data));
+        $hasConflict = $query
+            ->get()
+            ->contains(function (object $item) use ($current): bool {
+                return $current === null
+                    || (string) $item->getKey() !== (string) $current->getKey();
+            });
+
+        if ($hasConflict) {
+            throw ValidationException::withMessages([
+                'sort_order' => 'Thứ tự hiển thị này đã được sử dụng trong cùng nhóm. Vui lòng chọn số khác.',
+            ]);
+        }
     }
 
     protected function normalizeSortOrderInput(Request $request): void

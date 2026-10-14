@@ -213,7 +213,7 @@ export default function SongDetailPage({ slug }: { slug: string }) {
       return () => { cancelled = true; };
     }
 
-    void getArtist(artistIdentifier)
+    void getArtist(artistIdentifier, { summary: true })
       .then(({ data }) => {
         if (!cancelled) setFeaturedAlbumState({ artistKey: artistIdentifier, albums: (data.albums || []).slice(0, 12) });
       })

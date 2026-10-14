@@ -5,6 +5,7 @@ namespace App\Http\Controllers\AdminController;
 use App\Models\Playlist;
 use App\Models\PlaylistSong;
 use App\Models\Song;
+use App\Models\SongArtist;
 use App\Models\Artist;
 use App\Models\Genre;
 use App\Models\Topic;
@@ -100,6 +101,8 @@ class PlaylistController extends MediaCatalogController
             'mediaAssets' => app(\App\Services\MediaAssetService::class)->latest(),
             'songs' => $this->availableSongs(),
             'selectedSongIds' => [],
+            'defaultSortOrder' => $this->nextSortOrder($this->defaultSortOrderGroup()),
+            'sortOrderByGroup' => $this->sortOrderSuggestions(),
             ...$this->relationOptions(),
             'selectedArtistIds' => [],
             'selectedGenreIds' => [],
@@ -110,22 +113,24 @@ class PlaylistController extends MediaCatalogController
     public function edit(string $id): View
     {
         $item = Playlist::query()->findOrFail($id);
+        $selectedSongIds = PlaylistSong::query()
+            ->where('playlist_id', (string) $item->getKey())
+            ->orderBy('position')
+            ->pluck('song_id')
+            ->map(fn ($songId): string => (string) $songId)
+            ->all();
 
         return view("{$this->viewDirectory}.edit", $this->viewData([
             'item' => $item,
             'fields' => $this->resolvedFields(),
             'mediaAssets' => app(\App\Services\MediaAssetService::class)->latest(),
             'songs' => $this->availableSongs(),
-            'selectedSongIds' => PlaylistSong::query()
-                ->where('playlist_id', (string) $item->getKey())
-                ->orderBy('position')
-                ->pluck('song_id')
-                ->map(fn ($songId): string => (string) $songId)
-                ->all(),
+            'selectedSongIds' => $selectedSongIds,
             ...$this->relationOptions(),
-            'selectedArtistIds' => $this->selectedIds($item, 'artist_ids'),
+            'selectedArtistIds' => $this->artistIdsForSongs($selectedSongIds),
             'selectedGenreIds' => $this->selectedIds($item, 'genre_ids'),
             'selectedTopicIds' => $this->selectedIds($item, 'topic_ids'),
+            'sortOrderByGroup' => $this->sortOrderSuggestions(),
         ]));
     }
 
@@ -160,7 +165,9 @@ class PlaylistController extends MediaCatalogController
     {
         $this->normalizeSortOrderInput($request);
         $data = $request->validate($this->rules(null), $this->validationMessages());
+        $this->validateSortOrder($data, null);
         $this->validateSongIds($data['song_ids'] ?? []);
+        $data['artist_ids'] = $this->artistIdsForSongs($data['song_ids'] ?? []);
         $this->validateRelationIds($data);
         $playlist = Playlist::query()->create($this->preparePayload($request, $data, null));
         $this->syncSongs($playlist, $data['song_ids'] ?? []);
@@ -174,7 +181,9 @@ class PlaylistController extends MediaCatalogController
         $item = Playlist::query()->findOrFail($id);
         $this->normalizeSortOrderInput($request);
         $data = $request->validate($this->rules($item), $this->validationMessages());
+        $this->validateSortOrder($data, $item);
         $this->validateSongIds($data['song_ids'] ?? []);
+        $data['artist_ids'] = $this->artistIdsForSongs($data['song_ids'] ?? []);
         $this->validateRelationIds($data);
         $item->update($this->preparePayload($request, $data, $item));
         $this->syncSongs($item, $data['song_ids'] ?? []);
@@ -203,7 +212,12 @@ class PlaylistController extends MediaCatalogController
             'description' => ['nullable', 'string', 'max:2500', new PlainText()],
             'is_system' => ['nullable', 'boolean'],
             'visibility' => ['required', 'in:public,private,unlisted'],
-            'sort_order' => ['required', 'integer', 'min:0', 'max:9999'],
+            'sort_order' => [
+                'required',
+                'integer',
+                'min:0',
+                'max:9999',
+            ],
             'status' => ['required', 'in:active,inactive'],
             'song_ids' => ['nullable', 'array', 'max:500'],
             'song_ids.*' => ['required', 'string', 'max:64', 'distinct'],
@@ -216,6 +230,65 @@ class PlaylistController extends MediaCatalogController
             'image' => [$item === null ? 'required_without:image_asset_id' : 'nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=4000,max_height=4000'],
             'image_asset_id' => [$item === null ? 'required_without:image' : 'nullable', 'string', 'alpha_dash', 'max:64'],
         ];
+    }
+
+    /** @param array<string, mixed> $data */
+    protected function sortOrderGroup(array $data): ?string
+    {
+        $type = trim((string) ($data['type'] ?? ''));
+
+        if ($type === 'custom') {
+            return 'custom:'.trim((string) ($data['type_custom'] ?? ''));
+        }
+
+        return $type !== '' ? $type : null;
+    }
+
+    protected function defaultSortOrderGroup(): ?string
+    {
+        return 'mood_today';
+    }
+
+    /** @param mixed $query */
+    protected function applySortOrderScope($query, ?string $group): void
+    {
+        if ($group === null || $group === '') {
+            return;
+        }
+
+        if (str_starts_with($group, 'custom:')) {
+            $query->where('type', 'custom')
+                ->where('type_custom', substr($group, 7));
+
+            return;
+        }
+
+        $query->where('type', $group);
+    }
+
+    /** @return array<string, int> */
+    protected function sortOrderSuggestions(): array
+    {
+        $suggestions = [];
+
+        foreach (array_keys(config('playlists.types', [])) as $type) {
+            if ($type !== 'custom') {
+                $suggestions[$type] = $this->nextSortOrder($type);
+            }
+        }
+
+        Playlist::query()
+            ->where('type', 'custom')
+            ->get(['type_custom'])
+            ->pluck('type_custom')
+            ->map(fn ($name): string => trim((string) $name))
+            ->filter()
+            ->unique()
+            ->each(function (string $name) use (&$suggestions): void {
+                $suggestions['custom:'.$name] = $this->nextSortOrder('custom:'.$name);
+            });
+
+        return $suggestions;
     }
 
     protected function normalizePayload(array $data, Request $request): array
@@ -269,11 +342,28 @@ class PlaylistController extends MediaCatalogController
 
     private function availableSongs()
     {
-        return Song::query()
+        $songs = Song::query()
             ->whereIn('status', ['draft', 'published'])
             ->orderBy('title')
             ->limit(500)
             ->get();
+
+        $songIds = $songs->map(fn (Song $song): string => (string) $song->getKey())->all();
+        $artistIdsBySong = $songIds === []
+            ? collect()
+            : SongArtist::query()
+                ->whereIn('song_id', $songIds)
+                ->orderBy('artist_role')
+                ->get()
+                ->groupBy(fn (SongArtist $link): string => (string) $link->song_id)
+                ->map(fn ($links): array => $links->pluck('artist_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all());
+
+        return $songs->each(function (Song $song) use ($artistIdsBySong): void {
+            $song->setAttribute(
+                'playlist_artist_ids',
+                $artistIdsBySong->get((string) $song->getKey(), []),
+            );
+        });
     }
 
     private function validateSongIds(array $songIds): void
@@ -285,6 +375,27 @@ class PlaylistController extends MediaCatalogController
                 ]);
             }
         }
+    }
+
+    /** @param array<int, string> $songIds */
+    private function artistIdsForSongs(array $songIds): array
+    {
+        $songIds = array_values(array_unique(array_map('strval', $songIds)));
+
+        if ($songIds === []) {
+            return [];
+        }
+
+        return SongArtist::query()
+            ->whereIn('song_id', $songIds)
+            ->orderBy('artist_role')
+            ->get()
+            ->pluck('artist_id')
+            ->filter()
+            ->map(fn ($id): string => (string) $id)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /** @param array<string, mixed> $data */

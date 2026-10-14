@@ -599,6 +599,144 @@
 
 .admin-dashboard .ant-empty { color: var(--admin-text-muted); }
 
+.admin-dashboard-insights {
+    margin-top: 22px;
+}
+
+.admin-dashboard-section-heading {
+    align-items: end;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.admin-dashboard-section-heading h2 {
+    color: var(--admin-text);
+    font-size: 20px;
+    margin: 4px 0 5px;
+}
+
+.admin-dashboard-section-heading p {
+    color: var(--admin-text-muted);
+    font-size: 11px;
+    margin: 0;
+}
+
+.admin-dashboard-insights-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-dashboard-insight-card {
+    min-width: 0;
+    padding: 17px 18px;
+}
+
+.admin-dashboard-insight-card[data-tone="cyan"] { --insight-accent: #36d5df; }
+.admin-dashboard-insight-card[data-tone="violet"] { --insight-accent: #a99bff; }
+.admin-dashboard-insight-card[data-tone="amber"] { --insight-accent: #f6c878; }
+.admin-dashboard-insight-card[data-tone="mint"] { --insight-accent: #94e3b3; }
+.admin-dashboard-insight-card[data-tone="pink"] { --insight-accent: #f29ab4; }
+.admin-dashboard-insight-card[data-tone="blue"] { --insight-accent: #71adff; }
+
+.admin-dashboard-insight-card .admin-dashboard-panel-heading {
+    margin-bottom: 6px;
+}
+
+.admin-dashboard-insight-card .admin-dashboard-panel-heading h3 {
+    color: var(--admin-text);
+    font-size: 13px;
+    line-height: 1.35;
+    margin: 0;
+}
+
+.admin-dashboard-insight-card .admin-dashboard-panel-heading p {
+    color: var(--admin-text-muted);
+    font-size: 10px;
+    line-height: 1.45;
+    margin: 5px 0 0;
+}
+
+.admin-dashboard-insight-list {
+    border-top: 1px solid var(--admin-border);
+}
+
+.admin-dashboard-insight-row {
+    align-items: center;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 22px 30px minmax(0, 1fr) auto;
+    min-height: 52px;
+    padding: 8px 0;
+}
+
+.admin-dashboard-insight-row + .admin-dashboard-insight-row {
+    border-top: 1px solid color-mix(in srgb, var(--admin-border) 72%, transparent);
+}
+
+.admin-dashboard-insight-row .admin-dashboard-ranking-number {
+    color: var(--insight-accent, var(--admin-accent));
+}
+
+.admin-dashboard-insight-avatar {
+    align-items: center;
+    background: color-mix(in srgb, var(--insight-accent, var(--admin-accent)) 13%, var(--admin-surface));
+    border-radius: 9px;
+    color: var(--insight-accent, var(--admin-accent));
+    display: flex;
+    height: 30px;
+    justify-content: center;
+    overflow: hidden;
+    width: 30px;
+}
+
+.admin-dashboard-insight-avatar img {
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+}
+
+.admin-dashboard-insight-avatar .anticon { font-size: 14px; }
+
+.admin-dashboard-insight-copy {
+    min-width: 0;
+}
+
+.admin-dashboard-insight-copy strong,
+.admin-dashboard-insight-copy span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-dashboard-insight-copy strong {
+    color: var(--admin-text);
+    font-size: 11px;
+}
+
+.admin-dashboard-insight-copy span {
+    color: var(--admin-text-muted);
+    font-size: 9px;
+    margin-top: 3px;
+}
+
+.admin-dashboard-insight-value {
+    color: var(--insight-accent, var(--admin-accent));
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.admin-dashboard-insight-value small {
+    color: var(--admin-text-muted);
+    display: block;
+    font-size: 8px;
+    margin-top: 2px;
+}
+
 [data-admin-theme="dark"] .admin-dashboard-kpi[data-tone="cyan"] .admin-dashboard-kpi-icon { color: #65e4eb; }
 [data-admin-theme="dark"] .admin-dashboard-kpi[data-tone="violet"] .admin-dashboard-kpi-icon { color: #b3a7ff; }
 [data-admin-theme="dark"] .admin-dashboard-kpi[data-tone="amber"] .admin-dashboard-kpi-icon { color: #f6c878; }
@@ -618,6 +756,7 @@
     .admin-dashboard-main-grid,
     .admin-dashboard-bottom-grid,
     .admin-dashboard-secondary-grid { grid-template-columns: minmax(0, 1fr); }
+    .admin-dashboard-insights-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 700px) {
@@ -626,6 +765,7 @@
     .admin-dashboard-mini-panel { padding: 19px 16px 16px; }
     .admin-dashboard-song-row { grid-template-columns: 38px minmax(0, 1fr) auto; }
     .admin-dashboard-song-album { display: none; }
+    .admin-dashboard-insights-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 480px) {

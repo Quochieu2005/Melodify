@@ -69,3 +69,73 @@ document.querySelectorAll('[data-selection-panel]').forEach((panel) => {
         });
     });
 });
+
+const playlistSongPanel = document.querySelector('[data-playlist-song-panel]');
+const playlistArtistPanel = document.querySelector('[data-playlist-artist-panel]');
+
+if (playlistSongPanel && playlistArtistPanel) {
+    const songInputs = [...playlistSongPanel.querySelectorAll('[data-playlist-song]')];
+    const artistInputs = [...playlistArtistPanel.querySelectorAll('[data-playlist-auto-artist]')];
+
+    const syncPlaylistArtists = () => {
+        const selectedArtistIds = new Set();
+
+        songInputs
+            .filter((input) => input.checked)
+            .forEach((input) => {
+                String(input.dataset.artistIds || '')
+                    .split(',')
+                    .map((id) => id.trim())
+                    .filter(Boolean)
+                    .forEach((id) => selectedArtistIds.add(id));
+            });
+
+        artistInputs.forEach((input) => {
+            input.checked = selectedArtistIds.has(String(input.value));
+            input.disabled = true;
+        });
+    };
+
+    songInputs.forEach((input) => input.addEventListener('change', syncPlaylistArtists));
+    syncPlaylistArtists();
+}
+
+const sortOrderForm = document.querySelector('[data-sort-order-form]');
+const sortOrderInput = sortOrderForm?.querySelector('[data-sort-order-input]');
+const sortOrderType = sortOrderForm?.querySelector('[data-playlist-type], [data-topic-type]');
+const sortOrderCustom = sortOrderForm?.querySelector('[data-playlist-type-custom], [data-topic-type-custom]');
+
+if (sortOrderForm && sortOrderInput && sortOrderType) {
+    let suggestions = {};
+    try {
+        suggestions = JSON.parse(sortOrderForm.dataset.sortOrderGroups || '{}');
+    } catch {
+        suggestions = {};
+    }
+
+    let userChangedOrder = false;
+    let lastSuggestedOrder = sortOrderInput.value;
+
+    const groupKey = () => {
+        const type = sortOrderType.value || '';
+        if (type === 'custom') return `custom:${sortOrderCustom?.value.trim() || ''}`;
+        return type;
+    };
+
+    const syncSortOrder = () => {
+        if (userChangedOrder) return;
+        const key = groupKey();
+        const nextOrder = Object.prototype.hasOwnProperty.call(suggestions, key)
+            ? suggestions[key]
+            : 0;
+        sortOrderInput.value = String(nextOrder);
+        lastSuggestedOrder = sortOrderInput.value;
+    };
+
+    sortOrderInput.addEventListener('input', () => {
+        userChangedOrder = sortOrderInput.value !== lastSuggestedOrder;
+    });
+    sortOrderType.addEventListener('change', syncSortOrder);
+    sortOrderCustom?.addEventListener('input', syncSortOrder);
+    syncSortOrder();
+}

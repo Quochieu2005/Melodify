@@ -5,7 +5,7 @@ import { Lexend } from 'next/font/google';
 import { useEffect, useMemo, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
-import { getHomeDiscovery, listPlaylists, type HomeDiscovery, type Playlist, type Song } from '@/lib/api';
+import { getHomeBootstrap, type HomeDiscovery, type Playlist, type Song } from '@/lib/api';
 import { recentPlaylistItem, recordRecentItem, recentArtistItem, recentSongItem, songPath } from '@/lib/recent-history';
 
 import styles from './MusicDiscoverySections.module.css';
@@ -171,19 +171,39 @@ function TrendingArtistsSection() {
 
 export default function MusicDiscoverySections() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [discovery, setDiscovery] = useState<HomeDiscovery>({ single_new_releases: [], tiktok_top_mix: [] });
+  const [discovery, setDiscovery] = useState<HomeDiscovery>({ single_new_releases: [], popular_songs: [] });
 
   useEffect(() => {
     let cancelled = false;
 
-    Promise.allSettled([getHomeDiscovery(), listPlaylists({ perPage: 50 })]).then(([discoveryResult, playlistsResult]) => {
+    const loadHome = (force = false) => getHomeBootstrap({ force }).then((response) => {
       if (cancelled) return;
 
-      if (discoveryResult.status === 'fulfilled') setDiscovery(discoveryResult.value.data);
-      if (playlistsResult.status === 'fulfilled') setPlaylists(playlistsResult.value.data);
+      const nextDiscovery = response.data.discovery as HomeDiscovery & { tiktok_top_mix?: Song[] };
+      setDiscovery({
+        single_new_releases: nextDiscovery.single_new_releases || [],
+        popular_songs: nextDiscovery.popular_songs || nextDiscovery.tiktok_top_mix || [],
+      });
+      setPlaylists(response.data.playlists);
+    }).catch(() => {
+      if (!cancelled) {
+        setDiscovery({ single_new_releases: [], popular_songs: [] });
+        setPlaylists([]);
+      }
     });
 
-    return () => { cancelled = true; };
+    void loadHome();
+    const refreshTimer = window.setInterval(() => void loadHome(true), 60_000);
+    const refreshOnFocus = () => {
+      if (document.visibilityState === 'visible') void loadHome(true);
+    };
+    document.addEventListener('visibilitychange', refreshOnFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshTimer);
+      document.removeEventListener('visibilitychange', refreshOnFocus);
+    };
   }, []);
 
   const sections = useMemo(() => {
@@ -200,7 +220,7 @@ export default function MusicDiscoverySections() {
 
   return <>
     <SongSection id="new-releases-heading" title="Single Mới Phát Hành" songs={discovery.single_new_releases} />
-    <SongSection id="tiktok-top-mix-heading" title="TikTok Top Mix" songs={discovery.tiktok_top_mix} />
+    <SongSection id="popular-songs-heading" title="Nhiều Lượt Nghe Nhất" songs={discovery.popular_songs} />
     {sections.map((section) => section.playlists.length > 0 ? <PlaylistSection key={section.id} {...section} /> : null)}
     <TrendingArtistsSection />
   </>;

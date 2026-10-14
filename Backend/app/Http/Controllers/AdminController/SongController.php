@@ -22,6 +22,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -148,6 +149,7 @@ class SongController extends CrudResourceController
         if ($externalId === '' || filled($request->input('plain_lyrics')) || filled($request->input('synced_lyrics'))) {
             $this->syncLyrics($song, $request->input('plain_lyrics'), $request->input('synced_lyrics'));
         }
+        $this->forgetHomeCache();
 
         return redirect()->route("admin.{$this->resource}.index")
             ->with('success', "Đã tạo {$this->title} thành công.");
@@ -181,6 +183,7 @@ class SongController extends CrudResourceController
         $this->syncGenre($item, $request->input('genre_id'));
         $this->addToPlaylist($item, $request->input('playlist_id'));
         $this->syncLyrics($item, $request->input('plain_lyrics'), $request->input('synced_lyrics'));
+        $this->forgetHomeCache();
 
         return redirect()->route("admin.{$this->resource}.index")
             ->with('success', "Đã cập nhật {$this->title}.");
@@ -284,6 +287,13 @@ class SongController extends CrudResourceController
         }
 
         return $data;
+    }
+
+    private function forgetHomeCache(): void
+    {
+        $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
+        Cache::store('file')->forget('api:home-discovery:v2:'.$dateKey);
+        Cache::store('file')->forget('api:home-bootstrap:v2:'.$dateKey);
     }
 
     private function availableTopics()

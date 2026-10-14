@@ -66,16 +66,9 @@
 
 @container (max-width: 560px) {
   .songGrid {
-    display: flex;
-    gap: 12px;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scroll-snap-type: inline mandatory;
-    scrollbar-width: none;
-  }
-
-  .songGrid::-webkit-scrollbar {
-    display: none;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 0;
+    row-gap: 8px;
   }
 }
 
@@ -133,8 +126,7 @@
 
 @container (max-width: 560px) {
   .songCard {
-    flex: 0 0 88%;
-    scroll-snap-align: start;
+    width: 100%;
   }
 
   .songCardContent {

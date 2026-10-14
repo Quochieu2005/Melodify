@@ -2,7 +2,7 @@
 
 import { Lexend } from 'next/font/google';
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type TransitionEvent as ReactTransitionEvent } from 'react';
-import { listBanners, type Banner as ApiBanner } from '@/lib/api';
+import { getHomeBootstrap, type Banner as ApiBanner } from '@/lib/api';
 
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const dragThreshold = 48;
@@ -261,11 +261,11 @@ export default function MorningBannerCarousel() {
   useEffect(() => {
     let isCurrent = true;
 
-    listBanners({ daily: true, limit: 5 })
+    getHomeBootstrap()
       .then((response) => {
         const uniqueBanners = Array.from(
           new Map(
-            response.data
+            response.data.banners
               .filter((banner) => banner.image_url)
               .map((banner) => [banner.image_url, banner]),
           ).values(),

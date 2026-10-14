@@ -26,6 +26,13 @@ class AudioController extends Controller
         $audio = $this->refreshAudio($song, $nhaccuatui);
 
         abort_if(blank($audio?->file_url), 404, 'Bài hát chưa có audio.');
+        abort_if(
+            (bool) ($audio?->premium_only ?? false)
+                && ! (bool) ($request->user()?->is_premium ?? false)
+                && ! $request->user('admin'),
+            403,
+            'Bài hát này dành cho tài khoản VIP đã nạp.',
+        );
 
         if ($audio->source !== 'nhaccuatui') {
             return redirect()->away($audio->file_url);
@@ -74,7 +81,7 @@ class AudioController extends Controller
             $audio->duration_seconds = isset($track['trackTimeMillis'])
                 ? (int) round(((int) $track['trackTimeMillis']) / 1000)
                 : $audio->duration_seconds;
-            $audio->premium_only = false;
+            $audio->premium_only = (bool) ($audio->premium_only ?? false);
             $audio->status = 'active';
             $audio->save();
         } catch (Throwable) {

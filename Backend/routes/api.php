@@ -100,12 +100,17 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::get('/artists/{slug}', [CatalogController::class, 'artist'])->name('artists.show');
     Route::get('/playlists', [CatalogController::class, 'playlists'])->name('playlists.index');
     Route::get('/playlists/{slug}', [CatalogController::class, 'playlist'])->name('playlists.show');
+    Route::get('/home/bootstrap', [CatalogController::class, 'homeBootstrap'])->name('home.bootstrap');
     Route::get('/home/discovery', [CatalogController::class, 'homeDiscovery'])->name('home.discovery');
     Route::get('/songs', [CatalogController::class, 'songs'])->name('songs.index');
     Route::get('/songs/popular', [CatalogController::class, 'popularSongs'])->name('songs.popular');
     Route::get('/songs/external/{externalId}/audio', [AudioController::class, 'streamExternal'])->name('songs.external-audio');
-    Route::get('/songs/{slug}/audio', [AudioController::class, 'stream'])->name('songs.audio');
-    Route::post('/songs/{slug}/view', [CatalogController::class, 'recordSongView'])->name('songs.view');
+    Route::get('/songs/{slug}/audio', [AudioController::class, 'stream'])
+        ->middleware('api.user.optional')
+        ->name('songs.audio');
+    Route::post('/songs/{slug}/view', [CatalogController::class, 'recordSongView'])
+        ->middleware('api.user.optional')
+        ->name('songs.view');
     Route::post('/songs/{slug}/favorite', [CatalogController::class, 'toggleSongFavorite'])->name('songs.favorite');
     Route::post('/songs/{slug}/share', [CatalogController::class, 'recordSongShare'])->name('songs.share');
     Route::get('/songs/{slug}/lyrics', [CatalogController::class, 'lyrics'])->name('songs.lyrics');

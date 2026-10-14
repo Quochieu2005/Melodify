@@ -2679,6 +2679,10 @@ body.admin-body,
     width: 100%;
     min-width: 0;
 }
+
+.admin-songs-page .admin-table-card {
+    min-height: 720px;
+}
 .admin-table-toolbar {
     align-items: center;
     display: flex;
@@ -2819,7 +2823,7 @@ body.admin-body,
 }
 
 .admin-form-page {
-    max-width: 1180px;
+    max-width: 1640px;
 }
 .admin-resource-form {
     width: 100%;
@@ -2985,6 +2989,14 @@ body.admin-body,
 }
 
 @media (max-width: 767px) {
+    .admin-songs-page {
+        max-width: 100%;
+    }
+
+    .admin-songs-page .admin-table-card {
+        min-height: 0;
+    }
+
     .admin-content,
     .ant-layout-content {
         padding: 18px 14px;

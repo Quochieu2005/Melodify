@@ -47,6 +47,9 @@
 .admin-selection-option:hover { background: var(--admin-accent-soft, #edfafd); }
 .admin-selection-option:has(input:checked) { background: var(--admin-accent-soft, #edfafd); }
 
+[data-playlist-artist-panel] .admin-selection-option { cursor: default; }
+[data-playlist-artist-panel] .admin-selection-option input:disabled { opacity: 1; }
+
 .admin-selection-option input {
     accent-color: var(--admin-accent, #13b8c8);
     block-size: 16px;

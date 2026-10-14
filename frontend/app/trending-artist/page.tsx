@@ -47,7 +47,7 @@ const trendingSongs: TrendingSong[] = [
     title: 'MRT',
     artist: 'buitruonglinh',
     publisher: 'BELIEVE MUSIC',
-    image: '/topics/scene/scene_50_600.png',
+    image: '/topics/scene/scene_47_600.png',
     publisherColor: '#f4c542',
   },
 ];

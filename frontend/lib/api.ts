@@ -70,7 +70,16 @@ export type Playlist = {
 
 export type HomeDiscovery = {
   single_new_releases: Song[];
-  tiktok_top_mix: Song[];
+  popular_songs: Song[];
+};
+
+export type HomeBootstrap = {
+  banners: Banner[];
+  topics: TopicRecord[];
+  genres: GenreRecord[];
+  albums: AlbumRecord[];
+  playlists: Playlist[];
+  discovery: HomeDiscovery;
 };
 
 export type Artist = {
@@ -330,6 +339,20 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return response.json() as Promise<T>;
 }
 
+let homeBootstrapPromise: Promise<{ data: HomeBootstrap; meta: { date: string; refresh_minutes: number } }> | null = null;
+
+export function getHomeBootstrap(options: { force?: boolean } = {}) {
+  if (options.force || !homeBootstrapPromise) {
+    homeBootstrapPromise = apiFetch<{ data: HomeBootstrap; meta: { date: string; refresh_minutes: number } }>('/v1/home/bootstrap')
+      .catch((error) => {
+        homeBootstrapPromise = null;
+        throw error;
+      });
+  }
+
+  return homeBootstrapPromise;
+}
+
 export async function uploadImage(file: File) {
   const form = new FormData();
   form.append('image', file);
@@ -378,13 +401,16 @@ export async function getSongLyrics(songId: string, language?: string) {
   );
 }
 
-export async function recordSongView(songId: string, visitorId?: string) {
+export async function recordSongView(songId: string, visitorId?: string, source = 'player') {
   return apiFetch<{ recorded: boolean; views: number }>(
     `/v1/songs/${encodeURIComponent(songId)}/view`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(visitorId ? { visitor_id: visitorId } : {}),
+      body: JSON.stringify({
+        ...(visitorId ? { visitor_id: visitorId } : {}),
+        source,
+      }),
     },
   );
 }
@@ -471,7 +497,7 @@ export async function listPlaylists(options: { query?: string; type?: string; to
 }
 
 export async function getHomeDiscovery() {
-  return apiFetch<{ data: HomeDiscovery; meta: { date: string; refresh_hours: number } }>('/v1/home/discovery');
+  return apiFetch<{ data: HomeDiscovery; meta: { date: string; refresh_minutes: number } }>('/v1/home/discovery');
 }
 
 export async function listAlbums(options: { query?: string; page?: number; perPage?: number } = {}) {
@@ -510,6 +536,7 @@ export async function listArtists(options: { query?: string; perPage?: number } 
   return apiFetch<PaginatedResponse<Artist>>(`/v1/artists${query ? `?${query}` : ''}`);
 }
 
-export async function getArtist(artistId: string) {
-  return apiFetch<{ data: ArtistDetail }>(`/v1/artists/${encodeURIComponent(artistId)}`);
+export async function getArtist(artistId: string, options: { summary?: boolean } = {}) {
+  const query = options.summary ? '?summary=1' : '';
+  return apiFetch<{ data: ArtistDetail }>(`/v1/artists/${encodeURIComponent(artistId)}${query}`);
 }
