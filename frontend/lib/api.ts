@@ -73,6 +73,24 @@ export type HomeDiscovery = {
   popular_songs: Song[];
 };
 
+export type ChartSong = Song & {
+  rank: number;
+  trend: 'up' | 'down' | 'same';
+};
+
+export type ChartRecord = {
+  id: string;
+  slug: string;
+  title: string;
+  tone: 'rose' | 'olive' | 'purple';
+  description: string | null;
+  cover_url: string | null;
+  date: string;
+  updated_at: string | null;
+  song_count: number;
+  songs: ChartSong[];
+};
+
 export type HomeBootstrap = {
   banners: Banner[];
   topics: TopicRecord[];
@@ -498,6 +516,16 @@ export async function listPlaylists(options: { query?: string; type?: string; to
 
 export async function getHomeDiscovery() {
   return apiFetch<{ data: HomeDiscovery; meta: { date: string; refresh_minutes: number } }>('/v1/home/discovery');
+}
+
+export async function listCharts() {
+  return apiFetch<{ data: ChartRecord[]; meta: { date: string; refresh_minutes: number; source: string } }>('/v1/charts');
+}
+
+export async function getChart(slug: string) {
+  return apiFetch<{ data: ChartRecord; meta: { date: string; refresh_minutes: number; source: string } }>(
+    `/v1/charts/${encodeURIComponent(slug)}`,
+  );
 }
 
 export async function listAlbums(options: { query?: string; page?: number; perPage?: number } = {}) {

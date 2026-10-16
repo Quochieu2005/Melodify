@@ -745,18 +745,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const openMobileSidebar = () => {
         if (!adminShell) return;
         adminShell.classList.add('is-sidebar-open');
+        mobileToggleBtn?.setAttribute('aria-expanded', 'true');
         document.body.style.overflow = 'hidden';
     };
 
     const closeMobileSidebar = () => {
         if (!adminShell) return;
         adminShell.classList.remove('is-sidebar-open');
+        mobileToggleBtn?.setAttribute('aria-expanded', 'false');
         document.body.style.overflow = '';
     };
 
     mobileToggleBtn?.addEventListener('click', openMobileSidebar);
     sidebarCloseBtn?.addEventListener('click', closeMobileSidebar);
     sidebarOverlay?.addEventListener('click', closeMobileSidebar);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeMobileSidebar();
+    });
 
     // Close mobile sidebar on navigation link click
     document.querySelectorAll('.admin-menu .ant-menu-item > a').forEach((link) => {

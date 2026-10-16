@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\AdminController\AdminManagementController;
 use App\Http\Controllers\AdminController\AdminNotificationController;
-use App\Http\Controllers\AudioController;
 use App\Http\Controllers\AdminController\AlbumController;
 use App\Http\Controllers\AdminController\ArtistController;
 use App\Http\Controllers\AdminController\AuthController;
@@ -23,13 +22,14 @@ use App\Http\Controllers\AdminController\SongViewController;
 use App\Http\Controllers\AdminController\SubscriptionController;
 use App\Http\Controllers\AdminController\TopicController;
 use App\Http\Controllers\AdminController\UserController;
+use App\Http\Controllers\AudioController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return redirect('/admin/dashboard');
 });
 
-Route::prefix('admin')->name('admin.')->group(function () {
+Route::prefix('admin')->name('admin.')->middleware('admin.timing')->group(function () {
     Route::middleware('guest:admin')->group(function () {
         Route::get('/login', [AuthController::class, 'create'])->name('login');
         Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');

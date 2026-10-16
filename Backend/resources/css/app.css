@@ -2202,13 +2202,14 @@
 
 @media (max-width: 900px) {
     .admin-login-page {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
     .admin-login-visual {
         display: none;
     }
     .admin-login-panel {
         min-height: 100vh;
+        min-width: 0;
         padding: 40px 24px;
     }
     .admin-login-mobile-brand {
@@ -2219,7 +2220,12 @@
 @media (max-width: 480px) {
     .admin-login-panel {
         align-items: flex-start;
-        padding-top: 30px;
+        padding: 30px 16px 24px;
+    }
+
+    .admin-login-form-wrap {
+        min-width: 0;
+        width: 100%;
     }
     .admin-login-mobile-brand {
         margin-bottom: 70px;
