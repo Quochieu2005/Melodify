@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\PasswordAuthController;
 use App\Http\Controllers\Api\PhoneAuthController;
 use App\Http\Controllers\Api\QrAuthController;
 use App\Http\Controllers\Api\SocialAuthController;
+use App\Http\Controllers\Api\SubscriptionPlanController;
+use App\Http\Controllers\Api\VipCheckoutController;
 use App\Http\Controllers\AudioController;
 use App\Http\Controllers\VideoController;
 use Illuminate\Support\Facades\DB;
@@ -86,6 +88,11 @@ Route::prefix('v1')->name('api.v1.')->middleware('admin.timing')->group(function
         Route::post('/auth/qr/scan', [QrAuthController::class, 'scan'])
             ->middleware('throttle:20,1')
             ->name('auth.qr.scan');
+        Route::post('/vip/checkout', [VipCheckoutController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('vip.checkout');
+        Route::get('/vip/transactions', [VipCheckoutController::class, 'index'])
+            ->name('vip.transactions.index');
     });
 
     Route::get('/topics', [CatalogController::class, 'topics'])->name('topics.index');
@@ -102,6 +109,7 @@ Route::prefix('v1')->name('api.v1.')->middleware('admin.timing')->group(function
     Route::get('/playlists/{slug}', [CatalogController::class, 'playlist'])->name('playlists.show');
     Route::get('/charts', [CatalogController::class, 'charts'])->name('charts.index');
     Route::get('/charts/{slug}', [CatalogController::class, 'chart'])->name('charts.show');
+    Route::get('/subscription-plans', [SubscriptionPlanController::class, 'index'])->name('subscription-plans.index');
     Route::get('/home/bootstrap', [CatalogController::class, 'homeBootstrap'])->name('home.bootstrap');
     Route::get('/home/discovery', [CatalogController::class, 'homeDiscovery'])->name('home.discovery');
     Route::get('/songs', [CatalogController::class, 'songs'])->name('songs.index');

@@ -130,7 +130,7 @@ export default function Sidebar() {
           ) : (
             <>
               <p className="text-sm leading-5 text-[#d9d5e7]">Đăng nhập để lưu nhạc và đồng bộ thư viện của bạn.</p>
-              <button type="button" onClick={openLogin} className="mt-4 w-full rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#211d3b] outline-none transition-colors hover:bg-violet-100 focus-visible:ring-2 focus-visible:ring-violet-300">Đăng nhập</button>
+              <button type="button" onClick={() => openLogin()} className="mt-4 w-full rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#211d3b] outline-none transition-colors hover:bg-violet-100 focus-visible:ring-2 focus-visible:ring-violet-300">Đăng nhập</button>
             </>
           )}
         </div>

@@ -1,24 +1,35 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { apiFetch, clearAuthSession, type AuthResponse, type AuthUser } from '@/lib/api';
 import LoginModal from './LoginModal';
 
 type LoginModalContextValue = {
-  openLogin: () => void;
+  openLogin: (returnTo?: string) => void;
   user: AuthUser | null;
+  authReady: boolean;
   logout: () => Promise<void>;
 };
 
 const LoginModalContext = createContext<LoginModalContextValue | null>(null);
 
 export function LoginModalProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const openLogin = useCallback(() => setIsOpen(true), []);
-  const closeLogin = useCallback(() => setIsOpen(false), []);
+  const [loginReturnTo, setLoginReturnTo] = useState<string | null>(null);
+  const openLogin = useCallback((returnTo?: string) => {
+    setLoginReturnTo(returnTo ?? null);
+    setIsOpen(true);
+  }, []);
+  const closeLogin = useCallback(() => {
+    setIsOpen(false);
+    setLoginReturnTo(null);
+  }, []);
 
   useEffect(() => {
     const readStoredUser = () => {
@@ -26,6 +37,7 @@ export function LoginModalProvider({ children }: { children: ReactNode }) {
 
       if (!storedUser) {
         setUser(null);
+        setAuthReady(true);
         return;
       }
 
@@ -34,6 +46,7 @@ export function LoginModalProvider({ children }: { children: ReactNode }) {
       } catch {
         setUser(null);
       }
+      setAuthReady(true);
     };
 
     readStoredUser();
@@ -56,7 +69,10 @@ export function LoginModalProvider({ children }: { children: ReactNode }) {
   const handleLoginSuccess = useCallback((auth: AuthResponse) => {
     setUser(auth.user);
     setToast(`Đăng nhập thành công. Xin chào ${auth.user.name || 'bạn'}!`);
-  }, []);
+    setIsOpen(false);
+    if (loginReturnTo?.startsWith('/')) router.replace(loginReturnTo);
+    setLoginReturnTo(null);
+  }, [loginReturnTo, router]);
 
   const logout = useCallback(async () => {
     try {
@@ -70,7 +86,7 @@ export function LoginModalProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const value = useMemo(() => ({ openLogin, user, logout }), [logout, openLogin, user]);
+  const value = useMemo(() => ({ openLogin, user, authReady, logout }), [authReady, logout, openLogin, user]);
 
   return (
     <LoginModalContext.Provider value={value}>

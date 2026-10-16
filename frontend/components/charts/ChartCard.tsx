@@ -3,11 +3,12 @@
 import Link from 'next/link';
 
 import { usePlayer } from '@/components/player';
+import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { type ChartRecord, type ChartSong } from '@/lib/api';
 import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 
-function PlayIcon({ size = 'size-5' }: { size?: string }) {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className={`${size} fill-current`}><path d="M8 5.2v13.6a1.2 1.2 0 0 0 1.84 1.02l9.93-6.8a1.24 1.24 0 0 0 0-2.04L9.84 4.18A1.2 1.2 0 0 0 8 5.2Z" /></svg>;
+function ChartPlayIcon() {
+  return <PlayGlyph className="svg-icon chart-play-btn size-5 text-[#212121]" />;
 }
 
 function PauseIcon() {
@@ -73,7 +74,7 @@ export default function ChartCard({ chart, className = '' }: { chart: ChartRecor
         </Link>
         <button type="button" onClick={handlePlayAll} disabled={songs.length === 0} className="flex h-9 shrink-0 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-bold transition-colors hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
           {chartIsPlaying ? 'Đang phát' : 'Phát'}
-          <span className="text-cyan-300">{chartIsPlaying ? <PauseIcon /> : <PlayIcon />}</span>
+          <span className="text-cyan-300">{chartIsPlaying ? <PauseIcon /> : <ChartPlayIcon />}</span>
         </button>
       </div>
 
@@ -90,7 +91,7 @@ export default function ChartCard({ chart, className = '' }: { chart: ChartRecor
                 </div>
                 <div className="relative size-14 overflow-hidden rounded-[6px] bg-black/20 bg-cover bg-center" style={{ backgroundImage: `url("${song.cover_url || '/topics/genre/vpop_600.png'}")` }}>
                   <button type="button" onClick={() => handlePlaySong(song)} aria-label={isCurrent && isPlaying ? `Tạm dừng ${song.title}` : `Phát ${song.title}`} className="pointer-events-none absolute inset-0 grid place-items-center bg-black/35 text-white opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
-                    <span className="grid size-9 place-items-center rounded-full bg-white text-[#202a28]">{isCurrent && isPlaying ? <PauseIcon /> : <PlayIcon size="size-4" />}</span>
+                    <span className="grid size-9 place-items-center rounded-full bg-white text-[#202a28]">{isCurrent && isPlaying ? <PauseIcon /> : <PlayGlyph className="size-4" />}</span>
                   </button>
                 </div>
                 <div className="min-w-0 pr-7">

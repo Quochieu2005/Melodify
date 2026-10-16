@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ArtistLink, ArtistNames } from '@/components/artists';
+import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { usePlayer } from '@/components/player';
 import { getArtist, getSong, listSongs, type AlbumRecord, type Lyric, type Song, type SongArtistCredit } from '@/lib/api';
 import { recentAlbumItem, recentSongItem, recordRecentItem } from '@/lib/recent-history';
@@ -14,10 +15,6 @@ const fallbackCover = '/topics/genre/vpop_600.png';
 const sidebarSurfaceStyle = {
   background: 'linear-gradient(180deg, #213d39 0%, #202a28 28%, #171817 68%, #111 100%)',
 };
-
-function PlayIcon() {
-  return <span aria-hidden="true" className="ml-0.5 border-y-[7px] border-l-[10px] border-y-transparent border-l-current" />;
-}
 
 function PauseIcon() {
   return <span aria-hidden="true" className="flex gap-1"><span className="h-4 w-1.5 rounded-sm bg-current" /><span className="h-4 w-1.5 rounded-sm bg-current" /></span>;
@@ -268,7 +265,7 @@ export default function SongDetailPage({ slug }: { slug: string }) {
                 <button type="button" aria-label="Thêm tùy chọn" className="grid size-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"><MoreIcon /></button>
               </div>
               <div className="mt-6 flex flex-wrap gap-4">
-                <button type="button" onClick={handlePlay} className="inline-flex h-11 items-center gap-3 rounded-full bg-[#00cfe3] px-8 text-sm font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">{currentTrack && isPlaying ? <PauseIcon /> : <PlayIcon />}{currentTrack && isPlaying ? 'Tạm dừng' : 'Phát'}</button>
+                <button type="button" onClick={handlePlay} className="inline-flex h-11 items-center gap-3 rounded-full bg-[#00cfe3] px-8 text-sm font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">{currentTrack && isPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}{currentTrack && isPlaying ? 'Tạm dừng' : 'Phát'}</button>
                 <a href={song.audio_url || song.stream_url || song.source_url || '#'} download className="inline-flex h-11 items-center gap-3 rounded-full bg-white/15 px-8 text-sm font-bold transition-colors hover:bg-white/25"><DownloadIcon />Tải về</a>
               </div>
             </div>

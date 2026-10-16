@@ -5,6 +5,8 @@ import { Lexend } from 'next/font/google';
 import { useEffect, useMemo, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
+import { PlayGlyph } from '@/components/icons/PlayGlyph';
+import { artistPath, type ArtistReference } from '@/components/artists/ArtistLink';
 import { getHomeBootstrap, type HomeDiscovery, type Playlist, type Song } from '@/lib/api';
 import { recentPlaylistItem, recordRecentItem, recentArtistItem, recentSongItem, songPath } from '@/lib/recent-history';
 
@@ -31,10 +33,6 @@ const artists = [
   { name: 'Hngle', followers: '8076 người theo dõi', song: 'Tìm Em', songArtists: 'Hngle, Bảo Anh', image: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=900&q=85' },
 ];
 
-function PlayIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-current"><path d="M8 5.2v13.6a1.2 1.2 0 0 0 1.84 1.02l9.93-6.8a1.24 1.24 0 0 0 0-2.04L9.84 4.18A1.2 1.2 0 0 0 8 5.2Z" /></svg>;
-}
-
 function AudioBadge() {
   return <span aria-hidden="true" className="absolute right-3 top-3 z-10 grid size-6 place-items-center rounded-full bg-black/35 text-[11px] text-white/80 backdrop-blur-sm">◖▮◗</span>;
 }
@@ -59,7 +57,7 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
         <div aria-hidden="true" className={`${styles.coverImage} h-full w-full bg-cover bg-center transition-transform duration-300 ease-out group-hover:scale-[1.045]`} style={{ backgroundImage: `url("${coverUrl}")` }} />
         <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
         <AudioBadge />
-        <span aria-hidden="true" className="absolute bottom-3 right-3 grid size-12 translate-y-2 place-items-center rounded-full bg-[#00d3e5] text-[#13201e] opacity-0 shadow-lg shadow-black/30 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"><PlayIcon /></span>
+        <span aria-hidden="true" className="absolute bottom-3 right-3 grid size-12 translate-y-2 place-items-center rounded-full bg-[#00d3e5] text-[#13201e] opacity-0 shadow-lg shadow-black/30 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"><PlayGlyph className="size-6" /></span>
       </div>
       <h3 className="mt-3 truncate text-[15px] font-bold leading-5 text-white transition-colors group-hover:text-[#00d3e5]">{playlist.name}</h3>
       <p className="mt-1 truncate text-[13px] leading-5 text-[#c2c5c4]">{subtitle}</p>
@@ -86,7 +84,7 @@ function PlayingBars() {
 
 function SongCard({ song, onPlay, isActive, isPlaying }: { song: Song; onPlay: () => void; isActive: boolean; isPlaying: boolean }) {
   const coverUrl = song.cover_url || '/topics/genre/vpop_600.png';
-  const artistCredits = (song.artists?.length ? song.artists : song.artist ? [song.artist] : []).filter((artist) => artist.name.trim());
+  const artistCredits: ArtistReference[] = (song.artists?.length ? song.artists : song.artist ? [song.artist] : []).filter((artist) => artist.name.trim());
   const artistNames = artistCredits.map((artist) => artist.name).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật';
   const publisher = song.publisher || 'Melodify';
 
@@ -95,17 +93,21 @@ function SongCard({ song, onPlay, isActive, isPlaying }: { song: Song; onPlay: (
       <button type="button" onClick={onPlay} aria-label={`Phát ${song.title}`} className="relative size-[72px] shrink-0 overflow-hidden rounded-[4px] bg-[#18211f] outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
         <span aria-hidden="true" className="absolute inset-0 bg-cover bg-center transition-transform duration-300 ease-out group-hover:scale-[1.06]" style={{ backgroundImage: `url("${coverUrl}")` }} />
         <span aria-hidden="true" className="absolute inset-0 bg-black/10" />
-        <span aria-hidden={!isPlaying} className={`absolute inset-0 grid place-items-center bg-black/30 text-[#00d3e5] transition-opacity ${isPlaying ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>{isPlaying ? <PlayingBars /> : <PlayIcon />}</span>
+        <span aria-hidden={!isPlaying} className={`absolute inset-0 grid place-items-center bg-black/30 text-[#00d3e5] transition-opacity ${isPlaying ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>{isPlaying ? <PlayingBars /> : <PlayGlyph className="size-6" />}</span>
       </button>
       <span className={`${styles.songCardContent} min-w-0 flex-1 overflow-hidden`}>
         <Link href={songPath(song)} onClick={() => recordRecentItem(recentSongItem(song))} className={`block w-full max-w-full truncate text-left text-[14px] font-bold leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] ${isActive ? 'text-[#00d3e5]' : 'text-white hover:text-[#00d3e5]'}`} title={song.title}>{song.title}</Link>
         <span className="mt-0.5 block max-w-full truncate text-[12px] leading-5 text-[#bdbfbe]" title={artistNames}>
-          {artistCredits.length > 0 ? artistCredits.map((artist, index) => (
-            <span key={`${artist.id ?? artist.name}-${index}`}>
-              {index > 0 ? ', ' : null}
-              {artist.id ? <Link href={`/artist/${encodeURIComponent(artist.id)}`} className="transition-colors hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00d3e5]" onClick={(event) => { event.stopPropagation(); recordRecentItem(recentArtistItem(artist)); }}>{artist.name}</Link> : artist.name}
-            </span>
-          )) : artistNames}
+          {artistCredits.length > 0 ? artistCredits.map((artist, index) => {
+            const href = artistPath(artist);
+
+            return (
+              <span key={`${artist.id ?? artist.name}-${index}`}>
+                {index > 0 ? ', ' : null}
+                {href ? <Link href={href} className="transition-colors hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00d3e5]" onClick={(event) => { event.stopPropagation(); recordRecentItem(recentArtistItem(artist)); }}>{artist.name}</Link> : artist.name}
+              </span>
+            );
+          }) : artistNames}
         </span>
         <span className="mt-0.5 flex min-w-0 max-w-full items-center gap-1 truncate text-[11px] uppercase leading-4 text-[#d1d3d2]" title={publisher}>
           <span aria-hidden="true" className="size-3 shrink-0 rounded-full bg-white/90 shadow-[inset_0_0_0_2px_rgba(0,0,0,0.2)]" />

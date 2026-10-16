@@ -7,15 +7,12 @@ import { useEffect, useState } from 'react';
 import { getHomeBootstrap } from '@/lib/api';
 import { albumRecordToCard, pickDailyAlbums, type AlbumCard } from '@/lib/album-data';
 import { ArtistLink } from '@/components/artists';
+import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { vietnamDateKey } from '@/lib/topic-data';
 import { recordRecentItem } from '@/lib/recent-history';
 import styles from './AlbumGrid.module.css';
 
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
-
-function PlayIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 fill-current"><path d="M8 5.2v13.6a1.2 1.2 0 0 0 1.84 1.02l9.93-6.8a1.24 1.24 0 0 0 0-2.04L9.84 4.18A1.2 1.2 0 0 0 8 5.2Z" /></svg>;
-}
 
 function AlbumCard({ album }: { album: AlbumCard }) {
   return (
@@ -25,7 +22,7 @@ function AlbumCard({ album }: { album: AlbumCard }) {
           <div role="img" aria-label={`Ảnh bìa ${album.title}`} className="h-full w-full bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.04]" style={{ backgroundImage: `url("${album.coverUrl}")` }} />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-70" />
           <span aria-hidden="true" className="absolute bottom-3 right-3 grid size-10 translate-y-1 place-items-center rounded-full bg-[#00d3e5] text-[#07363a] opacity-0 shadow-lg transition-all group-hover:translate-y-0 group-hover:opacity-100">
-            <PlayIcon />
+            <PlayGlyph className="size-4" />
           </span>
         </div>
         <h3 className="mt-3 truncate text-[14px] font-bold leading-5 text-white">{album.title}</h3>

@@ -48,7 +48,7 @@ export default function FollowListPage({ kind }: FollowListPageProps) {
         <div className="mx-auto max-w-[900px] rounded-2xl border border-white/10 bg-white/5 p-10 text-center">
           <h1 className="text-3xl font-extrabold">{isFollowing ? 'Đang theo dõi' : 'Người theo dõi'}</h1>
           <p className="mt-3 text-white/60">Đăng nhập để xem danh sách của bạn.</p>
-          <button type="button" onClick={openLogin} className="mt-6 rounded-full bg-cyan-400 px-6 py-3 font-bold text-[#07363a] hover:bg-cyan-300">
+          <button type="button" onClick={() => openLogin()} className="mt-6 rounded-full bg-cyan-400 px-6 py-3 font-bold text-[#07363a] hover:bg-cyan-300">
             Đăng nhập
           </button>
         </div>
