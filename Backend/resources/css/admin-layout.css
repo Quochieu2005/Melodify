@@ -46,7 +46,7 @@ body.admin-body {
     min-height: 100vh;
     background: var(--admin-surface) !important;
     border-inline-end: 1px solid var(--admin-border);
-    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    transition: width 0.2s cubic-bezier(0.2, 0, 0, 1), flex-basis 0.2s cubic-bezier(0.2, 0, 0, 1);
     position: sticky;
     top: 0;
     z-index: 10;
@@ -136,6 +136,17 @@ body.admin-body {
         background 0.15s,
         color 0.15s;
     user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }
 
 .admin-menu .ant-menu-item > a,

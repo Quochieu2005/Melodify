@@ -8,8 +8,25 @@
             aria-label="Thu gọn / Mở rộng sidebar"
             title="Thu gọn / Mở rộng sidebar"
         >
-            <x-anticon name="menu-fold" class="admin-sidebar-icon-fold" />
-            <x-anticon name="menu-unfold" class="admin-sidebar-icon-unfold" />
+            <svg class="admin-menu-toggle-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <rect x="3.75" y="4.75" width="16.5" height="14.5" rx="2.25" />
+                <path d="M9 5v14M13 9h4M13 12h4M13 15h4" />
+            </svg>
+        </button>
+
+        {{-- Mobile drawer toggle; app.js already handles this data attribute. --}}
+        <button
+            type="button"
+            class="ant-btn ant-btn-text ant-btn-circle admin-icon-btn admin-mobile-toggle"
+            data-sidebar-mobile-toggle
+            aria-label="Mở menu"
+            aria-controls="admin-sider"
+            aria-expanded="false"
+        >
+            <svg class="admin-menu-toggle-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <rect x="3.75" y="4.75" width="16.5" height="14.5" rx="2.25" />
+                <path d="M9 5v14M13 9h4M13 12h4M13 15h4" />
+            </svg>
         </button>
 
         @include('layouts.partials.header.search')

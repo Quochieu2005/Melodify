@@ -50,9 +50,9 @@ Route::get('/health', function () {
         'database' => $database,
         'timestamp' => now()->toISOString(),
     ]);
-});
+})->middleware('admin.timing');
 
-Route::prefix('v1')->name('api.v1.')->group(function () {
+Route::prefix('v1')->name('api.v1.')->middleware('admin.timing')->group(function () {
     Route::post('/auth/social', [SocialAuthController::class, 'login'])->name('auth.social');
     Route::post('/auth/login', [PasswordAuthController::class, 'login'])->name('auth.login');
     Route::post('/auth/password/forgot', [PasswordAuthController::class, 'requestPasswordReset'])
@@ -100,6 +100,8 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::get('/artists/{slug}', [CatalogController::class, 'artist'])->name('artists.show');
     Route::get('/playlists', [CatalogController::class, 'playlists'])->name('playlists.index');
     Route::get('/playlists/{slug}', [CatalogController::class, 'playlist'])->name('playlists.show');
+    Route::get('/charts', [CatalogController::class, 'charts'])->name('charts.index');
+    Route::get('/charts/{slug}', [CatalogController::class, 'chart'])->name('charts.show');
     Route::get('/home/bootstrap', [CatalogController::class, 'homeBootstrap'])->name('home.bootstrap');
     Route::get('/home/discovery', [CatalogController::class, 'homeDiscovery'])->name('home.discovery');
     Route::get('/songs', [CatalogController::class, 'songs'])->name('songs.index');

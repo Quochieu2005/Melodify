@@ -15,21 +15,46 @@ use App\Models\SongShare;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
     public function index(): View
     {
-        $today = now()->startOfDay();
-        $trendStart = $today->copy()->subDays(6);
-        $recentPlayStart = $today->copy()->subDays(29);
+        $data = Cache::store('file')->remember(
+            'admin:dashboard:metrics:v2:'.now()->format('Y-m-d-H-i'),
+            now()->addSeconds(30),
+            fn (): array => $this->dashboardData(),
+        );
+
         $latestSongs = Song::query()
             ->with(['album', 'createdByArtist'])
             ->latest()
             ->limit(6)
             ->get();
+        $playCountBySong = collect($data['playCountBySong']);
+        $topSongs = $latestSongs->map(fn (Song $song): array => [
+            'song' => $song,
+            'plays' => $playCountBySong->get((string) $song->getKey(), 0),
+        ])->sortByDesc('plays')->values();
 
+        return view('Admin.dashboard', [
+            'stats' => $data['stats'],
+            'latestSongs' => $latestSongs,
+            'playTrend' => collect($data['playTrend']),
+            'paymentTrend' => collect($data['paymentTrend']),
+            'userTrend' => collect($data['userTrend']),
+            'topSongs' => $topSongs,
+            'adminRankingCards' => $data['adminRankingCards'],
+        ]);
+    }
+
+    private function dashboardData(): array
+    {
+        $today = now()->startOfDay();
+        $trendStart = $today->copy()->subDays(6);
+        $recentPlayStart = $today->copy()->subDays(29);
         // Read the time-series collections once instead of querying once per
         // day and once per song.
         $playEvents = SongPlayEvent::query()
@@ -85,13 +110,6 @@ class DashboardController extends Controller
             ];
         })->values();
 
-        $topSongs = $latestSongs->map(function (Song $song) use ($playCountBySong): array {
-            return [
-                'song' => $song,
-                'plays' => $playCountBySong->get((string) $song->getKey(), 0),
-            ];
-        })->sortByDesc('plays')->values();
-
         $engagementRankings = $this->engagementRankings($playCountBySong);
         $adminRankingCards = [
             [
@@ -144,7 +162,12 @@ class DashboardController extends Controller
             ],
         ];
 
-        return view('Admin.dashboard', [
+        $adminRankingCards = array_map(
+            static fn (array $card): array => [...$card, 'items' => $card['items']->all()],
+            $adminRankingCards,
+        );
+
+        return [
             'stats' => [
                 'songs' => Song::query()->count(),
                 'artists' => Artist::query()->count(),
@@ -152,14 +175,12 @@ class DashboardController extends Controller
                 'playsToday' => $playCountByDay->get($today->format('Y-m-d'), 0),
                 'paymentsToday' => $paymentTrend->last()['value'] ?? 0,
             ],
-            'latestSongs' => $latestSongs,
-            'playTrend' => $playTrend,
-            'paymentTrend' => $paymentTrend,
-            'userTrend' => $userTrend,
-            'topSongs' => $topSongs,
-            'engagementRankings' => $engagementRankings,
+            'playCountBySong' => $playCountBySong->all(),
+            'playTrend' => $playTrend->all(),
+            'paymentTrend' => $paymentTrend->all(),
+            'userTrend' => $userTrend->all(),
             'adminRankingCards' => $adminRankingCards,
-        ]);
+        ];
     }
 
     /** @return array{playlists: array<string, Collection>, artists: array<string, Collection>} */
@@ -178,7 +199,7 @@ class DashboardController extends Controller
             ->get(['playlist_id', 'song_id'])
             ->groupBy(fn (PlaylistSong $link): string => (string) $link->playlist_id);
         $playlistIds = $playlistLinks->keys()->map(fn ($id): string => (string) $id)->values()->all();
-        $playlistKey = (new Playlist())->getKeyName();
+        $playlistKey = (new Playlist)->getKeyName();
         $playlists = $playlistIds === []
             ? collect()
             : Playlist::query()->whereIn($playlistKey, $playlistIds)->get();
@@ -204,7 +225,7 @@ class DashboardController extends Controller
             ->get(['artist_id', 'song_id'])
             ->groupBy(fn (SongArtist $link): string => (string) $link->artist_id);
         $artistIds = $artistLinks->keys()->map(fn ($id): string => (string) $id)->values()->all();
-        $artistKey = (new Artist())->getKeyName();
+        $artistKey = (new Artist)->getKeyName();
         $artists = $artistIds === []
             ? collect()
             : Artist::query()->whereIn($artistKey, $artistIds)->get();

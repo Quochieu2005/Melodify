@@ -1,9 +1,10 @@
 <?php
 
+use App\Http\Middleware\AdminServerTiming;
+use App\Http\Middleware\AuthenticateApiUser;
 use App\Http\Middleware\EnsureAdminIdleSession;
 use App\Http\Middleware\EnsureAdminPermission;
 use App\Http\Middleware\EnsureSuperAdmin;
-use App\Http\Middleware\AuthenticateApiUser;
 use App\Http\Middleware\OptionalAuthenticateApiUser;
 use App\Http\Middleware\RecordAdminActivity;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -13,8 +14,8 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -25,6 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
+            'admin.timing' => AdminServerTiming::class,
             'api.user' => AuthenticateApiUser::class,
             'api.user.optional' => OptionalAuthenticateApiUser::class,
             'admin.idle' => EnsureAdminIdleSession::class,

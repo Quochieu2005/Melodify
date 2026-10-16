@@ -12,9 +12,37 @@ class AuthenticationTest extends TestCase
     {
         $this->get(route('admin.login'))
             ->assertOk()
+            ->assertHeader('Server-Timing')
             ->assertSee('Chào mừng trở lại')
             ->assertSee('Đăng nhập')
             ->assertSee('Quên mật khẩu?');
+    }
+
+    public function test_forgot_password_page_is_available_and_timed(): void
+    {
+        $this->get(route('admin.password.request'))
+            ->assertOk()
+            ->assertHeader('Server-Timing');
+    }
+
+    public function test_admin_header_exposes_the_mobile_sidebar_toggle(): void
+    {
+        $admin = new Admin([
+            'name' => 'Test Admin',
+            'email' => 'test-admin@example.com',
+            'role' => 'admin',
+            'status' => 'active',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($admin, 'admin');
+        $header = view('layouts.partials.header')
+            ->with('headerUnreadCount', 0)
+            ->with('headerNotifications', collect())
+            ->render();
+
+        $this->assertStringContainsString('data-sidebar-mobile-toggle', $header);
+        $this->assertStringContainsString('aria-controls="admin-sider"', $header);
     }
 
     public function test_admin_dashboard_requires_authentication(): void
