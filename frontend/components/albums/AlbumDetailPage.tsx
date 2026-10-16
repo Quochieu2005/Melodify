@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
+import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { getAlbum, type AlbumDetail, type Song, type SongArtistCredit } from '@/lib/api';
 
 import styles from './AlbumDetailPage.module.css';
@@ -24,10 +25,6 @@ function ShareIcon() {
 
 function DownloadIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-none stroke-current stroke-[1.8]"><path d="M12 3v11m0 0 4-4m-4 4-4-4M4 20h16" strokeLinecap="round" strokeLinejoin="round" /></svg>;
-}
-
-function PlayIcon() {
-  return <span aria-hidden="true" className="ml-0.5 border-y-[7px] border-l-[10px] border-y-transparent border-l-current" />;
 }
 
 function PauseIcon() {
@@ -117,7 +114,7 @@ function AlbumSongRow({ song, index, coverUrl, checked, onToggle, onPlay, isCurr
         <div className="group/cover relative size-11 shrink-0 overflow-hidden rounded-[4px]">
           <div role="img" aria-label={`Ảnh bìa ${song.title}`} className="size-full bg-cover bg-center" style={{ backgroundImage: `url("${imageUrl}")` }} />
           <button type="button" aria-label={isCurrentTrack && isPlaying ? `Tạm dừng ${song.title}` : `Phát ${song.title}`} onClick={onPlay} className={`absolute inset-0 grid place-items-center bg-black/45 text-white ${isCurrentTrack ? 'opacity-100' : 'opacity-0 group-hover/cover:opacity-100 group-focus-within/cover:opacity-100'}`}>
-            {isCurrentTrack && isPlaying ? <span className={`${styles.equalizer} ${styles.equalizerOnCover}`}><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /></span> : <PlayIcon />}
+            {isCurrentTrack && isPlaying ? <span className={`${styles.equalizer} ${styles.equalizerOnCover}`}><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /></span> : <PlayGlyph className="ml-0.5 size-4" />}
           </button>
         </div>
         <Link href={songPath(song)} onClick={() => recordRecentItem(recentSongItem(song))} className={`truncate text-[14px] font-bold transition-colors hover:text-[#00d3e5] ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{song.title}</Link>
@@ -291,7 +288,7 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
 
               <div className="mt-4 flex flex-wrap items-center gap-4">
                 <button type="button" onClick={handlePlayAll} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#00cfe3] px-6 text-[14px] font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">
-                  {albumIsPlaying ? <PauseIcon /> : <PlayIcon />}
+                  {albumIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}
                   {albumIsPlaying ? 'Tạm dừng' : 'Phát tất cả'}
                 </button>
                 <button type="button" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3c4140] px-7 text-[14px] font-bold text-white transition-colors hover:bg-[#4a504e]">

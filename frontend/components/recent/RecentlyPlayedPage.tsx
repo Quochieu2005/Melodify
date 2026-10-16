@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import styles from '@/components/albums/AlbumDetailPage.module.css';
 import { ArtistNames } from '@/components/artists';
+import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { getSong } from '@/lib/api';
 import { usePlayer } from '@/components/player';
 import {
@@ -25,10 +26,6 @@ const tabs: Array<{ label: string; value: RecentCategory }> = [
 ];
 
 const fallbackCover = '/topics/genre/vpop_600.png';
-
-function PlayIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-current"><path d="m8 5.5 10 6.5-10 6.5v-13Z" /></svg>;
-}
 
 function PauseIcon() {
   return <span aria-hidden="true" className="flex gap-1"><span className="h-4 w-1.5 rounded-sm bg-current" /><span className="h-4 w-1.5 rounded-sm bg-current" /></span>;
@@ -151,7 +148,7 @@ function RecentSongRow({ item, index, checked, onToggle, onPlay, currentTrackId,
         <div className="group/cover relative size-11 shrink-0 overflow-hidden rounded-[4px]">
           <div role="img" aria-label={item.title} className="size-full bg-cover bg-center" style={imageStyle(item)} />
           <button type="button" aria-label={isCurrentTrack && isPlaying ? `Tạm dừng ${item.title}` : `Phát ${item.title}`} onClick={onPlay} disabled={isLoading} className={`absolute inset-0 grid place-items-center bg-black/45 text-white disabled:cursor-wait ${isCurrentTrack ? 'opacity-100' : 'opacity-0 group-hover/cover:opacity-100 group-focus-within/cover:opacity-100'}`}>
-            {isCurrentTrack && isPlaying ? <span className={`${styles.equalizer} ${styles.equalizerOnCover}`}><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /></span> : <PlayIcon />}
+            {isCurrentTrack && isPlaying ? <span className={`${styles.equalizer} ${styles.equalizerOnCover}`}><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /></span> : <PlayGlyph className="size-5" />}
           </button>
         </div>
         <Link href={item.href} onClick={() => remember(item)} className={`truncate text-[14px] font-bold transition-colors hover:text-[#00d3e5] ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{item.title}</Link>
@@ -221,7 +218,7 @@ export default function RecentlyPlayedPage() {
           <section className="mt-8">
             <div className="flex items-center gap-4">
               <button type="button" aria-label="Phát bài hát đã phát" onClick={() => { if (currentSong) void playRecentSong(currentSong); }} disabled={!currentSong || isLoadingSong} className="grid size-12 place-items-center rounded-full bg-cyan-400 text-[#07363a] outline-none hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-white">
-                {track?.id === currentSong?.id && isPlaying ? <PauseIcon /> : <PlayIcon />}
+                {track?.id === currentSong?.id && isPlaying ? <PauseIcon /> : <PlayGlyph className="size-5" />}
               </button>
               <h2 className="text-[29px] font-extrabold tracking-[-0.03em]">Bài hát đã phát <span className="text-sm font-medium text-white/70">({displayCount(visibleItems.length)})</span></h2>
             </div>

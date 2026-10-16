@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { ArtistNames } from '@/components/artists';
+import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { songPath } from '@/lib/recent-history';
 
 import { usePlayer } from './PlayerProvider';
@@ -112,7 +113,7 @@ export default function MusicPlayer() {
             <PlayerButton label="Phát ngẫu nhiên" className="size-5" disabled={!track}><ShuffleIcon /></PlayerButton>
             <PlayerButton label="Bài trước" className="size-6" onClick={playPrevious} disabled={!track}><PreviousIcon /></PlayerButton>
             <button type="button" aria-label={isPlaying ? 'Tạm dừng' : 'Phát'} aria-pressed={isPlaying} onClick={togglePlay} disabled={!track} className="grid size-9 place-items-center rounded-full bg-white text-[#202020] outline-none transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:bg-white/25 disabled:text-white/40 disabled:hover:scale-100 focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
-              {isPlaying ? <span className="flex gap-0.5"><span className="h-3.5 w-0.5 rounded-full bg-current" /><span className="h-3.5 w-0.5 rounded-full bg-current" /></span> : <span className="ml-0.5 border-y-[7px] border-l-[11px] border-y-transparent border-l-current" />}
+              {isPlaying ? <span className="flex gap-1"><span className="h-4 w-1 rounded-full bg-current" /><span className="h-4 w-1 rounded-full bg-current" /></span> : <PlayGlyph className="size-5" />}
             </button>
             <PlayerButton label="Bài tiếp theo" className="size-6" onClick={playNext} disabled={!track}><NextIcon /></PlayerButton>
             <PlayerButton label="Lặp lại" className="size-5" disabled={!track}><RepeatIcon /></PlayerButton>

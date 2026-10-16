@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { recordRecentItem, songPath } from '@/lib/recent-history';
 
 type FavoriteSong = {
@@ -30,10 +31,6 @@ const favoriteSongs: FavoriteSong[] = [
     cover: '/topics/mood/mood_7_600.png',
   },
 ];
-
-function PlayIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 fill-current"><path d="m8 5.5 10 6.5-10 6.5v-13Z" /></svg>;
-}
 
 function DownloadIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 fill-none stroke-current stroke-2"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14" strokeLinecap="round" strokeLinejoin="round" /></svg>;
@@ -89,7 +86,7 @@ export default function FavoriteSongsPage() {
               </div>
               <div className="flex items-center gap-4">
                 <button type="button" onClick={() => setIsPlaying((playing) => !playing)} className="inline-flex h-11 w-[190px] items-center justify-center gap-2 rounded-full bg-[#08c6d9] text-sm font-bold text-[#07363a] outline-none transition-colors hover:bg-[#22d7e7] focus-visible:ring-2 focus-visible:ring-white">
-                  <PlayIcon />
+                  <PlayGlyph className="size-4" />
                   {isPlaying ? 'Đang phát' : 'Phát tất cả'}
                 </button>
                 <button type="button" className="inline-flex h-11 w-[190px] items-center justify-center gap-2 rounded-full bg-[#3a3a3a] text-sm font-bold text-white outline-none transition-colors hover:bg-[#484848] focus-visible:ring-2 focus-visible:ring-cyan-300">

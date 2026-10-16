@@ -2,9 +2,11 @@
 
 import { Lexend } from 'next/font/google';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
+import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import {
   getArtist,
   type AlbumRecord,
@@ -21,12 +23,12 @@ import { recentAlbumItem, recentPlaylistItem, recentVideoItem, recentSongItem, r
 const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const fallbackCover = '/topics/genre/vpop_600.png';
 
-function PlayIcon() {
-  return <span aria-hidden="true" className="ml-0.5 border-y-[7px] border-l-[10px] border-y-transparent border-l-current" />;
-}
-
 function PauseIcon() {
   return <span aria-hidden="true" className="flex gap-1"><span className="h-4 w-1.5 rounded-sm bg-current" /><span className="h-4 w-1.5 rounded-sm bg-current" /></span>;
+}
+
+function MoreHorizontalIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 fill-current"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>;
 }
 
 function ClockIcon() {
@@ -67,24 +69,25 @@ function SectionHeading({ title, href }: { title: string; href?: string }) {
   );
 }
 
-function ArtistSongRow({ song, index, artist, onPlay, isCurrentTrack, isPlaying }: { song: Song; index: number; artist: ArtistDetail; onPlay: () => void; isCurrentTrack: boolean; isPlaying: boolean }) {
+function ArtistSongRow({ song, index, artist, onPlay, onShare, isCurrentTrack, isPlaying }: { song: Song; index: number; artist: ArtistDetail; onPlay: () => void; onShare: () => void; isCurrentTrack: boolean; isPlaying: boolean }) {
   const imageUrl = song.cover_url || artist.avatar_url || fallbackCover;
   const artists = songArtists(song);
 
   return (
-    <li className="group grid grid-cols-[32px_minmax(0,1fr)_28px] items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-white/[0.04] sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px] sm:gap-4">
+    <li className={`${styles.songRow} group grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 rounded-lg px-2 py-2.5 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px_32px] sm:gap-4`}>
       <span className="grid size-6 place-items-center text-[13px] text-white/70">{index + 1}</span>
       <div className="flex min-w-0 items-center gap-3">
         <div className="group/cover relative size-11 shrink-0 overflow-hidden rounded-[4px]">
           <div role="img" aria-label={`Ảnh bìa ${song.title}`} className="size-full bg-cover" style={{ backgroundImage: `url("${imageUrl}")`, backgroundPosition: 'center 25%' }} />
-          <button type="button" aria-label={isCurrentTrack && isPlaying ? `Tạm dừng ${song.title}` : `Phát ${song.title}`} onClick={onPlay} className={`absolute inset-0 grid place-items-center bg-black/45 text-white ${isCurrentTrack ? 'opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover/cover:opacity-100 sm:group-focus-within/cover:opacity-100'}`}>
-            {isCurrentTrack && isPlaying ? <span className={`${styles.equalizer} ${styles.equalizerOnCover}`}><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /></span> : <PlayIcon />}
+          <button type="button" aria-label={isCurrentTrack && isPlaying ? `Tạm dừng ${song.title}` : `Phát ${song.title}`} onClick={onPlay} className={`absolute inset-0 grid place-items-center bg-black/45 text-white ${isCurrentTrack ? 'opacity-100' : 'opacity-0 group-hover/cover:opacity-100 group-focus-within/cover:opacity-100'}`}>
+            {isCurrentTrack && isPlaying ? <span className={`${styles.equalizer} ${styles.equalizerOnCover}`}><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /></span> : <PlayGlyph className="ml-0.5 size-4" />}
           </button>
         </div>
         <Link href={songPath(song)} onClick={() => recordRecentItem(recentSongItem(song))} className={`truncate text-[14px] font-bold transition-colors hover:text-[#00d3e5] ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{song.title}</Link>
       </div>
       <ArtistNames artists={artists} className="hidden truncate text-[13px] text-white/65 sm:block" />
       <span className="text-right text-[13px] text-white/75">{formatDuration(song.duration_seconds)}</span>
+      <button type="button" aria-label={`Chia sẻ ${song.title}`} onClick={onShare} className={`${styles.rowMore} grid size-7 place-items-center rounded-full text-white/75 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5]`}><MoreHorizontalIcon /></button>
     </li>
   );
 }
@@ -124,7 +127,7 @@ function VideoCard({ video }: { video: SongVideo }) {
       <div className="relative aspect-video overflow-hidden rounded-lg bg-[#30443f]">
         <div role="img" aria-label={`Ảnh video ${video.title}`} className="size-full bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.02]" style={{ backgroundImage: `url("${video.thumbnail_url || fallbackCover}")` }} />
         {video.duration_seconds !== null && video.duration_seconds !== undefined ? <span className="absolute bottom-2 right-2 rounded bg-black/85 px-1.5 py-0.5 text-[11px] font-bold text-white">{formatDuration(video.duration_seconds)}</span> : null}
-        {video.watch_url || video.video_url ? <span className="absolute inset-0 grid place-items-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/35 group-hover:opacity-100"><span className="grid size-11 place-items-center rounded-full bg-[#00cfe3] text-[#07363a]"><PlayIcon /></span></span> : null}
+        {video.watch_url || video.video_url ? <span className="absolute inset-0 grid place-items-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/35 group-hover:opacity-100"><span className="grid size-11 place-items-center rounded-full bg-[#00cfe3] text-[#07363a]"><PlayGlyph className="ml-0.5 size-4" /></span></span> : null}
       </div>
       <h3 className="mt-3 truncate text-[14px] font-bold text-white">{video.title}</h3>
     </div>
@@ -175,6 +178,7 @@ function ArtistBioModal({ artist, onClose }: { artist: ArtistDetail; onClose: ()
 }
 
 export default function ArtistDetailPage({ slug }: { slug: string }) {
+  const router = useRouter();
   const { track, isPlaying, playSong, togglePlay } = usePlayer();
   const artistHeroRef = useRef<HTMLElement | null>(null);
   const [request, setRequest] = useState({ slug: '', artist: null as ArtistDetail | null, isLoading: true, error: '' });
@@ -187,8 +191,16 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
 
     getArtist(slug)
       .then((response) => {
+        const artist = response.data;
+
+        // Keep old ID-based links working, but replace them with the canonical slug URL.
+        if (!cancelled && artist.slug && artist.slug !== slug) {
+          router.replace(`/artist/${encodeURIComponent(artist.slug)}`);
+          return;
+        }
+
         if (!cancelled) {
-          setRequest({ slug, artist: response.data, isLoading: false, error: '' });
+          setRequest({ slug, artist, isLoading: false, error: '' });
           setIsFollowing(false);
           setIsBioOpen(false);
         }
@@ -198,7 +210,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
       });
 
     return () => { cancelled = true; };
-  }, [slug]);
+  }, [slug, router]);
 
   useEffect(() => {
     if (!isBioOpen) return;
@@ -264,12 +276,22 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
     playSong(song, songs);
   };
 
+  const handleShareSong = async (song: Song) => {
+    const url = new URL(songPath(song), window.location.origin).toString();
+    try {
+      if (navigator.share) await navigator.share({ title: song.title, url });
+      else await navigator.clipboard.writeText(url);
+    } catch {
+      // Sharing can be dismissed by the user; keep the list interaction quiet.
+    }
+  };
+
   return (
     <>
       {showCompactSongsHeader ? (
         <div className="fixed inset-x-0 top-[80px] z-20 h-[60px] border-b border-white/10 bg-[#ffffff3d] px-5 py-2 shadow-[0_12px_30px_rgba(0,0,0,0.25)] backdrop-blur-md sm:px-8 lg:left-[248px] lg:px-7">
           <div className="mx-auto flex max-w-[1582px] items-center gap-4">
-            <button type="button" aria-label={`Phát tất cả bài hát của ${artist.name}`} onClick={handlePlayAll} disabled={songs.length === 0} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#00cfe3] text-[#07363a] transition-colors hover:bg-[#34dbea] disabled:cursor-not-allowed disabled:opacity-50">{artistIsPlaying ? <PauseIcon /> : <PlayIcon />}</button>
+            <button type="button" aria-label={`Phát tất cả bài hát của ${artist.name}`} onClick={handlePlayAll} disabled={songs.length === 0} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#00cfe3] text-[#07363a] transition-colors hover:bg-[#34dbea] disabled:cursor-not-allowed disabled:opacity-50">{artistIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}</button>
             <h2 className={`${lexend.className} truncate text-[22px] font-bold text-white sm:text-[25px]`}>Bài hát của {artist.name}</h2>
           </div>
         </div>
@@ -288,7 +310,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
               <button type="button" aria-pressed={isFollowing} onClick={() => setIsFollowing((value) => !value)} className="h-9 rounded-full border border-white/75 px-5 text-[13px] font-bold text-white transition-colors hover:border-[#00d3e5] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">{isFollowing ? 'Đang theo dõi' : 'Theo dõi'}</button>
             </div>
             <button type="button" onClick={handlePlayAll} disabled={songs.length === 0} className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[#00cfe3] px-6 text-[14px] font-bold text-[#07363a] transition-colors hover:bg-[#34dbea] disabled:cursor-not-allowed disabled:opacity-50">
-              {artistIsPlaying ? <PauseIcon /> : <PlayIcon />}
+              {artistIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}
               {artistIsPlaying ? 'Tạm dừng' : 'Phát tất cả'}
             </button>
           </div>
@@ -296,15 +318,17 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
       </section>
 
       <section className="mx-auto w-full max-w-[1582px] px-5 pt-8 sm:px-8 lg:px-7" aria-label={`Bài hát của ${artist.name}`}>
-        <div className="grid grid-cols-[32px_minmax(0,1fr)_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px] sm:gap-4">
+        <h2 className={`${lexend.className} mb-4 text-[26px] font-bold text-white sm:text-[30px]`}>Bài hát</h2>
+        <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px_32px] sm:gap-4">
           <span>#</span>
           <span>Tiêu đề</span>
           <span className="hidden sm:block">Nghệ sĩ</span>
           <span className="justify-self-end"><ClockIcon /></span>
+          <span aria-hidden="true" />
         </div>
         {songs.length > 0 ? (
           <ol className="mt-2 space-y-0.5">
-            {songs.map((song, index) => <ArtistSongRow key={song.id} song={song} index={index} artist={artist} onPlay={() => handlePlaySong(song)} isCurrentTrack={track?.id === song.id} isPlaying={isPlaying && track?.id === song.id} />)}
+            {songs.map((song, index) => <ArtistSongRow key={song.id} song={song} index={index} artist={artist} onPlay={() => handlePlaySong(song)} onShare={() => void handleShareSong(song)} isCurrentTrack={track?.id === song.id} isPlaying={isPlaying && track?.id === song.id} />)}
           </ol>
         ) : (
           <p className="mt-8 rounded-lg bg-[#30443f] px-4 py-5 text-sm text-white/70">Nghệ sĩ chưa có bài hát nào.</p>

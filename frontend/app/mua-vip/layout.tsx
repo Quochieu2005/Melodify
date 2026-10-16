@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
-import './vip.css';
+import type { ReactNode } from "react";
+import "./vip.css";
+import { LoginModalProvider } from "@/components/auth/LoginModalProvider";
 
 export default function MuaVipLayout({ children }: { children: ReactNode }) {
-  return children;
+  return <LoginModalProvider>{children}</LoginModalProvider>;
 }

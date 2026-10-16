@@ -3,6 +3,7 @@ import { Lexend } from "next/font/google";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArtistLink, ArtistNames } from "@/components/artists";
+import { PlayGlyph } from "@/components/icons/PlayGlyph";
 import { usePlayer } from "@/components/player";
 import { getChart, type ChartRecord, type ChartSong } from "@/lib/api";
 import {
@@ -12,14 +13,6 @@ import {
 } from "@/lib/recent-history";
 import styles from "@/components/albums/AlbumDetailPage.module.css";
 const lexend = Lexend({ subsets: ["latin", "vietnamese"], weight: "700" });
-function PlayIcon() {
-  return (
-    <span
-      aria-hidden="true"
-      className="ml-0.5 border-y-[7px] border-l-[10px] border-y-transparent border-l-current"
-    />
-  );
-}
 function PauseIcon() {
   return (
     <span aria-hidden="true" className="flex gap-1">
@@ -91,7 +84,7 @@ function ChartSongRow({
       : [];
   return (
     <li
-      className={`${styles.songRow} group grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 rounded-lg px-2 py-2.5 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4`}
+      className={`${styles.songRow} group grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-white/[0.08] focus-within:bg-white/[0.08] sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4`}
     >
       {" "}
       <div className="flex flex-col items-center justify-center gap-1 text-center text-sm text-white/70">
@@ -125,9 +118,9 @@ function ChartSongRow({
                 ? `Tạm dừng ${song.title}`
                 : `Phát ${song.title}`
             }
-            className="absolute inset-0 grid place-items-center bg-black/45 text-white opacity-100 transition-opacity sm:opacity-0 sm:group-hover/cover:opacity-100 sm:group-focus-within/cover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+            className={`absolute inset-0 grid place-items-center bg-black/45 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${isCurrent ? "opacity-100" : "opacity-0 group-hover/cover:opacity-100 group-focus-within/cover:opacity-100"}`}
           >
-            {isCurrent && isPlaying ? <PauseIcon /> : <PlayIcon />}
+            {isCurrent && isPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}
           </button>{" "}
         </div>{" "}
         <Link
@@ -300,7 +293,7 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
                 disabled={songs.length === 0}
                 className="inline-flex h-11 items-center gap-2 rounded-full bg-[#00cfe3] px-7 text-sm font-bold text-[#07363a] transition-colors hover:bg-[#34dbea] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {chartIsPlaying ? <PauseIcon /> : <PlayIcon />}
+                {chartIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}
                 {chartIsPlaying ? "Tạm dừng" : "Phát"}
               </button>{" "}
               <button
