@@ -1,18 +1,16 @@
 "use client";
-import { Lexend } from "next/font/google";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArtistLink, ArtistNames } from "@/components/artists";
 import { PlayGlyph } from "@/components/icons/PlayGlyph";
 import { usePlayer } from "@/components/player";
-import { getChart, type ChartRecord, type ChartSong } from "@/lib/api";
+import { getChart, getVisitorId, recordChartShare, recordSongShare, type ChartRecord, type ChartSong } from "@/lib/api";
 import {
   recentSongItem,
   recordRecentItem,
   songPath,
 } from "@/lib/recent-history";
 import styles from "@/components/albums/AlbumDetailPage.module.css";
-const lexend = Lexend({ subsets: ["latin", "vietnamese"], weight: "700" });
 function PauseIcon() {
   return (
     <span aria-hidden="true" className="flex gap-1">
@@ -26,13 +24,9 @@ function ShareIcon() {
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className="size-5 fill-none stroke-current stroke-[1.8]"
+      className="size-5 fill-current"
     >
-      <path
-        d="m5 12 14-8-4 16-4-6-6-2Zm6 2 8-10"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M14 3 23 11l-9 8v-5C8.2 14 4.4 15.5 1 21c.7-8 4.3-12.1 13-12.8V3Z" />
     </svg>
   );
 }
@@ -157,12 +151,15 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
     error: string;
   }>({ slug: "", chart: null, loading: true, error: "" });
   const [shareStatus, setShareStatus] = useState("");
+  const [shareCount, setShareCount] = useState(0);
   useEffect(() => {
     let cancelled = false;
     getChart(slug)
       .then((response) => {
-        if (!cancelled)
+        if (!cancelled) {
           setRequest({ slug, chart: response.data, loading: false, error: "" });
+          setShareCount(response.data.share_count ?? 0);
+        }
       })
       .catch(() => {
         if (!cancelled)
@@ -232,12 +229,27 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
     }
     playSong(song, songs);
   };
-  const handleShare = async () => {
+  const handleShareChart = async () => {
     const url = window.location.href;
     try {
-      if (navigator.share) await navigator.share({ title: chart.title, url });
+      const nativeShare = (navigator as unknown as { share?: (data: ShareData) => Promise<void> }).share;
+      const source = nativeShare ? "web" : "copy_link";
+      if (nativeShare) await nativeShare.call(navigator, { title: chart.title, url });
       else await navigator.clipboard.writeText(url);
-      setShareStatus("Đã sao chép liên kết chart.");
+      const response = await recordChartShare(chart.slug, source, getVisitorId());
+      setShareCount(response.shares);
+      setShareStatus(source === "web" ? "Đã chia sẻ bảng xếp hạng." : "Đã sao chép liên kết bảng xếp hạng.");
+    } catch {
+      setShareStatus("");
+    }
+  };
+  const handleShareSong = async (song: ChartSong) => {
+    const url = new URL(songPath(song), window.location.origin).toString();
+    try {
+      if (navigator.share) await navigator.share({ title: song.title, url });
+      else await navigator.clipboard.writeText(url);
+      await recordSongShare(song.id, 'web', getVisitorId());
+      setShareStatus(`Đã chia sẻ bài hát ${song.title}.`);
     } catch {
       setShareStatus("");
     }
@@ -274,7 +286,7 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
               Chart&nbsp; · &nbsp;{chart.song_count || songs.length} bài hát
             </p>{" "}
             <h1
-              className={`${lexend.className} mt-4 max-w-4xl text-3xl font-bold leading-tight sm:text-5xl`}
+              className="mt-4 max-w-4xl text-3xl font-bold leading-tight sm:text-5xl"
             >
               {chart.title}
             </h1>{" "}
@@ -282,11 +294,13 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
               {" "}
               <button
                 type="button"
-                onClick={() => void handleShare()}
-                className="grid size-10 place-items-center rounded-full bg-[#303c39] text-white transition-colors hover:bg-[#40504b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+                aria-label={`Chia sẻ bảng xếp hạng, ${shareCount} lượt chia sẻ`}
+                onClick={() => void handleShareChart()}
+                className="grid size-10 place-items-center rounded-full bg-[#303c39] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
               >
                 <ShareIcon />
               </button>{" "}
+              <span className="text-xs font-semibold text-white">{shareCount}</span>{" "}
               <button
                 type="button"
                 onClick={handlePlayAll}
@@ -317,7 +331,7 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
             <div>
               <h2
                 id="chart-songs-heading"
-                className={`${lexend.className} text-2xl font-bold`}
+                className="text-2xl font-bold"
               >
                 Bảng xếp hạng
               </h2>
@@ -339,7 +353,7 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
                   key={song.id}
                   song={song}
                   onPlay={() => handlePlaySong(song)}
-                  onShare={() => void handleShare()}
+                  onShare={() => void handleShareSong(song)}
                   isCurrent={track?.id === song.id}
                   isPlaying={isPlaying && track?.id === song.id}
                 />
@@ -358,7 +372,7 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
           >
             <h2
               id="chart-collaborators-heading"
-              className={`${lexend.className} text-[24px] font-bold text-white`}
+              className="text-[24px] font-bold text-white"
             >
               Kết hợp từ các nghệ sĩ
             </h2>

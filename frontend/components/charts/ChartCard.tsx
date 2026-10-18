@@ -4,11 +4,11 @@ import Link from 'next/link';
 
 import { usePlayer } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
-import { type ChartRecord, type ChartSong } from '@/lib/api';
+import { getVisitorId, recordSongShare, type ChartRecord, type ChartSong } from '@/lib/api';
 import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 
 function ChartPlayIcon() {
-  return <PlayGlyph className="svg-icon chart-play-btn size-5 text-[#212121]" />;
+  return <PlayGlyph className="svg-icon chart-play-btn size-5" />;
 }
 
 function PauseIcon() {
@@ -60,6 +60,7 @@ export default function ChartCard({ chart, className = '' }: { chart: ChartRecor
     try {
       if (navigator.share) await navigator.share({ title: song.title, url });
       else await navigator.clipboard.writeText(url);
+      await recordSongShare(song.id, 'web', getVisitorId());
     } catch {
       // The share sheet can be dismissed without an error message.
     }

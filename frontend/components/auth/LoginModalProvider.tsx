@@ -15,7 +15,7 @@ type LoginModalContextValue = {
 
 const LoginModalContext = createContext<LoginModalContextValue | null>(null);
 
-export function LoginModalProvider({ children }: { children: ReactNode }) {
+export function LoginModalProvider({ children, variant = 'default' }: { children: ReactNode; variant?: 'default' | 'vip' }) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -97,7 +97,7 @@ export function LoginModalProvider({ children }: { children: ReactNode }) {
           <span>{toast}</span>
         </div>
       ) : null}
-      {isOpen ? <LoginModal onClose={closeLogin} onLoginSuccess={handleLoginSuccess} /> : null}
+      {isOpen ? <LoginModal variant={variant} onClose={closeLogin} onLoginSuccess={handleLoginSuccess} /> : null}
     </LoginModalContext.Provider>
   );
 }

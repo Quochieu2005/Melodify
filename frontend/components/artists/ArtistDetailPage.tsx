@@ -1,6 +1,5 @@
 'use client';
 
-import { Lexend } from 'next/font/google';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -9,6 +8,8 @@ import { usePlayer } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import {
   getArtist,
+  getVisitorId,
+  recordSongShare,
   type AlbumRecord,
   type ArtistDetail,
   type Playlist,
@@ -20,7 +21,6 @@ import styles from '@/components/albums/AlbumDetailPage.module.css';
 import { ArtistNames, type ArtistReference } from './ArtistLink';
 import { recentAlbumItem, recentPlaylistItem, recentVideoItem, recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 
-const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const fallbackCover = '/topics/genre/vpop_600.png';
 
 function PauseIcon() {
@@ -63,7 +63,7 @@ function songArtists(song: Song): ArtistReference[] {
 function SectionHeading({ title, href }: { title: string; href?: string }) {
   return (
     <div className="mb-4 flex items-center justify-between gap-4">
-      <h2 className={`${lexend.className} text-[25px] font-bold text-white sm:text-[28px]`}>{title}</h2>
+      <h2 className="text-[25px] font-bold text-white sm:text-[28px]">{title}</h2>
       {href ? <Link href={href} className="text-[13px] font-bold text-white/70 transition-colors hover:text-[#00d3e5]">Thêm</Link> : null}
     </div>
   );
@@ -145,7 +145,7 @@ function ArtistBioCard({ artist, onViewMore }: { artist: ArtistDetail; onViewMor
       <div className="grid gap-6 sm:grid-cols-[300px_minmax(0,1fr)] sm:items-center">
         <div role="img" aria-label={`Ảnh giới thiệu ${artist.name}`} className="aspect-square w-full rounded-lg bg-cover bg-center" style={{ backgroundImage: `url("${artist.avatar_url || fallbackCover}")`, backgroundPosition: 'center 18%' }} />
         <div className="min-w-0">
-          <h2 id="artist-bio-heading" className={`${lexend.className} text-[26px] font-bold text-white`}>{artist.name}</h2>
+          <h2 id="artist-bio-heading" className="text-[26px] font-bold text-white">{artist.name}</h2>
           <p className="mt-5 text-[14px] font-semibold leading-6 text-white">Họ và tên: {realName}</p>
           <p className="mt-1 text-[14px] font-semibold leading-6 text-white">Nghệ sĩ Việt Nam</p>
           <p className="mt-5 max-h-24 overflow-hidden text-[14px] font-semibold leading-6 text-white/90">{artist.bio}</p>
@@ -166,7 +166,7 @@ function ArtistBioModal({ artist, onClose }: { artist: ArtistDetail; onClose: ()
         <div className="grid gap-6 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-start">
           <div role="img" aria-label={`Ảnh nghệ sĩ ${artist.name}`} className="aspect-square w-full rounded-lg bg-cover bg-center" style={{ backgroundImage: `url("${artist.avatar_url || fallbackCover}")`, backgroundPosition: 'center 18%' }} />
           <div className="min-w-0 pt-2">
-            <h2 id="artist-bio-modal-heading" className={`${lexend.className} text-[26px] font-bold`}>{artist.name}</h2>
+            <h2 id="artist-bio-modal-heading" className="text-[26px] font-bold">{artist.name}</h2>
             <p className="mt-4 font-semibold">Họ và tên: {realName}</p>
             <p className="mt-1 font-semibold">Quốc tịch: Việt Nam</p>
           </div>
@@ -281,6 +281,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
     try {
       if (navigator.share) await navigator.share({ title: song.title, url });
       else await navigator.clipboard.writeText(url);
+      await recordSongShare(song.id, 'web', getVisitorId());
     } catch {
       // Sharing can be dismissed by the user; keep the list interaction quiet.
     }
@@ -292,7 +293,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
         <div className="fixed inset-x-0 top-[80px] z-20 h-[60px] border-b border-white/10 bg-[#ffffff3d] px-5 py-2 shadow-[0_12px_30px_rgba(0,0,0,0.25)] backdrop-blur-md sm:px-8 lg:left-[248px] lg:px-7">
           <div className="mx-auto flex max-w-[1582px] items-center gap-4">
             <button type="button" aria-label={`Phát tất cả bài hát của ${artist.name}`} onClick={handlePlayAll} disabled={songs.length === 0} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#00cfe3] text-[#07363a] transition-colors hover:bg-[#34dbea] disabled:cursor-not-allowed disabled:opacity-50">{artistIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}</button>
-            <h2 className={`${lexend.className} truncate text-[22px] font-bold text-white sm:text-[25px]`}>Bài hát của {artist.name}</h2>
+            <h2 className="truncate text-[22px] font-bold text-white sm:text-[25px]">Bài hát của {artist.name}</h2>
           </div>
         </div>
       ) : null}
@@ -304,7 +305,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
         <div className="relative mx-auto flex min-h-[370px] w-full max-w-[1582px] items-end gap-5 px-5 pb-8 pt-14 sm:gap-7 sm:px-8 lg:px-7">
           <div role="img" aria-label={`Ảnh nghệ sĩ ${artist.name}`} className="size-36 shrink-0 rounded-full border border-white/45 bg-cover shadow-[0_14px_40px_rgba(0,0,0,0.32)] sm:size-44" style={{ backgroundImage: `url("${backgroundImage}")`, backgroundPosition: 'center 18%' }} />
           <div className="min-w-0 pb-1">
-            <h1 id="artist-title" className={`${lexend.className} truncate text-[34px] font-bold leading-tight text-white sm:text-[44px]`}>{artist.name}</h1>
+            <h1 id="artist-title" className="truncate text-[34px] font-bold leading-tight text-white sm:text-[44px]">{artist.name}</h1>
             <div className="mt-3 flex flex-wrap items-center gap-3 text-[14px] font-bold text-white">
               <span>{formatCount(followerCount)} người theo dõi</span>
               <button type="button" aria-pressed={isFollowing} onClick={() => setIsFollowing((value) => !value)} className="h-9 rounded-full border border-white/75 px-5 text-[13px] font-bold text-white transition-colors hover:border-[#00d3e5] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">{isFollowing ? 'Đang theo dõi' : 'Theo dõi'}</button>
@@ -318,7 +319,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
       </section>
 
       <section className="mx-auto w-full max-w-[1582px] px-5 pt-8 sm:px-8 lg:px-7" aria-label={`Bài hát của ${artist.name}`}>
-        <h2 className={`${lexend.className} mb-4 text-[26px] font-bold text-white sm:text-[30px]`}>Bài hát</h2>
+        <h2 className="mb-4 text-[26px] font-bold text-white sm:text-[30px]">Bài hát</h2>
         <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px_32px] sm:gap-4">
           <span>#</span>
           <span>Tiêu đề</span>

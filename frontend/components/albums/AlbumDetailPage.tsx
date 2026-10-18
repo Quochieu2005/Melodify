@@ -1,26 +1,24 @@
 'use client';
 
-import { Lexend } from 'next/font/google';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
-import { getAlbum, type AlbumDetail, type Song, type SongArtistCredit } from '@/lib/api';
+import { getAlbum, getVisitorId, recordAlbumShare, toggleAlbumFavorite, type AlbumDetail, type Song, type SongArtistCredit } from '@/lib/api';
 
 import styles from './AlbumDetailPage.module.css';
 import { ArtistLink, ArtistNames } from '@/components/artists';
 import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 
-const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const fallbackCover = '/topics/genre/vpop_600.png';
 
-function HeartIcon({ filled, solid = false }: { filled: boolean; solid?: boolean }) {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className={`size-6 ${solid ? 'fill-white stroke-white' : filled ? 'fill-[#ff6f91] stroke-[#ff6f91]' : 'fill-none stroke-current'} stroke-[1.8]`}><path d="M12 20.2 3.8 12A5.2 5.2 0 0 1 11.15 4.65L12 5.5l.85-.85A5.2 5.2 0 0 1 20.2 12L12 20.2Z" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+function HeartIcon({ filled }: { filled: boolean }) {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className={`size-6 fill-current ${filled ? 'text-[#ff3b66]' : 'text-white'}`}><path d="M12 21.1 3.4 12.7a5.8 5.8 0 0 1 8.2-8.2l.4.4.4-.4a5.8 5.8 0 0 1 8.2 8.2L12 21.1Z" /></svg>;
 }
 
 function ShareIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-[1.8]"><path d="m5 12 14-8-4 16-4-6-6-2Zm6 2 8-10" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-current"><path d="M14 3 23 11l-9 8v-5C8.2 14 4.4 15.5 1 21c.7-8 4.3-12.1 13-12.8V3Z" /></svg>;
 }
 
 function DownloadIcon() {
@@ -141,18 +139,20 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
   const [shareCount, setShareCount] = useState(0);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [shareStatus, setShareStatus] = useState('');
+  const [isFavoritePending, setIsFavoritePending] = useState(false);
+  const [isSharePending, setIsSharePending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    getAlbum(slug)
+    getAlbum(slug, getVisitorId())
       .then((response) => {
         if (!cancelled) {
           setRequest({ slug, album: response.data, visibleCount: 30, isLoading: false, error: '' });
           setSelectedIds([]);
-          setIsFavorite(false);
-          setFavoriteCount(response.data.songs[0]?.favorite_count ?? 0);
-          setShareCount(response.data.songs[0]?.share_count ?? 0);
+          setIsFavorite(Boolean(response.data.is_favorite));
+          setFavoriteCount(response.data.favorite_count ?? 0);
+          setShareCount(response.data.share_count ?? 0);
           setIsMoreOpen(false);
         }
       })
@@ -218,26 +218,42 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
     playSong(song, album.songs);
   };
 
-  const handleFavorite = () => {
-    setIsFavorite((current) => {
-      setFavoriteCount((count) => Math.max(0, count + (current ? -1 : 1)));
-      return !current;
-    });
+  const handleFavorite = async () => {
+    if (isFavoritePending) return;
+    setIsFavoritePending(true);
+    setShareStatus('');
+    try {
+      const response = await toggleAlbumFavorite(album.id, getVisitorId());
+      setIsFavorite(response.favorited);
+      setFavoriteCount(response.favorites);
+    } catch {
+      setShareStatus('Không thể cập nhật lượt yêu thích album. Vui lòng thử lại.');
+    } finally {
+      setIsFavoritePending(false);
+    }
   };
 
   const handleShare = async () => {
+    if (isSharePending) return;
     const url = window.location.href;
+    setIsSharePending(true);
+    setShareStatus('');
 
     try {
+      let source: 'web' | 'copy_link' = 'web';
       if (navigator.share) {
         await navigator.share({ title: album.title, url });
       } else {
         await navigator.clipboard.writeText(url);
+        source = 'copy_link';
       }
-      setShareCount((count) => count + 1);
-      setShareStatus('Đã chia sẻ album.');
+      const response = await recordAlbumShare(album.id, source, getVisitorId());
+      setShareCount(response.shares);
+      setShareStatus(source === 'web' ? 'Đã chia sẻ album.' : 'Đã sao chép đường dẫn album.');
     } catch {
-      setShareStatus('');
+      setShareStatus('Không thể chia sẻ album. Vui lòng thử lại.');
+    } finally {
+      setIsSharePending(false);
     }
     setIsMoreOpen(false);
   };
@@ -255,7 +271,7 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
 
           <div className="flex min-w-0 flex-col lg:h-[248px]">
             <p className="text-[13px] text-white/55">Album&nbsp; · &nbsp;{releaseYear}&nbsp; · &nbsp;{album.songs.length} Bài hát</p>
-            <h1 className={`${lexend.className} mt-4 truncate text-[30px] font-bold leading-tight text-white sm:text-[34px]`}>{album.title}</h1>
+            <h1 className="mt-4 truncate text-[30px] font-bold leading-tight text-white sm:text-[34px]">{album.title}</h1>
             {album.artist ? (
               <ArtistLink artist={album.artist} className="mt-5 flex min-w-0 items-center gap-2 text-[14px] font-bold text-white">
                 <div role="img" aria-label={`Ảnh đại diện ${album.artist.name}`} className="size-7 shrink-0 rounded-full bg-cover" style={album.artist.avatar_url ? { backgroundImage: `url("${album.artist.avatar_url}")`, backgroundPosition: 'center 20%' } : undefined}>
@@ -267,13 +283,13 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
 
             <div className="mt-auto">
               <div className="flex items-start gap-3">
-                <button type="button" aria-label={isFavorite ? 'Bỏ yêu thích album' : 'Thêm album vào yêu thích'} aria-pressed={isFavorite} onClick={handleFavorite} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#ff6f91] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
-                  <span className="grid size-8 place-items-center text-white"><HeartIcon filled={isFavorite} solid /></span>
-                  <span className="text-[11px] font-bold">{favoriteCount}</span>
+                <button type="button" aria-label={isFavorite ? 'Bỏ yêu thích album' : 'Thêm album vào yêu thích'} aria-pressed={isFavorite} disabled={isFavoritePending} onClick={() => void handleFavorite()} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-60">
+                  <span className="grid size-8 place-items-center"><HeartIcon filled={isFavorite} /></span>
+                  <span className="text-[11px] font-bold text-white">{favoriteCount}</span>
                 </button>
-                <button type="button" aria-label="Chia sẻ album" onClick={handleShare} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#00d3e5] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
+                <button type="button" aria-label="Chia sẻ album" disabled={isSharePending} onClick={() => void handleShare()} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-60">
                   <span className="grid size-8 place-items-center text-white"><ShareIcon /></span>
-                  <span className="text-[11px] font-bold">{shareCount}</span>
+                  <span className="text-[11px] font-bold text-white">{shareCount}</span>
                 </button>
                 <div className="relative">
                   <button type="button" aria-label="Thêm tùy chọn" aria-expanded={isMoreOpen} onClick={() => setIsMoreOpen((current) => !current)} className="grid size-8 place-items-center rounded-full bg-[#303c39] text-[13px] tracking-[0.08em] text-white outline-none transition-colors hover:bg-[#40504b] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">•••</button>
@@ -338,7 +354,7 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
 
         {collaborators.length > 0 ? (
           <section aria-labelledby="album-collaborators-heading" className="mt-14">
-            <h2 id="album-collaborators-heading" className={`${lexend.className} text-[24px] font-bold text-white`}>Kết hợp từ các nghệ sĩ</h2>
+            <h2 id="album-collaborators-heading" className="text-[24px] font-bold text-white">Kết hợp từ các nghệ sĩ</h2>
             <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-7">
               {collaborators.map((artist) => (
                 <article key={artist.id || artist.name} className="min-w-0 text-center">

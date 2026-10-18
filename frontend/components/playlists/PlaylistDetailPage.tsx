@@ -1,27 +1,25 @@
 'use client';
 
-import { Lexend } from 'next/font/google';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
-import { getPlaylist, type Playlist, type Song, type SongArtistCredit } from '@/lib/api';
+import { getPlaylist, getVisitorId, recordPlaylistShare, togglePlaylistFavorite, type Playlist, type Song, type SongArtistCredit } from '@/lib/api';
 import { ArtistLink, ArtistNames } from '@/components/artists';
 import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 
 import styles from '@/components/albums/AlbumDetailPage.module.css';
 
-const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const fallbackCover = '/topics/genre/vpop_600.png';
 const maxHeaderArtists = 3;
 
-function HeartIcon({ filled, solid = false }: { filled: boolean; solid?: boolean }) {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className={`size-6 ${solid ? 'fill-white stroke-white' : filled ? 'fill-[#ff6f91] stroke-[#ff6f91]' : 'fill-none stroke-current'} stroke-[1.8]`}><path d="M12 20.2 3.8 12A5.2 5.2 0 0 1 11.15 4.65L12 5.5l.85-.85A5.2 5.2 0 0 1 20.2 12L12 20.2Z" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+function HeartIcon({ filled }: { filled: boolean }) {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className={`size-6 fill-current ${filled ? 'text-[#ff3b66]' : 'text-white'}`}><path d="M12 21.1 3.4 12.7a5.8 5.8 0 0 1 8.2-8.2l.4.4.4-.4a5.8 5.8 0 0 1 8.2 8.2L12 21.1Z" /></svg>;
 }
 
 function ShareIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-[1.8]"><path d="m5 12 14-8-4 16-4-6-6-2Zm6 2 8-10" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-current"><path d="M14 3 23 11l-9 8v-5C8.2 14 4.4 15.5 1 21c.7-8 4.3-12.1 13-12.8V3Z" /></svg>;
 }
 
 function DownloadIcon() {
@@ -34,6 +32,14 @@ function PauseIcon() {
 
 function MoreHorizontalIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 fill-current"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>;
+}
+
+function FacebookIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5"><circle cx="12" cy="12" r="11" fill="#1877f2" /><path d="M13.25 20v-7.3h2.45l.37-2.85h-2.82V8.03c0-.82.23-1.38 1.41-1.38h1.51V4.1c-.26-.04-1.15-.11-2.19-.11-2.16 0-3.64 1.32-3.64 3.75v2.1H7.9v2.85h2.44V20h2.91Z" fill="white" /></svg>;
+}
+
+function CopyLinkIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-none stroke-current stroke-[1.8]"><path d="m9.6 14.4 4.8-4.8m-7.2 7.2-1.2 1.2a3.4 3.4 0 0 1-4.8-4.8l4-4a3.4 3.4 0 0 1 4.8 0m2.4-2.4 1.2-1.2a3.4 3.4 0 0 1 4.8 4.8l-4 4a3.4 3.4 0 0 1-4.8 0" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
 function formatDuration(seconds: number | null | undefined) {
@@ -149,20 +155,26 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
   const [favoriteCount, setFavoriteCount] = useState(0);
   const [shareCount, setShareCount] = useState(0);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isFavoritePending, setIsFavoritePending] = useState(false);
+  const [isSharePending, setIsSharePending] = useState(false);
   const [shareStatus, setShareStatus] = useState('');
+  const actionMenusRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const visitorId = getVisitorId();
 
-    getPlaylist(slug)
+    getPlaylist(slug, visitorId)
       .then((response) => {
         if (!cancelled) {
           setRequest({ slug, playlist: response.data, visibleCount: 30, isLoading: false, error: '' });
           setSelectedIds([]);
-          setIsFavorite(false);
-          setFavoriteCount(response.data.songs?.[0]?.favorite_count ?? 0);
-          setShareCount(response.data.songs?.[0]?.share_count ?? 0);
+          setIsFavorite(response.data.is_favorite ?? false);
+          setFavoriteCount(response.data.favorite_count ?? 0);
+          setShareCount(response.data.share_count ?? 0);
           setIsMoreOpen(false);
+          setIsShareOpen(false);
         }
       })
       .catch(() => {
@@ -171,6 +183,31 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
 
     return () => { cancelled = true; };
   }, [slug]);
+
+  useEffect(() => {
+    if (!isMoreOpen && !isShareOpen) return;
+
+    const closeMenusOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !actionMenusRef.current?.contains(event.target)) {
+        setIsMoreOpen(false);
+        setIsShareOpen(false);
+      }
+    };
+    const closeMenusOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMoreOpen(false);
+        setIsShareOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', closeMenusOutside);
+    document.addEventListener('keydown', closeMenusOnEscape);
+
+    return () => {
+      document.removeEventListener('pointerdown', closeMenusOutside);
+      document.removeEventListener('keydown', closeMenusOnEscape);
+    };
+  }, [isMoreOpen, isShareOpen]);
 
   const isCurrentRequest = request.slug === slug;
   const playlist = isCurrentRequest ? request.playlist : null;
@@ -228,33 +265,59 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
     playSong(song, songs);
   };
 
-  const handleFavorite = () => {
-    setIsFavorite((current) => {
-      setFavoriteCount((count) => Math.max(0, count + (current ? -1 : 1)));
-      return !current;
-    });
-  };
+  const handleFavorite = async () => {
+    if (isFavoritePending) return;
 
-  const handleShare = async () => {
-    const url = window.location.href;
+    setIsFavoritePending(true);
+    setShareStatus('');
 
     try {
-      if (navigator.share) {
-        await navigator.share({ title: playlist.name, url });
+      const response = await togglePlaylistFavorite(playlist.id, getVisitorId());
+      setIsFavorite(response.favorited);
+      setFavoriteCount(response.favorites);
+    } catch {
+      setShareStatus('Không thể cập nhật lượt yêu thích. Vui lòng thử lại.');
+    } finally {
+      setIsFavoritePending(false);
+    }
+  };
+
+  const handleShare = async (source: 'facebook' | 'copy_link') => {
+    if (isSharePending) return;
+
+    const url = window.location.href;
+    let shareStarted = false;
+    setIsSharePending(true);
+    setShareStatus('');
+
+    try {
+      if (source === 'facebook') {
+        const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+        window.open(facebookUrl, '_blank', 'noopener,noreferrer,width=680,height=640');
+        shareStarted = true;
       } else {
         await navigator.clipboard.writeText(url);
+        shareStarted = true;
       }
-      setShareCount((count) => count + 1);
-      setShareStatus('Đã chia sẻ playlist.');
+
+      const response = await recordPlaylistShare(playlist.id, source, getVisitorId());
+      setShareCount(response.shares);
+      setShareStatus(source === 'facebook' ? 'Đã mở Facebook để chia sẻ playlist.' : 'Đã sao chép liên kết playlist.');
     } catch {
-      setShareStatus('');
+      setShareStatus(shareStarted
+        ? 'Đã thực hiện chia sẻ nhưng chưa ghi nhận được lượt. Vui lòng thử lại.'
+        : 'Không thể chia sẻ playlist. Vui lòng thử lại.');
+    } finally {
+      setIsSharePending(false);
+      setIsMoreOpen(false);
+      setIsShareOpen(false);
     }
-    setIsMoreOpen(false);
   };
 
   const handleReport = () => {
     setShareStatus('Đã ghi nhận báo cáo.');
     setIsMoreOpen(false);
+    setIsShareOpen(false);
   };
 
   const scrollToCollaborators = () => {
@@ -269,7 +332,7 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
 
           <div className="flex min-w-0 flex-col lg:h-[248px]">
             <p className="text-[13px] text-white/55">Playlist&nbsp; · &nbsp;{songs.length} Bài hát</p>
-            <h1 className={`${lexend.className} mt-4 truncate text-[30px] font-bold leading-tight text-white sm:text-[34px]`}>{playlist.name}</h1>
+            <h1 className="mt-4 truncate text-[30px] font-bold leading-tight text-white sm:text-[34px]">{playlist.name}</h1>
             {visibleHeaderArtists.length > 0 ? (
               <div className="mt-4 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 text-[14px] font-bold text-white">
                 <ArtistNames artists={visibleHeaderArtists} className="min-w-0 truncate" />
@@ -279,12 +342,24 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
             {playlist.description ? <p className="mt-3 max-w-2xl text-sm text-white/55">{playlist.description}</p> : null}
 
             <div className="mt-auto">
-              <div className="flex items-start gap-3">
-                <button type="button" aria-label={isFavorite ? 'Bỏ yêu thích playlist' : 'Thêm playlist vào yêu thích'} aria-pressed={isFavorite} onClick={handleFavorite} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#ff6f91] focus-visible:ring-2 focus-visible:ring-[#00d3e5]"><span className="grid size-8 place-items-center text-white"><HeartIcon filled={isFavorite} solid /></span><span className="text-[11px] font-bold">{favoriteCount}</span></button>
-                <button type="button" aria-label="Chia sẻ playlist" onClick={handleShare} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none transition-colors hover:text-[#00d3e5] focus-visible:ring-2 focus-visible:ring-[#00d3e5]"><span className="grid size-8 place-items-center text-white"><ShareIcon /></span><span className="text-[11px] font-bold">{shareCount}</span></button>
+              <div ref={actionMenusRef} className="relative flex items-start gap-3">
+                <button type="button" aria-label={isFavorite ? 'Bỏ yêu thích playlist' : 'Thêm playlist vào yêu thích'} aria-pressed={isFavorite} disabled={isFavoritePending} onClick={() => void handleFavorite()} className="group flex min-w-8 flex-col items-center gap-1 rounded-full px-1.5 py-1 text-white outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-60">
+                  <span className="grid size-8 place-items-center"><HeartIcon filled={isFavorite} /></span>
+                  <span className="text-[11px] font-bold text-white">{favoriteCount}</span>
+                </button>
                 <div className="relative">
-                  <button type="button" aria-label="Thêm tùy chọn" aria-expanded={isMoreOpen} onClick={() => setIsMoreOpen((current) => !current)} className="grid size-8 place-items-center rounded-full bg-[#303c39] text-[13px] tracking-[0.08em] text-white outline-none transition-colors hover:bg-[#40504b] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">•••</button>
-                  {isMoreOpen ? <div role="menu" className="absolute left-0 top-10 z-20 w-32 overflow-hidden rounded-lg bg-[#2b2b2b] p-1.5 text-[13px] font-bold text-white shadow-xl"><button type="button" role="menuitem" onClick={handleShare} className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left hover:bg-white/10">Chia sẻ <span aria-hidden="true">›</span></button><button type="button" role="menuitem" onClick={handleReport} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-white/10"><span aria-hidden="true">⚑</span>Báo cáo</button></div> : null}
+                  <button type="button" aria-label="Chia sẻ playlist" aria-haspopup="menu" aria-controls="playlist-share-menu" aria-expanded={isShareOpen} disabled={isSharePending} onClick={() => { setIsMoreOpen(false); setIsShareOpen((current) => !current); }} className="group flex min-w-8 flex-col items-center gap-1 rounded-full px-1.5 py-1 text-white outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-60">
+                    <span className="grid size-8 place-items-center"><ShareIcon /></span>
+                    <span className="text-[11px] font-bold text-white">{shareCount}</span>
+                  </button>
+                  {isShareOpen ? <div id="playlist-share-menu" role="menu" aria-label="Chia sẻ playlist" className="absolute left-0 top-full z-30 mt-2 w-56 overflow-hidden rounded-xl border border-white/[0.06] bg-[#292c2b] p-1.5 text-[13px] font-bold text-white shadow-2xl">
+                    <button type="button" role="menuitem" disabled={isSharePending} onClick={() => void handleShare('facebook')} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5] disabled:opacity-60"><FacebookIcon />Facebook</button>
+                    <button type="button" role="menuitem" disabled={isSharePending} onClick={() => void handleShare('copy_link')} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5] disabled:opacity-60"><CopyLinkIcon />Sao chép đường dẫn</button>
+                  </div> : null}
+                </div>
+                <div className="relative">
+                  <button type="button" aria-label="Thêm tùy chọn" aria-expanded={isMoreOpen} onClick={() => { setIsShareOpen(false); setIsMoreOpen((current) => !current); }} className="grid size-10 place-items-center rounded-full bg-[#303c39] text-[13px] tracking-[0.08em] text-white outline-none transition-colors hover:bg-[#40504b] focus-visible:ring-2 focus-visible:ring-[#00d3e5]"><MoreHorizontalIcon /></button>
+                  {isMoreOpen ? <div role="menu" className="absolute left-0 top-full z-20 mt-2 w-40 overflow-hidden rounded-xl border border-white/[0.06] bg-[#292c2b] p-1.5 text-[13px] font-bold text-white shadow-2xl"><button type="button" role="menuitem" onClick={() => { setIsMoreOpen(false); setIsShareOpen(true); }} className="flex w-full items-center justify-between rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5]">Chia sẻ <span aria-hidden="true">›</span></button><button type="button" role="menuitem" onClick={handleReport} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5]"><span aria-hidden="true">⚑</span>Báo cáo</button></div> : null}
                 </div>
               </div>
 
@@ -311,7 +386,7 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
 
         {collaborators.length > 0 ? (
           <section id="playlist-collaborators" aria-labelledby="playlist-collaborators-heading" className="scroll-mt-24 mt-14">
-            <h2 id="playlist-collaborators-heading" className={`${lexend.className} text-[24px] font-bold text-white`}>Kết hợp từ các nghệ sĩ</h2>
+            <h2 id="playlist-collaborators-heading" className="text-[24px] font-bold text-white">Kết hợp từ các nghệ sĩ</h2>
             <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-7">
               {collaborators.map((artist) => (
                 <article key={artist.id || artist.name} className="min-w-0 text-center">

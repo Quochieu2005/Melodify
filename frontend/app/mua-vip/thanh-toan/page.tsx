@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useLoginModal } from "@/components/auth/LoginModalProvider";
 import {
@@ -52,20 +52,16 @@ function formatMoney(amount: number) {
 function VipLogo() {
   return (
     <Link
-      href="/mua-vip"
-      className="flex shrink-0 items-center gap-2"
-      aria-label="Melodify VIP"
+      href="/home"
+      className="flex shrink-0 items-center gap-2 text-[#1c1e20] outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+      aria-label="Melodify — về trang chủ"
     >
-      <span className="grid size-9 place-items-center rounded-full bg-[#101c1a] text-sm font-bold text-white">
-        M
+      <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-violet-400 to-fuchsia-500 text-xl text-white shadow-[0_5px_14px_rgba(124,92,255,0.24)]">
+        ♫
       </span>
-      <Image
-        src="/vip/logo_nct.png"
-        alt="NCT"
-        width={70}
-        height={36}
-        className="h-8 w-auto object-contain"
-      />
+      <span className="text-lg font-bold tracking-[-0.04em] sm:text-xl">
+        Melodify
+      </span>
     </Link>
   );
 }
@@ -76,10 +72,15 @@ export default function VipCheckoutPage() {
   const [plans, setPlans] = useState<SubscriptionPlanRecord[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [method, setMethod] = useState<VipPaymentMethod>("card");
+  const [planSelectOpen, setPlanSelectOpen] = useState(false);
+  const [activePlanIndex, setActivePlanIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [order, setOrder] = useState<VipCheckoutOrder | null>(null);
+  const planSelectRef = useRef<HTMLDivElement>(null);
+  const planSelectTriggerRef = useRef<HTMLButtonElement>(null);
+  const planOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const selectedPlan = useMemo(
     () => plans.find((plan) => plan.id === selectedPlanId) ?? null,
@@ -136,6 +137,29 @@ export default function VipCheckoutPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (planSelectOpen) planOptionRefs.current[activePlanIndex]?.focus();
+  }, [activePlanIndex, planSelectOpen]);
+
+  useEffect(() => {
+    if (!planSelectOpen) return;
+    function closeWhenClickingOutside(event: PointerEvent) {
+      if (!planSelectRef.current?.contains(event.target as Node)) {
+        setPlanSelectOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", closeWhenClickingOutside);
+    return () =>
+      document.removeEventListener("pointerdown", closeWhenClickingOutside);
+  }, [planSelectOpen]);
+
+  function choosePlan(planId: string) {
+    setSelectedPlanId(planId);
+    setOrder(null);
+    setPlanSelectOpen(false);
+    window.requestAnimationFrame(() => planSelectTriggerRef.current?.focus());
+  }
+
   async function submitCheckout() {
     if (!selectedPlan) return;
     setError("");
@@ -147,7 +171,7 @@ export default function VipCheckoutPage() {
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) {
         setError("Đăng nhập để tạo yêu cầu thanh toán.");
-        openLogin();
+        openLogin("/mua-vip/thanh-toan");
       } else {
         setError(
           cause instanceof Error
@@ -294,26 +318,154 @@ export default function VipCheckoutPage() {
                   Bạn đang chọn gói VIP sau:
                 </p>
                 <label
+                  id="vip-plan-label"
                   className="block text-xs text-[#71808b]"
                   htmlFor="vip-plan-select"
                 >
                   Gói VIP
                 </label>
-                <select
-                  id="vip-plan-select"
-                  value={selectedPlanId}
-                  onChange={(event) => {
-                    setSelectedPlanId(event.target.value);
-                    setOrder(null);
-                  }}
-                  className="-mt-3 h-11 w-full rounded-lg border border-black/10 bg-[#f5f7f8] px-3 text-sm font-semibold outline-none focus:border-[#249be8] focus:ring-2 focus:ring-[#249be8]/15"
-                >
-                  {plans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.name} · {plan.billing_months} tháng
-                    </option>
-                  ))}
-                </select>
+                <div ref={planSelectRef} className="relative -mt-3">
+                  <button
+                    ref={planSelectTriggerRef}
+                    id="vip-plan-select"
+                    type="button"
+                    role="combobox"
+                    aria-labelledby="vip-plan-label"
+                    aria-haspopup="listbox"
+                    aria-expanded={planSelectOpen}
+                    aria-controls={planSelectOpen ? "vip-plan-options" : undefined}
+                    disabled={loading || plans.length === 0}
+                    onClick={() => {
+                      if (plans.length === 0) return;
+                      const selectedIndex = plans.findIndex(
+                        (plan) => plan.id === selectedPlanId,
+                      );
+                      setActivePlanIndex(selectedIndex >= 0 ? selectedIndex : 0);
+                      setPlanSelectOpen((open) => !open);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                        event.preventDefault();
+                        if (!planSelectOpen) {
+                          const selectedIndex = plans.findIndex(
+                            (plan) => plan.id === selectedPlanId,
+                          );
+                          setActivePlanIndex(selectedIndex >= 0 ? selectedIndex : 0);
+                          setPlanSelectOpen(true);
+                        }
+                      } else if (event.key === "Escape") {
+                        setPlanSelectOpen(false);
+                      }
+                    }}
+                    className={`flex h-11 w-full items-center justify-between gap-3 rounded-lg border bg-[#f5f7f8] px-3 text-left text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#249be8]/20 disabled:cursor-not-allowed disabled:opacity-60 ${
+                      planSelectOpen
+                        ? "border-[#249be8]"
+                        : "border-black/10 hover:border-[#249be8]/60"
+                    }`}
+                  >
+                    <span className="truncate">
+                      {selectedPlan
+                        ? `${selectedPlan.name} · ${selectedPlan.billing_months} tháng`
+                        : loading
+                          ? "Đang tải gói VIP…"
+                          : "Chưa có gói VIP"}
+                    </span>
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      className={`size-4 shrink-0 text-[#667782] transition-transform ${
+                        planSelectOpen ? "rotate-180" : ""
+                      }`}
+                    >
+                      <path
+                        d="m5.5 7.5 4.5 4.5 4.5-4.5"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  {planSelectOpen ? (
+                    <div
+                      id="vip-plan-options"
+                      role="listbox"
+                      aria-labelledby="vip-plan-label"
+                      onKeyDown={(event) => {
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setActivePlanIndex((index) =>
+                            Math.min(index + 1, plans.length - 1),
+                          );
+                        } else if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setActivePlanIndex((index) => Math.max(index - 1, 0));
+                        } else if (event.key === "Home") {
+                          event.preventDefault();
+                          setActivePlanIndex(0);
+                        } else if (event.key === "End") {
+                          event.preventDefault();
+                          setActivePlanIndex(plans.length - 1);
+                        } else if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          const plan = plans[activePlanIndex];
+                          if (plan) choosePlan(plan.id);
+                        } else if (event.key === "Escape") {
+                          event.preventDefault();
+                          setPlanSelectOpen(false);
+                          planSelectTriggerRef.current?.focus();
+                        }
+                      }}
+                      className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-y-auto rounded-lg border border-black/10 bg-white p-1 shadow-xl shadow-[#15232b]/15"
+                    >
+                      {plans.map((plan, index) => {
+                        const selected = plan.id === selectedPlanId;
+                        const active = index === activePlanIndex;
+                        return (
+                          <button
+                            key={plan.id}
+                            ref={(element) => {
+                              planOptionRefs.current[index] = element;
+                            }}
+                            id={`vip-plan-option-${index}`}
+                            type="button"
+                            role="option"
+                            aria-selected={selected}
+                            tabIndex={active ? 0 : -1}
+                            onFocus={() => setActivePlanIndex(index)}
+                            onClick={() => choosePlan(plan.id)}
+                            className={`flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm transition ${
+                              selected
+                                ? "bg-[#eaf5fd] font-semibold text-[#147cc2]"
+                                : "text-[#24343d] hover:bg-[#f3f7f9]"
+                            } ${active ? "ring-2 ring-inset ring-[#249be8]/30" : ""}`}
+                          >
+                            <span className="leading-5">
+                              {plan.name} · {plan.billing_months} tháng
+                            </span>
+                            {selected ? (
+                              <svg
+                                aria-hidden="true"
+                                viewBox="0 0 20 20"
+                                fill="none"
+                                className="size-4 shrink-0 text-[#168ee0]"
+                              >
+                                <path
+                                  d="m4.5 10 3.5 3.5 7.5-7.5"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
                 <div className="flex items-center justify-between gap-3 text-sm">
                   <span className="text-[#71808b]">Số tiền</span>
                   <strong>

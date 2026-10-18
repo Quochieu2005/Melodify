@@ -34,14 +34,17 @@ const benefits = [
 
 function Logo() {
   return (
-    <Link href="/home" className="flex items-center gap-2 text-[#1c1e20]">
-      <Image
-        src="/vip/logo_nct.png"
-        alt="NCT"
-        width={64}
-        height={40}
-        className="h-10 w-16 object-contain"
-      />
+    <Link
+      href="/home"
+      aria-label="Melodify — về trang chủ"
+      className="flex shrink-0 items-center gap-2 text-[#1c1e20] outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+    >
+      <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-violet-400 to-fuchsia-500 text-xl text-white shadow-[0_5px_14px_rgba(124,92,255,0.24)]">
+        ♫
+      </span>
+      <span className="text-lg font-bold tracking-[-0.04em] sm:text-xl">
+        Melodify
+      </span>
     </Link>
   );
 }
@@ -139,16 +142,17 @@ export default function MuaVipPage() {
           >
             <Link
               href="/mua-vip"
-              className="flex w-40 items-center justify-center border-b-2 border-[#2daaed] text-sm font-bold"
+              className="flex w-[72px] items-center justify-center border-b-2 border-[#2daaed] text-[10px] font-bold sm:w-40 sm:text-sm"
             >
               Mua VIP
             </Link>
             <button
               type="button"
               onClick={() => user ? router.push('/mua-vip/lich-su-giao-dich') : openLogin('/mua-vip/lich-su-giao-dich')}
-              className="flex w-40 items-center justify-center text-sm font-semibold text-black/75 hover:border-b-2 hover:border-[#2daaed]"
+              className="flex w-[72px] items-center justify-center text-[10px] font-semibold text-black/75 hover:border-b-2 hover:border-[#2daaed] sm:w-40 sm:text-sm"
             >
-              Lịch Sử Giao Dịch
+              <span className="sm:hidden">Lịch sử</span>
+              <span className="hidden sm:inline">Lịch Sử Giao Dịch</span>
             </button>
           </nav>
           {user ? (
@@ -174,7 +178,7 @@ export default function MuaVipPage() {
               <span className="grid size-8 place-items-center rounded-full border-2 border-black/45 text-lg">
                 ♙
               </span>
-              Đăng nhập
+              <span className="hidden sm:inline">Đăng nhập</span>
             </button>
           )}
         </div>

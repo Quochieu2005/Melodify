@@ -1,10 +1,8 @@
 'use client';
 
-import { Lexend } from 'next/font/google';
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type TransitionEvent as ReactTransitionEvent } from 'react';
 import { getHomeBootstrap, type Banner as ApiBanner } from '@/lib/api';
 
-const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const dragThreshold = 48;
 
 type Banner = {
@@ -287,7 +285,7 @@ export default function MorningBannerCarousel() {
 
   return (
     <section aria-label="Gợi ý nghe nhạc">
-      <h1 className={lexend.className + ' text-[34px] font-bold leading-tight text-white'} style={{ color: '#ffffff', fontFamily: 'Lexend, sans-serif', fontSize: '34px', fontWeight: 700 }}>
+      <h1 className="text-[34px] font-bold leading-tight text-white" style={{ color: '#ffffff', fontSize: '34px', fontWeight: 700 }}>
         {greeting}
       </h1>
 

@@ -102,18 +102,34 @@ Route::prefix('v1')->name('api.v1.')->middleware('admin.timing')->group(function
     Route::get('/banners', [CatalogController::class, 'banners'])->name('banners.index');
     Route::get('/banners/{slug}', [CatalogController::class, 'banner'])->name('banners.show');
     Route::get('/albums', [CatalogController::class, 'albums'])->name('albums.index');
+    Route::post('/albums/{slug}/favorite', [CatalogController::class, 'toggleAlbumFavorite'])
+        ->middleware('throttle:60,1')
+        ->name('albums.favorite');
+    Route::post('/albums/{slug}/share', [CatalogController::class, 'recordAlbumShare'])
+        ->middleware('throttle:60,1')
+        ->name('albums.share');
     Route::get('/albums/{slug}', [CatalogController::class, 'album'])->name('albums.show');
     Route::get('/artists', [CatalogController::class, 'artists'])->name('artists.index');
     Route::get('/artists/{slug}', [CatalogController::class, 'artist'])->name('artists.show');
     Route::get('/playlists', [CatalogController::class, 'playlists'])->name('playlists.index');
     Route::get('/playlists/{slug}', [CatalogController::class, 'playlist'])->name('playlists.show');
+    Route::post('/playlists/{slug}/favorite', [CatalogController::class, 'togglePlaylistFavorite'])
+        ->middleware('throttle:60,1')
+        ->name('playlists.favorite');
+    Route::post('/playlists/{slug}/share', [CatalogController::class, 'recordPlaylistShare'])
+        ->middleware('throttle:60,1')
+        ->name('playlists.share');
     Route::get('/charts', [CatalogController::class, 'charts'])->name('charts.index');
+    Route::post('/charts/{slug}/share', [CatalogController::class, 'recordChartShare'])
+        ->middleware('throttle:60,1')
+        ->name('charts.share');
     Route::get('/charts/{slug}', [CatalogController::class, 'chart'])->name('charts.show');
     Route::get('/subscription-plans', [SubscriptionPlanController::class, 'index'])->name('subscription-plans.index');
     Route::get('/home/bootstrap', [CatalogController::class, 'homeBootstrap'])->name('home.bootstrap');
     Route::get('/home/discovery', [CatalogController::class, 'homeDiscovery'])->name('home.discovery');
     Route::get('/songs', [CatalogController::class, 'songs'])->name('songs.index');
     Route::get('/songs/popular', [CatalogController::class, 'popularSongs'])->name('songs.popular');
+    Route::get('/favorites/songs', [CatalogController::class, 'favoriteSongs'])->name('favorites.songs');
     Route::get('/songs/external/{externalId}/audio', [AudioController::class, 'streamExternal'])->name('songs.external-audio');
     Route::get('/songs/{slug}/audio', [AudioController::class, 'stream'])
         ->middleware('api.user.optional')
@@ -121,8 +137,12 @@ Route::prefix('v1')->name('api.v1.')->middleware('admin.timing')->group(function
     Route::post('/songs/{slug}/view', [CatalogController::class, 'recordSongView'])
         ->middleware('api.user.optional')
         ->name('songs.view');
-    Route::post('/songs/{slug}/favorite', [CatalogController::class, 'toggleSongFavorite'])->name('songs.favorite');
-    Route::post('/songs/{slug}/share', [CatalogController::class, 'recordSongShare'])->name('songs.share');
+    Route::post('/songs/{slug}/favorite', [CatalogController::class, 'toggleSongFavorite'])
+        ->middleware('throttle:60,1')
+        ->name('songs.favorite');
+    Route::post('/songs/{slug}/share', [CatalogController::class, 'recordSongShare'])
+        ->middleware('throttle:60,1')
+        ->name('songs.share');
     Route::get('/songs/{slug}/lyrics', [CatalogController::class, 'lyrics'])->name('songs.lyrics');
     Route::get('/songs/{slug}', [CatalogController::class, 'song'])->name('songs.show');
     Route::get('/videos', [CatalogController::class, 'videos'])->name('videos.index');
