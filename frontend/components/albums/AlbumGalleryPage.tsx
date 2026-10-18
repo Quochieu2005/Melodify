@@ -1,6 +1,5 @@
 'use client';
 
-import { Lexend } from 'next/font/google';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
@@ -10,7 +9,6 @@ import { ArtistLink } from '@/components/artists';
 import styles from '@/components/home/sections/AlbumGrid.module.css';
 import { recordRecentItem } from '@/lib/recent-history';
 
-const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 
 function AlbumCard({ album }: { album: AlbumCard }) {
   return (
@@ -61,7 +59,7 @@ export default function AlbumGalleryPage() {
   return (
     <main className="min-h-[calc(100vh-80px)] overflow-x-hidden bg-[#202a28] px-5 pb-12 pt-7 text-white sm:px-8 lg:px-7">
       <div className="w-full">
-        <h1 className={`${lexend.className} text-[34px] font-bold leading-tight text-white`}>Album</h1>
+        <h1 className="text-[34px] font-bold leading-tight text-white">Album</h1>
 
         {isLoading ? (
           <div className={`${styles.galleryGrid} mt-8`}>

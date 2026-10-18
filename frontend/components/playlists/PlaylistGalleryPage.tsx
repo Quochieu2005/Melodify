@@ -1,6 +1,5 @@
 'use client';
 
-import { Lexend } from 'next/font/google';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
@@ -10,7 +9,6 @@ import styles from '@/components/home/sections/AlbumGrid.module.css';
 import { recentPlaylistItem, recordRecentItem } from '@/lib/recent-history';
 
 const fallbackCover = '/topics/genre/vpop_600.png';
-const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 
 type PlaylistFilterKind = 'topic' | 'genre';
 
@@ -111,7 +109,7 @@ export default function PlaylistGalleryPage({ topicSlug, topicKind = 'topic' }: 
   return (
     <main className="min-h-[calc(100vh-80px)] overflow-x-hidden bg-[#202a28] px-5 pb-12 pt-7 text-white sm:px-8 lg:px-7">
       <div className="w-full">
-        <h1 className={`${lexend.className} text-[34px] font-bold leading-tight text-white`}>{catalogInfo?.name || 'Playlist'}</h1>
+        <h1 className="text-[34px] font-bold leading-tight text-white">{catalogInfo?.name || 'Playlist'}</h1>
         {isLoading ? (
           <div className={`${styles.galleryGrid} mt-8`}>
             {Array.from({ length: 12 }, (_, index) => <div key={index} className="aspect-square w-full max-w-[205px] animate-pulse rounded-[8px] bg-[#30443f]" />)}

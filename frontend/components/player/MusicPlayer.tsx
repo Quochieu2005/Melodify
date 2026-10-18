@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { ArtistNames } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
+import { getCachedSongFavorite, getVisitorId, setSongFavorite } from '@/lib/api';
 import { songPath } from '@/lib/recent-history';
 
 import { usePlayer } from './PlayerProvider';
@@ -77,10 +78,41 @@ function playerArtists(track: { artist: string; artists?: { id: string | null; n
 
 export default function MusicPlayer() {
   const { track, isPlaying, elapsed, duration, notice, togglePlay, playPrevious, playNext, seek } = usePlayer();
-  const [isLiked, setIsLiked] = useState(false);
+  const [favoriteState, setFavoriteState] = useState<{ songId: string; favorited: boolean }>({ songId: '', favorited: false });
+  const [isFavoritePending, setIsFavoritePending] = useState(false);
+  const [favoriteError, setFavoriteError] = useState('');
   const displayDuration = duration || track?.durationSeconds || 0;
   const displayElapsed = Math.min(elapsed, displayDuration);
   const visibleArtists = track ? playerArtists(track) : [];
+  const isLiked = Boolean(track && (favoriteState.songId === track.id
+    ? favoriteState.favorited
+    : getCachedSongFavorite(track.id) ?? false));
+  const activeTrackId = track?.id;
+
+  useEffect(() => {
+    const syncFavorite = (event: Event) => {
+      const detail = (event as CustomEvent<{ songId: string; favorited: boolean }>).detail;
+      if (activeTrackId && detail?.songId === activeTrackId) {
+        setFavoriteState({ songId: detail.songId, favorited: detail.favorited });
+      }
+    };
+    window.addEventListener('melodify:song-favorite', syncFavorite);
+    return () => window.removeEventListener('melodify:song-favorite', syncFavorite);
+  }, [activeTrackId]);
+
+  const handleFavorite = async () => {
+    if (!track || isFavoritePending) return;
+    setIsFavoritePending(true);
+    setFavoriteError('');
+    try {
+      const response = await setSongFavorite(track.id, !isLiked, getVisitorId());
+      setFavoriteState({ songId: track.id, favorited: response.favorited });
+    } catch {
+      setFavoriteError('Không thể cập nhật lượt yêu thích.');
+    } finally {
+      setIsFavoritePending(false);
+    }
+  };
 
   return (
     <>
@@ -97,7 +129,8 @@ export default function MusicPlayer() {
               </div>
             </div>
             <div className="ml-auto hidden items-center gap-2 sm:flex">
-              <button type="button" aria-label={isLiked ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'} aria-pressed={isLiked} onClick={() => setIsLiked((value) => !value)} className="grid size-7 place-items-center rounded-full text-white/65 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5]"><HeartIcon filled={isLiked} /></button>
+              <button type="button" aria-label={isLiked ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'} aria-pressed={isLiked} disabled={isFavoritePending} onClick={() => void handleFavorite()} className="grid size-7 place-items-center rounded-full text-white/65 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-50"><HeartIcon filled={isLiked} /></button>
+              <span role="status" aria-live="polite" className="sr-only">{favoriteError}</span>
               <PlayerButton label="Thêm tùy chọn" className="size-7 text-base tracking-[0.1em]">•••</PlayerButton>
             </div>
           </div>

@@ -1,16 +1,14 @@
 'use client';
 
-import { Lexend } from 'next/font/google';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ArtistLink, ArtistNames } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { usePlayer } from '@/components/player';
-import { getArtist, getSong, listSongs, type AlbumRecord, type Lyric, type Song, type SongArtistCredit } from '@/lib/api';
+import { ApiError, getArtist, getSong, getVisitorId, listSongs, recordSongShare, toggleSongFavorite, type AlbumRecord, type Lyric, type Song, type SongArtistCredit } from '@/lib/api';
 import { recentAlbumItem, recentSongItem, recordRecentItem } from '@/lib/recent-history';
 
-const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 const fallbackCover = '/topics/genre/vpop_600.png';
 const sidebarSurfaceStyle = {
   background: 'linear-gradient(180deg, #213d39 0%, #202a28 28%, #171817 68%, #111 100%)',
@@ -21,11 +19,11 @@ function PauseIcon() {
 }
 
 function HeartIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-[1.8]"><path d="M12 20.2 3.8 12A5.2 5.2 0 0 1 11.15 4.65L12 5.5l.85-.85A5.2 5.2 0 0 1 20.2 12L12 20.2Z" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-current"><path d="M12 21.1 3.4 12.7a5.8 5.8 0 0 1 8.2-8.2l.4.4.4-.4a5.8 5.8 0 0 1 8.2 8.2L12 21.1Z" /></svg>;
 }
 
 function ShareIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-[1.8]"><path d="m5 12 14-8-4 16-4-6-6-2Zm6 2 8-10" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-current"><path d="M14 3 23 11l-9 8v-5C8.2 14 4.4 15.5 1 21c.7-8 4.3-12.1 13-12.8V3Z" /></svg>;
 }
 
 function MoreIcon() {
@@ -139,7 +137,7 @@ function LyricBlock({ lyrics, elapsed, isActiveTrack, onSeek }: { lyrics: Lyric[
 function ArtistPanel({ artists }: { artists: SongArtistCredit[] }) {
   return (
     <aside aria-labelledby="song-artists-heading">
-      <h2 id="song-artists-heading" className={`${lexend.className} text-[26px] font-bold`}>Nghệ sĩ</h2>
+      <h2 id="song-artists-heading" className="text-[26px] font-bold">Nghệ sĩ</h2>
       <div className="mt-5 space-y-4">
         {artists.map((artist, index) => (
           <div key={`${artist.id || artist.name}-${index}`} className="flex items-center gap-3">
@@ -164,6 +162,10 @@ export default function SongDetailPage({ slug }: { slug: string }) {
   const [featuredAlbumState, setFeaturedAlbumState] = useState<{ artistKey: string; albums: AlbumRecord[] }>({ artistKey: '', albums: [] });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isFavoritePending, setIsFavoritePending] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isSharePending, setIsSharePending] = useState(false);
+  const [engagementStatus, setEngagementStatus] = useState('');
   const pendingLyricSeekRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -175,8 +177,9 @@ export default function SongDetailPage({ slug }: { slug: string }) {
       try {
         let songResponse: Song & { lyrics: Lyric[] };
         try {
-          songResponse = (await getSong(slug)).data;
-        } catch {
+          songResponse = (await getSong(slug, getVisitorId())).data;
+        } catch (loadError) {
+          if (loadError instanceof ApiError && loadError.status !== 404) throw loadError;
           const searchQuery = decodeURIComponent(slug).replace(/-/g, ' ');
           const searchResponse = await listSongs({ query: searchQuery, perPage: 1 });
           const fallbackSong = searchResponse.data[0];
@@ -239,6 +242,67 @@ export default function SongDetailPage({ slug }: { slug: string }) {
     else playSong(song);
   };
 
+  const handleFavorite = async () => {
+    if (!song || isFavoritePending) return;
+
+    const wasFavorited = Boolean(song.is_favorite);
+    const previousCount = song.favorite_count ?? 0;
+    setIsFavoritePending(true);
+    setEngagementStatus('');
+    setSong((current) => current ? {
+      ...current,
+      is_favorite: !wasFavorited,
+      favorite_count: Math.max(0, previousCount + (wasFavorited ? -1 : 1)),
+    } : current);
+
+    try {
+      const result = await toggleSongFavorite(song.id, getVisitorId());
+      setSong((current) => current ? {
+        ...current,
+        is_favorite: result.favorited,
+        favorite_count: result.favorites,
+      } : current);
+    } catch {
+      setSong((current) => current ? {
+        ...current,
+        is_favorite: wasFavorited,
+        favorite_count: previousCount,
+      } : current);
+      setEngagementStatus('Chưa thể cập nhật lượt yêu thích. Vui lòng thử lại.');
+    } finally {
+      setIsFavoritePending(false);
+    }
+  };
+
+  const handleShare = async (source: 'facebook' | 'copy_link') => {
+    if (!song || isSharePending) return;
+
+    const url = new URL(window.location.pathname, window.location.origin).toString();
+    if (source === 'facebook') {
+      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank', 'noopener,noreferrer');
+    } else {
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        setEngagementStatus('Không thể sao chép đường dẫn trên trình duyệt này.');
+        return;
+      }
+    }
+
+    setIsShareOpen(false);
+    setIsSharePending(true);
+    setEngagementStatus('');
+    try {
+      const result = await recordSongShare(song.id, source, getVisitorId());
+      setSong((current) => current ? { ...current, share_count: result.shares } : current);
+      setEngagementStatus(source === 'copy_link' ? 'Đã sao chép đường dẫn.' : 'Đã mở cửa sổ chia sẻ Facebook.');
+    } catch {
+      setEngagementStatus('Đã chia sẻ nhưng chưa ghi nhận được lượt chia sẻ.');
+    } finally {
+      setIsSharePending(false);
+    }
+  };
+
   const handleLyricSeek = (seconds: number) => {
     if (currentTrack) {
       seek(seconds);
@@ -257,13 +321,26 @@ export default function SongDetailPage({ slug }: { slug: string }) {
             <div role="img" aria-label={`Ảnh bìa ${song.title}`} className="size-56 shrink-0 rounded-xl bg-cover bg-center shadow-xl sm:size-64" style={{ backgroundImage: `url("${song.cover_url || fallbackCover}")` }} />
             <div className="min-w-0 pt-1">
               <p className="text-sm text-white/60">Bài hát</p>
-              <h1 className={`${lexend.className} mt-3 text-[34px] leading-tight sm:text-[42px]`}>{song.title}</h1>
+              <h1 className="mt-3 text-[34px] leading-tight sm:text-[42px]">{song.title}</h1>
               <ArtistNames artists={artists} className="mt-4 block text-sm font-bold text-white" />
-              <div className="mt-7 flex items-center gap-4 text-white/80">
-                <button type="button" aria-label={`Yêu thích ${song.title}`} className="transition-colors hover:text-cyan-300"><HeartIcon /></button>
-                <button type="button" aria-label={`Chia sẻ ${song.title}`} className="transition-colors hover:text-cyan-300"><ShareIcon /></button>
+              <div className="mt-7 flex items-start gap-4 text-white">
+                <button type="button" aria-label={song.is_favorite ? `Bỏ yêu thích ${song.title}` : `Yêu thích ${song.title}`} aria-pressed={Boolean(song.is_favorite)} disabled={isFavoritePending} onClick={() => void handleFavorite()} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-cyan-300">
+                  <span className={song.is_favorite ? 'text-[#ff3b66]' : 'text-white'}><HeartIcon /></span>
+                  <span className="text-[11px] font-bold text-white">{formatCount(song.favorite_count)}</span>
+                </button>
+                <div className="relative">
+                  <button type="button" aria-label={`Chia sẻ ${song.title}`} aria-expanded={isShareOpen} disabled={isSharePending} onClick={() => setIsShareOpen((current) => !current)} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-cyan-300">
+                    <ShareIcon />
+                    <span className="text-[11px] font-bold text-white">{formatCount(song.share_count)}</span>
+                  </button>
+                  {isShareOpen ? <div role="menu" aria-label="Chia sẻ bài hát" className="absolute left-0 top-full z-20 mt-2 w-52 overflow-hidden rounded-xl border border-white/[0.06] bg-[#292c2b] p-1.5 text-[13px] font-bold text-white shadow-2xl">
+                    <button type="button" role="menuitem" onClick={() => void handleShare('facebook')} className="w-full rounded-lg px-3 py-2.5 text-left hover:bg-white/[0.09]">Facebook</button>
+                    <button type="button" role="menuitem" onClick={() => void handleShare('copy_link')} className="w-full rounded-lg px-3 py-2.5 text-left hover:bg-white/[0.09]">Sao chép đường dẫn</button>
+                  </div> : null}
+                </div>
                 <button type="button" aria-label="Thêm tùy chọn" className="grid size-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"><MoreIcon /></button>
               </div>
+              <p role="status" aria-live="polite" className="sr-only">{engagementStatus}</p>
               <div className="mt-6 flex flex-wrap gap-4">
                 <button type="button" onClick={handlePlay} className="inline-flex h-11 items-center gap-3 rounded-full bg-[#00cfe3] px-8 text-sm font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">{currentTrack && isPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}{currentTrack && isPlaying ? 'Tạm dừng' : 'Phát'}</button>
                 <a href={song.audio_url || song.stream_url || song.source_url || '#'} download className="inline-flex h-11 items-center gap-3 rounded-full bg-white/15 px-8 text-sm font-bold transition-colors hover:bg-white/25"><DownloadIcon />Tải về</a>
@@ -273,7 +350,7 @@ export default function SongDetailPage({ slug }: { slug: string }) {
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
           <section aria-labelledby="lyrics-heading">
-            <h2 id="lyrics-heading" className={`${lexend.className} text-[26px] font-bold`}>Lời bài hát</h2>
+            <h2 id="lyrics-heading" className="text-[26px] font-bold">Lời bài hát</h2>
             <div className="mt-4 rounded-xl bg-[#242424] p-5 sm:p-6">
               <p className="border-b border-white/10 pb-4 text-xs text-white/55">Đăng bởi <span className="font-bold text-white">{song.publisher || 'Melodify'}</span></p>
               <div className="pt-5"><LyricBlock lyrics={song.lyrics || []} elapsed={currentTrack ? elapsed : 0} isActiveTrack={currentTrack} onSeek={handleLyricSeek} /></div>
@@ -283,10 +360,10 @@ export default function SongDetailPage({ slug }: { slug: string }) {
         </div>
       </section>
 
-      {artists[0] ? <section className="mx-auto w-full max-w-[1582px] px-5 pt-5 sm:px-8 lg:px-10"><h2 className={`${lexend.className} text-[25px] font-bold`}>Bài hát nổi bật của <ArtistLink artist={artists[0]} className="text-cyan-300 hover:text-cyan-200">{artists[0].name}</ArtistLink></h2><p className="mt-5 text-sm text-white/55">{formatCount(song.views)} lượt nghe</p></section> : null}
+      {artists[0] ? <section className="mx-auto w-full max-w-[1582px] px-5 pt-5 sm:px-8 lg:px-10"><h2 className="text-[25px] font-bold">Bài hát nổi bật của <ArtistLink artist={artists[0]} className="text-cyan-300 hover:text-cyan-200">{artists[0].name}</ArtistLink></h2><p className="mt-5 text-sm text-white/55">{formatCount(song.views)} lượt nghe</p></section> : null}
 
       {artists[0] && featuredAlbums.length > 0 ? <section className="mx-auto w-full max-w-[1582px] px-5 pb-12 pt-10 sm:px-8 lg:px-10">
-        <h2 className={`${lexend.className} text-[25px] font-bold`}>Album nổi bật của <ArtistLink artist={artists[0]} className="text-cyan-300 transition-colors hover:text-cyan-200">{artists[0].name}</ArtistLink></h2>
+        <h2 className="text-[25px] font-bold">Album nổi bật của <ArtistLink artist={artists[0]} className="text-cyan-300 transition-colors hover:text-cyan-200">{artists[0].name}</ArtistLink></h2>
         <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7">
           {featuredAlbums.map((album) => <Link
             key={album.id}

@@ -1,6 +1,5 @@
 'use client';
 
-import { Lexend } from 'next/font/google';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { getHomeBootstrap } from '@/lib/api';
@@ -14,7 +13,6 @@ import {
   vietnamDateKey,
 } from '@/lib/topic-data';
 
-const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 
 export default function HomeTopicsSection() {
   const [topics, setTopics] = useState<TopicCard[]>([]);
@@ -49,8 +47,8 @@ export default function HomeTopicsSection() {
       <div className="mb-5 flex items-center justify-between gap-4">
         <h2
           id="home-topics-heading"
-          className={`${lexend.className} text-[24px] font-bold leading-none text-white`}
-          style={{ color: '#ffffff', fontFamily: 'Lexend, sans-serif', fontSize: '24px', fontWeight: 700 }}
+          className="text-[24px] font-bold leading-none text-white"
+          style={{ color: '#ffffff', fontSize: '24px', fontWeight: 700 }}
         >
           Chủ Đề
         </h2>

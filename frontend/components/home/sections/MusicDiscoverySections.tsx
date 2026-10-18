@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { Lexend } from 'next/font/google';
 import { useEffect, useMemo, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
@@ -12,7 +11,6 @@ import { recentPlaylistItem, recordRecentItem, recentArtistItem, recentSongItem,
 
 import styles from './MusicDiscoverySections.module.css';
 
-const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: ['500', '600', '700'] });
 
 type PlaylistSectionProps = {
   id: string;
@@ -33,14 +31,10 @@ const artists = [
   { name: 'Hngle', followers: '8076 người theo dõi', song: 'Tìm Em', songArtists: 'Hngle, Bảo Anh', image: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=900&q=85' },
 ];
 
-function AudioBadge() {
-  return <span aria-hidden="true" className="absolute right-3 top-3 z-10 grid size-6 place-items-center rounded-full bg-black/35 text-[11px] text-white/80 backdrop-blur-sm">◖▮◗</span>;
-}
-
 function SectionHeader({ id, title, href }: { id: string; title: string; href?: string }) {
   return (
     <div className="mb-5 flex items-center justify-between gap-4">
-      <h2 id={id} className={`${lexend.className} text-[24px] font-bold leading-tight text-white sm:text-[28px]`}>{title}</h2>
+      <h2 id={id} className="text-[24px] font-bold leading-tight text-white sm:text-[28px]">{title}</h2>
       {href ? <Link href={href} className="shrink-0 text-[14px] font-medium text-[#bdbdbd] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">Thêm</Link> : null}
     </div>
   );
@@ -56,7 +50,6 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
       <div className="relative aspect-square overflow-hidden rounded-[10px] bg-[#18211f]">
         <div aria-hidden="true" className={`${styles.coverImage} h-full w-full bg-cover bg-center transition-transform duration-300 ease-out group-hover:scale-[1.045]`} style={{ backgroundImage: `url("${coverUrl}")` }} />
         <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
-        <AudioBadge />
         <span aria-hidden="true" className="absolute bottom-3 right-3 grid size-12 translate-y-2 place-items-center rounded-full bg-[#00d3e5] text-[#13201e] opacity-0 shadow-lg shadow-black/30 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"><PlayGlyph className="size-6" /></span>
       </div>
       <h3 className="mt-3 truncate text-[15px] font-bold leading-5 text-white transition-colors group-hover:text-[#00d3e5]">{playlist.name}</h3>
@@ -131,7 +124,7 @@ function SongSection({ id, title, songs }: SongSectionProps) {
   return (
     <section aria-labelledby={id} className={`${styles.section} mt-10 first:mt-0 sm:mt-12`}>
       <div className="mb-5 flex items-center justify-between gap-4">
-        <h2 id={id} className={`${lexend.className} text-[24px] font-bold leading-tight text-white sm:text-[28px]`}>{title}</h2>
+        <h2 id={id} className="text-[24px] font-bold leading-tight text-white sm:text-[28px]">{title}</h2>
         <button type="button" onClick={playRandom} className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#3b4140] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#4a5250] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
           Nghe ngẫu nhiên
           <ShuffleIcon />

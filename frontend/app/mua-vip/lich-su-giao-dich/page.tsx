@@ -63,8 +63,17 @@ export default function VipTransactionHistoryPage() {
     <main className="min-h-screen bg-[#fafafa] text-[#18232b]">
       <header className="sticky top-0 z-30 border-b border-black/5 bg-white">
         <div className="mx-auto flex h-[58px] max-w-[1280px] items-center justify-between px-5">
-          <Link href="/mua-vip" aria-label="Melodify VIP" className="flex items-center">
-            <Image src="/vip/logo_nct.png" alt="NCT" width={70} height={38} className="h-9 w-auto object-contain" />
+          <Link
+            href="/home"
+            aria-label="Melodify — về trang chủ"
+            className="flex shrink-0 items-center gap-2 text-[#1c1e20] outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+          >
+            <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-violet-400 to-fuchsia-500 text-xl text-white shadow-[0_5px_14px_rgba(124,92,255,0.24)]">
+              ♫
+            </span>
+            <span className="text-lg font-bold tracking-[-0.04em] sm:text-xl">
+              Melodify
+            </span>
           </Link>
           <nav aria-label="Điều hướng VIP" className="flex h-full items-center text-xs font-bold sm:text-sm">
             <Link href="/mua-vip" className="flex h-full items-center px-3 text-[#52616a] sm:px-8">Mua VIP</Link>
@@ -107,9 +116,9 @@ export default function VipTransactionHistoryPage() {
               <button role="tab" aria-selected={tab === "xu"} onClick={() => setTab("xu")} className={`border-b-2 px-5 py-3 text-xs font-bold sm:px-8 ${tab === "xu" ? "border-[#249be8] text-[#17232b]" : "border-transparent text-[#73808a]"}`}>Giao dịch xu</button>
             </div>
             <div className="mt-2 overflow-hidden rounded border border-black/10 bg-white">
-              <h2 className="border-b border-black/10 px-5 py-4 text-sm font-bold">10 lịch sử giao dịch gần nhất</h2>
+              {tab === "vip" ? <h2 className="border-b border-black/10 px-5 py-4 text-sm font-bold">10 lịch sử giao dịch gần nhất</h2> : null}
               {tab === "vip" ? (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   <table className="w-full min-w-[620px] text-left text-xs">
                     <thead className="bg-[#f7f7f7] font-bold"><tr><th className="px-5 py-3">Mã đơn</th><th className="px-3 py-3">Thời gian</th><th className="px-3 py-3">Kênh thanh toán</th><th className="px-3 py-3">Gói cước</th><th className="px-5 py-3 text-right">Số tiền</th></tr></thead>
                     <tbody className="divide-y divide-black/5">
@@ -117,7 +126,25 @@ export default function VipTransactionHistoryPage() {
                     </tbody>
                   </table>
                 </div>
-              ) : <p className="px-5 py-6 text-xs text-[#9aa4aa]">Chưa có giao dịch xu.</p>}
+              ) : (
+                <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <table className="w-full min-w-[520px] table-fixed text-center text-xs">
+                    <thead className="bg-[#f7f7f7] font-bold">
+                      <tr>
+                        <th className="px-3 py-3">MÃ ĐƠN</th>
+                        <th className="px-3 py-3">THỜI GIAN</th>
+                        <th className="px-3 py-3">LOẠI GIAO DỊCH</th>
+                        <th className="px-3 py-3">XU</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-black/5">
+                      <tr>
+                        <td colSpan={4} className="px-5 py-5 text-center text-[#9aa4aa]">Chưa có giao dịch</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </section>
         </div>

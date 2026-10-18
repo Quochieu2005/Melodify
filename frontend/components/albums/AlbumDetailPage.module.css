@@ -35,7 +35,6 @@
 .songRow {
   position: relative;
   isolation: isolate;
-  overflow: hidden;
 }
 
 .songRow::before {
@@ -43,9 +42,10 @@
   inset: 0;
   z-index: 0;
   background: rgba(255, 255, 255, 0.08);
+  border-radius: inherit;
   content: '';
   pointer-events: none;
-  transform: translateX(-100%);
+  clip-path: inset(0 100% 0 0);
   animation: song-row-background-leave 520ms ease-in-out both;
 }
 
@@ -61,58 +61,33 @@
 .rowMore {
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-140%);
-  animation: row-more-leave 520ms ease-in-out both;
-  will-change: opacity, transform;
+  transform: none;
+  transition: opacity 160ms ease-in-out;
 }
 
 .songRow:hover .rowMore,
 .rowMore:focus-visible {
   pointer-events: auto;
-  animation: row-more-enter 520ms ease-in-out both;
+  opacity: 1;
 }
 
 @keyframes song-row-background-enter {
   from {
-    transform: translateX(-100%);
+    clip-path: inset(0 100% 0 0);
   }
 
   to {
-    transform: translateX(0);
+    clip-path: inset(0);
   }
 }
 
 @keyframes song-row-background-leave {
   from {
-    transform: translateX(0);
+    clip-path: inset(0);
   }
 
   to {
-    transform: translateX(-100%);
-  }
-}
-
-@keyframes row-more-enter {
-  from {
-    opacity: 0;
-    transform: translateX(140%);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes row-more-leave {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateX(-140%);
+    clip-path: inset(0 100% 0 0);
   }
 }
 
@@ -134,15 +109,18 @@
   }
 
   .rowMore,
-  .songRow::before,
   .songRow:hover .rowMore,
   .rowMore:focus-visible {
     animation: none;
-    transform: none;
+  }
+
+  .songRow::before {
+    animation: none;
+    clip-path: inset(0 100% 0 0);
   }
 
   .songRow:hover::before {
-    transform: none;
+    clip-path: inset(0);
   }
 
   .songRow:hover .rowMore,

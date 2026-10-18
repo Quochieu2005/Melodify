@@ -1,6 +1,5 @@
 'use client';
 
-import { Lexend } from 'next/font/google';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
@@ -12,7 +11,6 @@ import { vietnamDateKey } from '@/lib/topic-data';
 import { recordRecentItem } from '@/lib/recent-history';
 import styles from './AlbumGrid.module.css';
 
-const lexend = Lexend({ subsets: ['latin', 'vietnamese'], weight: '700' });
 
 function AlbumCard({ album }: { album: AlbumCard }) {
   return (
@@ -62,7 +60,7 @@ export default function AlbumHotSection() {
   return (
     <section aria-labelledby="album-hot-heading" className="mt-12">
       <div className="mb-5 flex items-center justify-between gap-4">
-        <h2 id="album-hot-heading" className={`${lexend.className} text-[24px] font-bold leading-none text-white`}>
+        <h2 id="album-hot-heading" className="text-[24px] font-bold leading-none text-white">
           Album Hot
         </h2>
         <Link href="/album" className="text-[14px] font-medium text-[#bdbdbd] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">

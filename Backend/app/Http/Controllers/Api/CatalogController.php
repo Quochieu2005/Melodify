@@ -4,12 +4,18 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Album;
+use App\Models\AlbumFavorite;
+use App\Models\AlbumShare;
+use App\Models\Admin;
 use App\Models\Artist;
 use App\Models\ArtistFollower;
 use App\Models\Banner;
+use App\Models\ChartShare;
 use App\Models\Favorite;
 use App\Models\Genre;
 use App\Models\Playlist;
+use App\Models\PlaylistFavorite;
+use App\Models\PlaylistShare;
 use App\Models\PlaylistSong;
 use App\Models\Song;
 use App\Models\SongArtist;
@@ -103,9 +109,70 @@ class CatalogController extends Controller
         return $this->collection($request, Album::class, ['published'], fn (Album $album): array => $this->albumData($album), 'title');
     }
 
-    public function album(string $slug): JsonResponse
+    public function album(string $slug, Request $request): JsonResponse
     {
-        return $this->show(Album::class, $slug, ['published'], fn (Album $album): array => $this->albumData($album, true));
+        $filters = $request->validate([
+            'visitor_id' => ['nullable', 'string', 'max:120'],
+        ]);
+        $payload = $this->responsePayload($this->show(Album::class, $slug, ['published'], fn (Album $album): array => $this->albumData($album, true)));
+        $albumId = (string) data_get($payload, 'data.id', '');
+        if ($albumId !== '') {
+            $actorId = $this->engagementActorId($request, $filters['visitor_id'] ?? null);
+            $payload['data']['favorite_count'] = AlbumFavorite::query()->where('album_id', $albumId)->count();
+            $payload['data']['share_count'] = AlbumShare::query()->where('album_id', $albumId)->count();
+            $payload['data']['is_favorite'] = AlbumFavorite::query()
+                ->where('album_id', $albumId)
+                ->where('user_id', $actorId)
+                ->exists();
+        }
+
+        return response()->json($payload);
+    }
+
+    public function toggleAlbumFavorite(string $slug, Request $request): JsonResponse
+    {
+        $album = $this->findPublishedAlbum($slug);
+        abort_unless($album, 404, 'Không tìm thấy album.');
+
+        $data = $request->validate(['visitor_id' => ['nullable', 'string', 'max:120']]);
+        $albumId = (string) $album->getKey();
+        $actorId = $this->engagementActorId($request, $data['visitor_id'] ?? null);
+        $favorite = AlbumFavorite::query()->where('album_id', $albumId)->where('user_id', $actorId)->first();
+
+        if ($favorite) {
+            $favorite->delete();
+            $favorited = false;
+        } else {
+            AlbumFavorite::query()->create(['album_id' => $albumId, 'user_id' => $actorId]);
+            $favorited = true;
+        }
+
+        return response()->json([
+            'favorited' => $favorited,
+            'favorites' => AlbumFavorite::query()->where('album_id', $albumId)->count(),
+        ]);
+    }
+
+    public function recordAlbumShare(string $slug, Request $request): JsonResponse
+    {
+        $album = $this->findPublishedAlbum($slug);
+        abort_unless($album, 404, 'Không tìm thấy album.');
+
+        $data = $request->validate([
+            'visitor_id' => ['nullable', 'string', 'max:120'],
+            'source' => ['nullable', 'string', 'in:facebook,copy_link,web', 'max:30'],
+        ]);
+        $albumId = (string) $album->getKey();
+        AlbumShare::query()->create([
+            'album_id' => $albumId,
+            'visitor_id' => $this->engagementActorId($request, $data['visitor_id'] ?? null),
+            'source' => $data['source'] ?? 'web',
+        ]);
+
+        return response()->json([
+            'recorded' => true,
+            'shares' => AlbumShare::query()->where('album_id', $albumId)->count(),
+        ]);
     }
 
     public function artists(Request $request): JsonResponse
@@ -180,15 +247,89 @@ class CatalogController extends Controller
         return response()->json($payload);
     }
 
-    public function playlist(string $slug): JsonResponse
+    public function playlist(string $slug, Request $request): JsonResponse
     {
-        return $this->show(
-            Playlist::class,
-            $slug,
-            ['active'],
-            fn (Playlist $playlist): array => $this->playlistData($playlist, true),
-            fn ($query) => $query->whereIn('visibility', ['public', 'unlisted']),
-        );
+        $playlist = $this->findPublicPlaylist($slug);
+        abort_unless($playlist, 404, 'Không tìm thấy playlist.');
+
+        $query = $request->validate([
+            'visitor_id' => ['nullable', 'string', 'max:120'],
+        ]);
+        $actorId = $this->engagementActorId($request, $query['visitor_id'] ?? null);
+        $playlistId = (string) $playlist->getKey();
+        $cacheKey = 'api:playlist-detail:v1:'.sha1($playlistId);
+        $data = Cache::store('file')->remember($cacheKey, now()->addMinute(), function () use ($playlist, $playlistId): array {
+            $artists = $this->playlistArtistsForCollection(collect([$playlist]))[$playlistId] ?? [];
+            $songCount = PlaylistSong::query()->where('playlist_id', $playlistId)->count();
+            $playlistData = $this->playlistData($playlist, false, $artists, $songCount);
+            $playlistData['songs'] = $this->playlistSongsData($playlist);
+
+            return $playlistData;
+        });
+
+        $data['favorite_count'] = PlaylistFavorite::query()->where('playlist_id', $playlistId)->count();
+        $data['share_count'] = PlaylistShare::query()->where('playlist_id', $playlistId)->count();
+        $data['is_favorite'] = PlaylistFavorite::query()
+            ->where('playlist_id', $playlistId)
+            ->where('user_id', $actorId)
+            ->exists();
+
+        return response()->json(['data' => $data]);
+    }
+
+    public function togglePlaylistFavorite(string $slug, Request $request): JsonResponse
+    {
+        $playlist = $this->findPublicPlaylist($slug);
+        abort_unless($playlist, 404, 'Không tìm thấy playlist.');
+
+        $data = $request->validate([
+            'visitor_id' => ['nullable', 'string', 'max:120'],
+        ]);
+        $playlistId = (string) $playlist->getKey();
+        $actorId = $this->engagementActorId($request, $data['visitor_id'] ?? null);
+        $favorite = PlaylistFavorite::query()
+            ->where('playlist_id', $playlistId)
+            ->where('user_id', $actorId)
+            ->first();
+
+        if ($favorite) {
+            $favorite->delete();
+            $favorited = false;
+        } else {
+            PlaylistFavorite::query()->create([
+                'playlist_id' => $playlistId,
+                'user_id' => $actorId,
+            ]);
+            $favorited = true;
+        }
+
+        return response()->json([
+            'favorited' => $favorited,
+            'favorites' => PlaylistFavorite::query()->where('playlist_id', $playlistId)->count(),
+        ]);
+    }
+
+    public function recordPlaylistShare(string $slug, Request $request): JsonResponse
+    {
+        $playlist = $this->findPublicPlaylist($slug);
+        abort_unless($playlist, 404, 'Không tìm thấy playlist.');
+
+        $data = $request->validate([
+            'visitor_id' => ['nullable', 'string', 'max:120'],
+            'source' => ['nullable', 'string', 'in:facebook,copy_link', 'max:30'],
+        ]);
+        $playlistId = (string) $playlist->getKey();
+
+        PlaylistShare::query()->create([
+            'playlist_id' => $playlistId,
+            'visitor_id' => $this->engagementActorId($request, $data['visitor_id'] ?? null),
+            'source' => $data['source'] ?? 'copy_link',
+        ]);
+
+        return response()->json([
+            'recorded' => true,
+            'shares' => PlaylistShare::query()->where('playlist_id', $playlistId)->count(),
+        ]);
     }
 
     public function charts(): JsonResponse
@@ -219,12 +360,34 @@ class CatalogController extends Controller
         abort_unless($chart, 404, 'Không tìm thấy bảng xếp hạng.');
 
         return response()->json([
-            'data' => $chart,
+            'data' => array_merge($chart, [
+                'share_count' => ChartShare::query()->where('chart_slug', $slug)->count(),
+            ]),
             'meta' => [
                 'date' => $dateKey,
                 'refresh_minutes' => 1,
                 'source' => 'MongoDB',
             ],
+        ]);
+    }
+
+    public function recordChartShare(string $slug, Request $request): JsonResponse
+    {
+        abort_unless(collect($this->chartDefinitions())->contains(fn (array $chart): bool => $chart['slug'] === $slug), 404, 'Không tìm thấy bảng xếp hạng.');
+
+        $data = $request->validate([
+            'visitor_id' => ['nullable', 'string', 'max:120'],
+            'source' => ['nullable', 'string', 'in:facebook,copy_link,web', 'max:30'],
+        ]);
+        ChartShare::query()->create([
+            'chart_slug' => $slug,
+            'visitor_id' => $this->engagementActorId($request, $data['visitor_id'] ?? null),
+            'source' => $data['source'] ?? 'web',
+        ]);
+
+        return response()->json([
+            'recorded' => true,
+            'shares' => ChartShare::query()->where('chart_slug', $slug)->count(),
         ]);
     }
 
@@ -529,6 +692,7 @@ class CatalogController extends Controller
 
         $data = $request->validate([
             'visitor_id' => ['nullable', 'string', 'max:120'],
+            'favorited' => ['sometimes', 'boolean'],
         ]);
         $actorId = $this->engagementActorId($request, $data['visitor_id'] ?? null);
         $favorite = Favorite::query()
@@ -536,7 +700,17 @@ class CatalogController extends Controller
             ->where('song_id', (string) $song->getKey())
             ->first();
 
-        if ($favorite) {
+        if (array_key_exists('favorited', $data)) {
+            $favorited = (bool) $data['favorited'];
+            if ($favorited && ! $favorite) {
+                Favorite::query()->create([
+                    'user_id' => $actorId,
+                    'song_id' => (string) $song->getKey(),
+                ]);
+            } elseif (! $favorited && $favorite) {
+                $favorite->delete();
+            }
+        } elseif ($favorite) {
             $favorite->delete();
             $favorited = false;
         } else {
@@ -547,9 +721,63 @@ class CatalogController extends Controller
             $favorited = true;
         }
 
+        $this->forgetSongDetailCache($song, $slug);
+
         return response()->json([
             'favorited' => $favorited,
             'favorites' => $this->songFavoriteCount($song),
+        ]);
+    }
+
+    public function favoriteSongs(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'visitor_id' => ['nullable', 'string', 'max:120'],
+        ]);
+        $actorId = $this->engagementActorId($request, $filters['visitor_id'] ?? null);
+        $songIds = Favorite::query()
+            ->where('user_id', $actorId)
+            ->orderByDesc('created_at')
+            ->get(['song_id'])
+            ->pluck('song_id')
+            ->map(fn ($songId): string => (string) $songId)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($songIds->isEmpty()) {
+            return response()->json(['data' => [], 'meta' => ['total' => 0]]);
+        }
+
+        $songsById = Song::query()
+            ->whereIn((new Song)->getKeyName(), $songIds->all())
+            ->get()
+            ->keyBy(fn (Song $song): string => (string) $song->getKey());
+        $orderedSongs = $songIds
+            ->map(fn (string $songId): ?Song => $songsById->get($songId))
+            ->filter()
+            ->values();
+        if ($orderedSongs->isEmpty()) {
+            return response()->json(['data' => [], 'meta' => ['total' => 0]]);
+        }
+
+        $favoriteCounts = Favorite::query()
+            ->whereIn('song_id', $orderedSongs->map(fn (Song $song): string => (string) $song->getKey())->all())
+            ->get(['song_id'])
+            ->groupBy(fn (Favorite $favorite): string => (string) $favorite->song_id)
+            ->map(fn (Collection $favorites): int => $favorites->count());
+        $data = collect($this->localSongsData($orderedSongs))
+            ->map(function (array $song) use ($favoriteCounts): array {
+                $song['is_favorite'] = true;
+                $song['favorite_count'] = (int) $favoriteCounts->get((string) $song['id'], 0);
+
+                return $song;
+            })
+            ->values();
+
+        return response()->json([
+            'data' => $data,
+            'meta' => ['total' => $data->count()],
         ]);
     }
 
@@ -571,27 +799,46 @@ class CatalogController extends Controller
             'source' => $data['source'] ?? 'web',
         ]);
 
+        $this->forgetSongDetailCache($song, $slug);
+
         return response()->json([
             'recorded' => true,
             'shares' => $this->songShareCount($song),
         ]);
     }
 
-    public function song(string $slug): JsonResponse
+    public function song(string $slug, Request $request): JsonResponse
     {
-        $cacheKey = 'api:song:'.sha1($slug);
+        $filters = $request->validate([
+            'visitor_id' => ['nullable', 'string', 'max:120'],
+        ]);
+        $cacheKey = 'api:song:v2:'.sha1($slug);
         try {
             $payload = Cache::store('file')->remember($cacheKey, now()->addMinutes(5), function () use ($slug): array {
                 $localSong = $this->localSongById($slug);
 
                 if ($localSong) {
-                    return ['data' => $this->localSongData($localSong, true, true)];
+                    return [
+                        'data' => $this->localSongData($localSong, true, true),
+                        '_local_song_id' => (string) $localSong->getKey(),
+                    ];
                 }
 
                 $track = $this->nhaccuatui->getSong($slug);
 
-                return ['data' => $this->nctTrackData($track)];
+                return ['data' => $this->nctTrackData($track), '_local_song_id' => null];
             });
+
+            $localSongId = (string) ($payload['_local_song_id'] ?? '');
+            unset($payload['_local_song_id']);
+
+            if ($localSongId !== '') {
+                $actorId = $this->engagementActorId($request, $filters['visitor_id'] ?? null);
+                $payload['data']['is_favorite'] = Favorite::query()
+                    ->where('song_id', $localSongId)
+                    ->where('user_id', $actorId)
+                    ->exists();
+            }
 
             return response()->json($payload);
         } catch (RuntimeException $exception) {
@@ -750,7 +997,7 @@ class CatalogController extends Controller
             'model' => $model,
             'slug' => $slug,
             'statuses' => $statuses,
-            'query' => request()->query(),
+            'query' => array_diff_key(request()->query(), ['visitor_id' => true]),
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         $payload = Cache::store('file')->remember($cacheKey, now()->addMinutes(5), function () use ($model, $slug, $statuses, $transform, $scope): array {
             $query = $model::query()->whereIn('status', $statuses);
@@ -869,9 +1116,7 @@ class CatalogController extends Controller
                 ->whereIn('status', ['published', 'draft'])
                 ->orderBy('title')
                 ->get()
-                ->map(fn (Song $song): array => $this->localSongData($song))
-                ->values()
-                ->all();
+                ->pipe(fn (Collection $songs): array => $this->localSongsData($songs));
         }
 
         return $data;
@@ -1038,19 +1283,116 @@ class CatalogController extends Controller
         ];
 
         if ($includeSongs) {
-            $data['songs'] = PlaylistSong::query()
-                ->where('playlist_id', (string) $playlist->getKey())
-                ->orderBy('position')
-                ->get()
-                ->map(fn ($link): ?array => ($song = $this->localSongById((string) $link->song_id))
-                    ? $this->localSongData($song)
-                    : null)
-                ->filter()
-                ->values()
-                ->all();
+            $data['songs'] = $this->playlistSongsData($playlist);
         }
 
         return $data;
+    }
+
+    /** Build playlist track payloads with batched reads to avoid one query chain per song. */
+    private function playlistSongsData(Playlist $playlist): array
+    {
+        $links = PlaylistSong::query()
+            ->where('playlist_id', (string) $playlist->getKey())
+            ->orderBy('position')
+            ->get();
+        $songIds = $links->pluck('song_id')->map(fn ($id): string => (string) $id)->filter()->unique()->values()->all();
+
+        if ($songIds === []) {
+            return [];
+        }
+
+        $songs = Song::query()
+            ->whereIn((new Song)->getKeyName(), $songIds)
+            ->get()
+            ->keyBy(fn (Song $song): string => (string) $song->getKey());
+        $songCollection = $songs->values();
+        $songsById = collect($this->localSongsData($songCollection))->keyBy('id');
+
+        return $links->map(fn (PlaylistSong $link): ?array => $songsById->get((string) $link->song_id))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /** Build track payloads with batched relation reads instead of querying once per song. */
+    private function localSongsData(Collection $songCollection): array
+    {
+        $songIds = $songCollection->map(fn (Song $song): string => (string) $song->getKey())->filter()->values()->all();
+        if ($songIds === []) {
+            return [];
+        }
+
+        $artistsBySong = $this->songArtistsForCollection($songCollection);
+        $audioBySong = SongAudioFile::query()
+            ->whereIn('song_id', $songIds)
+            ->where('status', 'active')
+            ->where('file_type', 'full')
+            ->get()
+            ->keyBy(fn (SongAudioFile $audio): string => (string) $audio->song_id);
+
+        $adminIds = $songCollection->pluck('created_by_admin_id')->map(fn ($id): string => (string) $id)->filter()->unique()->values()->all();
+        $admins = $adminIds === [] ? collect() : Admin::query()
+            ->whereIn((new Admin)->getKeyName(), $adminIds)
+            ->get()
+            ->keyBy(fn (Admin $admin): string => (string) $admin->getKey());
+        $creatorArtistIds = $songCollection->pluck('created_by_artist_id')->map(fn ($id): string => (string) $id)->filter()->unique()->values()->all();
+        $creatorArtists = $creatorArtistIds === [] ? collect() : Artist::query()
+            ->whereIn((new Artist)->getKeyName(), $creatorArtistIds)
+            ->get()
+            ->keyBy(fn (Artist $artist): string => (string) $artist->getKey());
+        $albumIds = $songCollection->pluck('album_id')->map(fn ($id): string => (string) $id)->filter()->unique()->values()->all();
+        $albums = $albumIds === [] ? collect() : Album::query()
+            ->whereIn((new Album)->getKeyName(), $albumIds)
+            ->get()
+            ->keyBy(fn (Album $album): string => (string) $album->getKey());
+
+        return $songCollection->map(function (Song $song) use ($artistsBySong, $audioBySong, $admins, $creatorArtists, $albums): array {
+            $songId = (string) $song->getKey();
+            $artists = $artistsBySong[$songId] ?? [];
+            $primaryArtist = $artists[0] ?? null;
+            $audio = $audioBySong->get($songId);
+            $audioUrl = $audio?->file_url;
+            if ((bool) ($audio?->premium_only ?? false) || $song->external_source === 'nhaccuatui' || $audio?->source === 'nhaccuatui') {
+                $audioUrl = route('api.v1.songs.audio', ['slug' => $song->slug ?: $song->getKey()]);
+            }
+            $album = filled($song->album_id) ? $albums->get((string) $song->album_id) : null;
+            $publisher = $admins->get((string) $song->created_by_admin_id)?->name
+                ?: $creatorArtists->get((string) $song->created_by_artist_id)?->name
+                ?: 'Melodify';
+
+            return [
+                'id' => $songId,
+                'external_id' => $song->external_id,
+                'title' => $song->title,
+                'slug' => $song->slug,
+                'artist' => ($song->artist_name || $primaryArtist) ? [
+                    'id' => $primaryArtist['id'] ?? null,
+                    'name' => $song->artist_name ?: $primaryArtist['name'],
+                ] : null,
+                'artists' => $artists,
+                'publisher' => $publisher,
+                'release_date' => $song->release_date?->toDateString(),
+                'premium_only' => (bool) ($audio?->premium_only ?? false),
+                'has_full_audio' => $audio !== null,
+                'album' => $album ? ['id' => (string) $album->getKey(), 'title' => $album->title] : null,
+                'duration_seconds' => $song->duration_seconds !== null ? (int) $song->duration_seconds : null,
+                'is_featured' => (int) ($song->is_featured ?? 0),
+                'is_hot' => (int) ($song->is_hot ?? 0),
+                'preview_limit_seconds' => (int) ($song->is_hot ?? 0) === 1 ? 30 : null,
+                'cover_url' => $song->cover_url,
+                'audio_url' => $audioUrl,
+                'stream_url' => $audioUrl,
+                'preview_url' => $song->preview_url,
+                'video_url' => null,
+                'videos' => [],
+                'source_url' => $song->external_url ?: $song->itunes_url,
+                'external_source' => $song->external_source,
+                'country_code' => $song->country_code,
+                'country' => filled($song->country_code) ? config('music.countries.'.$song->country_code, $song->country_code) : null,
+                'status' => $song->status,
+            ];
+        })->values()->all();
     }
 
     /**
@@ -1422,6 +1764,16 @@ class CatalogController extends Controller
             ->get(['song_id'])
             ->groupBy(fn (SongPlayEvent $event): string => (string) $event->song_id)
             ->map(fn (Collection $events): int => $events->count());
+        $favoriteCounts = Favorite::query()
+            ->whereIn('song_id', $songIds)
+            ->get(['song_id'])
+            ->groupBy(fn (Favorite $favorite): string => (string) $favorite->song_id)
+            ->map(fn (Collection $favorites): int => $favorites->count());
+        $shareCounts = SongShare::query()
+            ->whereIn('song_id', $songIds)
+            ->get(['song_id'])
+            ->groupBy(fn (SongShare $share): string => (string) $share->song_id)
+            ->map(fn (Collection $shares): int => $shares->count());
 
         $charts = [];
         foreach ($this->chartDefinitions() as $definition) {
@@ -1447,7 +1799,7 @@ class CatalogController extends Controller
                 })
                 ->take(50)
                 ->values();
-            $chartSongs = $ranked->map(function (Song $song, int $index) use ($audioBySong, $artistCredits, $todayCounts, $yesterdayCounts): array {
+            $chartSongs = $ranked->map(function (Song $song, int $index) use ($audioBySong, $artistCredits, $todayCounts, $yesterdayCounts, $favoriteCounts, $shareCounts): array {
                 $data = $this->compactSongData($song, $audioBySong->get((string) $song->getKey()), $artistCredits[(string) $song->getKey()] ?? []);
                 $today = (int) $todayCounts->get((string) $song->getKey(), 0);
                 $yesterday = (int) $yesterdayCounts->get((string) $song->getKey(), 0);
@@ -1456,8 +1808,8 @@ class CatalogController extends Controller
                     'rank' => $index + 1,
                     'trend' => $today > $yesterday ? 'up' : ($today < $yesterday ? 'down' : 'same'),
                     'views' => $today,
-                    'favorites' => $this->songFavoriteCount($song),
-                    'shares' => $this->songShareCount($song),
+                    'favorites' => (int) $favoriteCounts->get((string) $song->getKey(), 0),
+                    'shares' => (int) $shareCounts->get((string) $song->getKey(), 0),
                 ]);
             })->values()->all();
             $firstSong = $chartSongs[0] ?? null;
@@ -1837,6 +2189,19 @@ class CatalogController extends Controller
         return $query->count();
     }
 
+    private function forgetSongDetailCache(Song $song, string $identifier): void
+    {
+        $identifiers = array_unique(array_filter([
+            $identifier,
+            (string) $song->getKey(),
+            (string) $song->slug,
+        ]));
+
+        foreach ($identifiers as $cacheIdentifier) {
+            Cache::store('file')->forget('api:song:v2:'.sha1($cacheIdentifier));
+        }
+    }
+
     private function engagementActorId(Request $request, ?string $visitorId): string
     {
         $visitorId = trim((string) $visitorId);
@@ -1844,6 +2209,40 @@ class CatalogController extends Controller
         return $visitorId !== ''
             ? $visitorId
             : 'visitor:'.hash('sha256', (string) $request->ip());
+    }
+
+    private function findPublicPlaylist(string $identifier): ?Playlist
+    {
+        $query = Playlist::query()
+            ->where('status', 'active')
+            ->whereIn('visibility', ['public', 'unlisted']);
+        $playlist = (clone $query)->where('slug', $identifier)->first();
+
+        if ($playlist) {
+            return $playlist;
+        }
+
+        try {
+            return (clone $query)->find($identifier);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function findPublishedAlbum(string $identifier): ?Album
+    {
+        $query = Album::query()->where('status', 'published');
+        $album = (clone $query)->where('slug', $identifier)->first();
+
+        if ($album) {
+            return $album;
+        }
+
+        try {
+            return (clone $query)->find($identifier);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function localLyricsData(Song $song): array

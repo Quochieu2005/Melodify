@@ -1,4 +1,5 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+let inMemoryVisitorId: string | null = null;
 
 export type Lyric = {
   id: string;
@@ -46,6 +47,7 @@ export type Song = {
   shares?: number;
   favorite_count?: number;
   share_count?: number;
+  is_favorite?: boolean;
 };
 
 export type Playlist = {
@@ -66,6 +68,9 @@ export type Playlist = {
   genre_ids?: string[];
   topic_ids?: string[];
   songs?: Song[];
+  favorite_count?: number;
+  share_count?: number;
+  is_favorite?: boolean;
 };
 
 export type HomeDiscovery = {
@@ -88,6 +93,7 @@ export type ChartRecord = {
   date: string;
   updated_at: string | null;
   song_count: number;
+  share_count?: number;
   songs: ChartSong[];
 };
 
@@ -206,6 +212,9 @@ export type AlbumRecord = {
   cover_url: string | null;
   status: string;
   song_count: number;
+  favorite_count?: number;
+  share_count?: number;
+  is_favorite?: boolean;
 };
 
 export type AlbumDetail = AlbumRecord & {
@@ -313,6 +322,19 @@ export type SocialProvider = "google" | "facebook";
 
 export const AUTH_TOKEN_STORAGE_KEY = "melodify_access_token";
 export const AUTH_USER_STORAGE_KEY = "melodify_auth_user";
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
+const songFavoriteStates = new Map<string, boolean>();
+
+function rememberSongFavorite(songId: string, favorited: boolean) {
+  songFavoriteStates.set(songId, favorited);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("melodify:song-favorite", { detail: { songId, favorited } }));
+  }
+}
+
+export function getCachedSongFavorite(songId: string) {
+  return songFavoriteStates.get(songId);
+}
 
 export function saveAuthSession(auth: AuthResponse): void {
   if (typeof window === "undefined") return;
@@ -413,21 +435,42 @@ export async function apiFetch<T>(
     typeof window !== "undefined"
       ? window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
       : null;
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
-      ...init?.headers,
-    },
-  });
+  const method = (init?.method ?? "GET").toUpperCase();
+  const requestKey = `${storedToken ?? ""}:${path}`;
 
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, body.message ?? "API request failed");
+  if (method === "GET") {
+    const pending = inFlightGetRequests.get(requestKey);
+    if (pending) return pending as Promise<T>;
   }
 
-  return response.json() as Promise<T>;
+  const request = (async () => {
+    const response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        Accept: "application/json",
+        ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
+        ...init?.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new ApiError(response.status, body.message ?? "API request failed");
+    }
+
+    return response.json() as Promise<T>;
+  })();
+
+  if (method !== "GET") return request;
+
+  inFlightGetRequests.set(requestKey, request);
+  try {
+    return await request;
+  } finally {
+    if (inFlightGetRequests.get(requestKey) === request) {
+      inFlightGetRequests.delete(requestKey);
+    }
+  }
 }
 
 export function getSubscriptionPlans() {
@@ -497,10 +540,22 @@ export async function listSongs(
   );
 }
 
-export async function getSong(songId: string) {
-  return apiFetch<{ data: Song & { lyrics: Lyric[] } }>(
-    `/v1/songs/${encodeURIComponent(songId)}`,
+export function listFavoriteSongs(visitorId?: string) {
+  const query = visitorId ? `?visitor_id=${encodeURIComponent(visitorId)}` : "";
+  return apiFetch<{ data: Song[]; meta: { total: number } }>(
+    `/v1/favorites/songs${query}`,
   );
+}
+
+export async function getSong(songId: string, visitorId?: string) {
+  const query = visitorId ? `?visitor_id=${encodeURIComponent(visitorId)}` : "";
+  const response = await apiFetch<{ data: Song & { lyrics: Lyric[] } }>(
+    `/v1/songs/${encodeURIComponent(songId)}${query}`,
+  );
+  if (typeof response.data.is_favorite === "boolean") {
+    rememberSongFavorite(response.data.id, response.data.is_favorite);
+  }
+  return response;
 }
 
 export async function listVideos(
@@ -550,7 +605,7 @@ export async function recordSongView(
 }
 
 export async function toggleSongFavorite(songId: string, visitorId?: string) {
-  return apiFetch<{ favorited: boolean; favorites: number }>(
+  const response = await apiFetch<{ favorited: boolean; favorites: number }>(
     `/v1/songs/${encodeURIComponent(songId)}/favorite`,
     {
       method: "POST",
@@ -558,6 +613,21 @@ export async function toggleSongFavorite(songId: string, visitorId?: string) {
       body: JSON.stringify(visitorId ? { visitor_id: visitorId } : {}),
     },
   );
+  rememberSongFavorite(songId, response.favorited);
+  return response;
+}
+
+export async function setSongFavorite(songId: string, favorited: boolean, visitorId?: string) {
+  const response = await apiFetch<{ favorited: boolean; favorites: number }>(
+    `/v1/songs/${encodeURIComponent(songId)}/favorite`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ favorited, ...(visitorId ? { visitor_id: visitorId } : {}) }),
+    },
+  );
+  rememberSongFavorite(songId, response.favorited);
+  return response;
 }
 
 export async function recordSongShare(
@@ -694,6 +764,17 @@ export async function getChart(slug: string) {
   }>(`/v1/charts/${encodeURIComponent(slug)}`);
 }
 
+export function recordChartShare(chartSlug: string, source: "facebook" | "copy_link" | "web", visitorId?: string) {
+  return apiFetch<{ recorded: boolean; shares: number }>(
+    `/v1/charts/${encodeURIComponent(chartSlug)}/share`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source, ...(visitorId ? { visitor_id: visitorId } : {}) }),
+    },
+  );
+}
+
 export async function listAlbums(
   options: { query?: string; page?: number; perPage?: number } = {},
 ) {
@@ -709,9 +790,32 @@ export async function listAlbums(
   );
 }
 
-export async function getAlbum(slug: string) {
+export async function getAlbum(slug: string, visitorId?: string) {
+  const query = visitorId ? `?visitor_id=${encodeURIComponent(visitorId)}` : "";
   return apiFetch<{ data: AlbumDetail }>(
-    `/v1/albums/${encodeURIComponent(slug)}`,
+    `/v1/albums/${encodeURIComponent(slug)}${query}`,
+  );
+}
+
+export function toggleAlbumFavorite(albumId: string, visitorId?: string) {
+  return apiFetch<{ favorited: boolean; favorites: number }>(
+    `/v1/albums/${encodeURIComponent(albumId)}/favorite`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(visitorId ? { visitor_id: visitorId } : {}),
+    },
+  );
+}
+
+export function recordAlbumShare(albumId: string, source: "facebook" | "copy_link" | "web", visitorId?: string) {
+  return apiFetch<{ recorded: boolean; shares: number }>(
+    `/v1/albums/${encodeURIComponent(albumId)}/share`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source, ...(visitorId ? { visitor_id: visitorId } : {}) }),
+    },
   );
 }
 
@@ -727,9 +831,67 @@ export async function getGenre(slug: string) {
   );
 }
 
-export async function getPlaylist(playlistId: string) {
+export async function getPlaylist(playlistId: string, visitorId?: string) {
+  const query = visitorId ? `?visitor_id=${encodeURIComponent(visitorId)}` : "";
   return apiFetch<{ data: Playlist }>(
-    `/v1/playlists/${encodeURIComponent(playlistId)}`,
+    `/v1/playlists/${encodeURIComponent(playlistId)}${query}`,
+  );
+}
+
+export function getVisitorId() {
+  if (typeof window === "undefined") return "";
+  if (inMemoryVisitorId) return inMemoryVisitorId;
+
+  const storageKey = "melodify_visitor_id";
+  try {
+    const storedVisitorId = window.localStorage.getItem(storageKey);
+    if (storedVisitorId) {
+      inMemoryVisitorId = storedVisitorId;
+      return storedVisitorId;
+    }
+  } catch {
+    // Continue with a temporary ID when browser storage is unavailable.
+  }
+
+  const visitorId = window.crypto?.randomUUID?.()
+    ?? `visitor-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  inMemoryVisitorId = visitorId;
+
+  try {
+    window.localStorage.setItem(storageKey, visitorId);
+  } catch {
+    // The current page can still use this ID even when storage is blocked.
+  }
+
+  return visitorId;
+}
+
+export async function togglePlaylistFavorite(playlistId: string, visitorId?: string) {
+  return apiFetch<{ favorited: boolean; favorites: number }>(
+    `/v1/playlists/${encodeURIComponent(playlistId)}/favorite`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(visitorId ? { visitor_id: visitorId } : {}),
+    },
+  );
+}
+
+export async function recordPlaylistShare(
+  playlistId: string,
+  source: "facebook" | "copy_link",
+  visitorId?: string,
+) {
+  return apiFetch<{ recorded: boolean; shares: number }>(
+    `/v1/playlists/${encodeURIComponent(playlistId)}/share`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source,
+        ...(visitorId ? { visitor_id: visitorId } : {}),
+      }),
+    },
   );
 }
 
