@@ -32,16 +32,16 @@ Route::get('/', function () {
 Route::prefix('admin')->name('admin.')->middleware('admin.timing')->group(function () {
     Route::middleware('guest:admin')->group(function () {
         Route::get('/login', [AuthController::class, 'create'])->name('login');
-        Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+        Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:5,1,admin-login:')->name('login.store');
         Route::get('/forgot-password', [PasswordResetController::class, 'request'])->name('password.request');
-        Route::post('/forgot-password', [PasswordResetController::class, 'sendOtp'])->middleware('throttle:5,1')->name('password.email');
+        Route::post('/forgot-password', [PasswordResetController::class, 'sendOtp'])->middleware('throttle:5,1,admin-password-forgot:')->name('password.email');
         Route::get('/forgot-password/verify', [PasswordResetController::class, 'otpForm'])->name('password.otp.form');
-        Route::post('/forgot-password/verify', [PasswordResetController::class, 'verifyOtp'])->middleware('throttle:8,1')->name('password.otp.verify');
+        Route::post('/forgot-password/verify', [PasswordResetController::class, 'verifyOtp'])->middleware('throttle:8,1,admin-password-verify:')->name('password.otp.verify');
         Route::get('/forgot-password/reset', [PasswordResetController::class, 'resetForm'])->name('password.reset.form');
-        Route::post('/forgot-password/reset', [PasswordResetController::class, 'resetPassword'])->middleware('throttle:5,1')->name('password.reset');
+        Route::post('/forgot-password/reset', [PasswordResetController::class, 'resetPassword'])->middleware('throttle:5,1,admin-password-reset:')->name('password.reset');
     });
 
-    Route::middleware(['auth:admin', 'admin.idle', 'admin.audit'])->group(function () {
+    Route::middleware(['auth:admin', 'admin.idle', 'admin.audit', 'admin.catalog-cache'])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
         Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
         Route::get('/notifications', [AdminNotificationController::class, 'index'])->name('notifications.index');

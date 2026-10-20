@@ -6,7 +6,8 @@ import { useEffect, useMemo, useState } from 'react';
 import styles from '@/components/albums/AlbumDetailPage.module.css';
 import { ArtistNames } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
-import { getSong } from '@/lib/api';
+import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
+import { getSong, type Song } from '@/lib/api';
 import { usePlayer } from '@/components/player';
 import {
   readRecentItems,
@@ -25,7 +26,7 @@ const tabs: Array<{ label: string; value: RecentCategory }> = [
   { label: 'Video', value: 'video' },
 ];
 
-const fallbackCover = '/topics/genre/vpop_600.png';
+const fallbackCover = '/images/cover-placeholder.svg';
 
 function PauseIcon() {
   return <span aria-hidden="true" className="flex gap-1"><span className="h-4 w-1.5 rounded-sm bg-current" /><span className="h-4 w-1.5 rounded-sm bg-current" /></span>;
@@ -42,10 +43,6 @@ function formatDuration(seconds: number | null | undefined) {
 
 function displayCount(count: number) {
   return new Intl.NumberFormat('vi-VN').format(count);
-}
-
-function MoreHorizontalIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 fill-current"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>;
 }
 
 function SelectionCheckbox({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
@@ -134,7 +131,17 @@ function RecentSongRow({ item, index, checked, onToggle, onPlay, currentTrackId,
       ? 'pointer-events-none opacity-0'
       : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100';
   const indexVisibility = checked ? 'hidden' : 'group-hover:hidden';
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const song: Song = {
+    id: item.id,
+    title: item.title,
+    slug: decodeURIComponent(item.href.split('/').filter(Boolean).at(-1) || item.id),
+    duration_seconds: item.durationSeconds ?? null,
+    artist: item.artists?.length === 1 ? { id: item.artists[0].id, name: item.artists[0].name } : null,
+    artists: item.artists || [],
+    preview_url: null,
+    cover_url: item.imageUrl,
+    publisher: item.publisher,
+  };
 
   return (
     <div className={`${styles.songRow} group grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 rounded-lg px-2 py-2.5 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4`}>
@@ -156,8 +163,7 @@ function RecentSongRow({ item, index, checked, onToggle, onPlay, currentTrackId,
       <ArtistNames artists={item.artists || []} fallback={item.subtitle} className="hidden truncate text-[13px] text-white/65 sm:block" />
       <span className="text-right text-[13px] text-white/75">{formatDuration(item.durationSeconds)}</span>
       <div className="relative flex justify-end">
-        <button type="button" aria-label={`Tùy chọn bài ${item.title}`} aria-expanded={isMenuOpen} onClick={() => setIsMenuOpen((value) => !value)} className={`${styles.rowMore} grid size-7 place-items-center rounded-full text-white/75 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5]`}><MoreHorizontalIcon /></button>
-        {isMenuOpen ? <div role="menu" className="absolute right-0 top-8 z-20 w-36 overflow-hidden rounded-lg bg-[#2b2b2b] p-1.5 text-[12px] font-bold text-white shadow-xl"><button type="button" role="menuitem" onClick={() => { setIsMenuOpen(false); onPlay(); }} className="flex w-full rounded-md px-2.5 py-2 text-left hover:bg-white/10">Phát bài hát</button><Link href={item.href} role="menuitem" onClick={() => { setIsMenuOpen(false); remember(item); }} className="flex w-full rounded-md px-2.5 py-2 hover:bg-white/10">Mở bài hát</Link></div> : null}
+        <SongRowActionMenu song={song} buttonClassName="pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100" />
       </div>
     </div>
   );

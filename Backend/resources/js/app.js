@@ -1,4 +1,5 @@
 import './admin-subscriptions.js';
+import './admin-song-audio-metadata.js';
 
 /**
  * Melodify Admin Interface - Ant Design Vanilla JS Controllers
@@ -32,7 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             return maxLength > 0 ? generatedSlug.slice(0, maxLength) : generatedSlug;
         };
-        let followsSource = slugInput.value.trim() === '' || slugInput.value.trim() === sourceSlug();
+        const editing = ['PUT', 'PATCH'].includes(form.querySelector('input[name="_method"]')?.value?.toUpperCase());
+        // Existing URLs must stay stable when only a title/name is edited.
+        let followsSource = slugInput.value.trim() === '' || (!editing && slugInput.value.trim() === sourceSlug());
 
         const syncSlug = () => {
             if (followsSource) slugInput.value = sourceSlug();

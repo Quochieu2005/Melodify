@@ -6,10 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
+import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
+import FollowButton from '@/components/follow/FollowButton';
 import {
   getArtist,
-  getVisitorId,
-  recordSongShare,
+  recordArtistView,
   type AlbumRecord,
   type ArtistDetail,
   type Playlist,
@@ -21,14 +22,10 @@ import styles from '@/components/albums/AlbumDetailPage.module.css';
 import { ArtistNames, type ArtistReference } from './ArtistLink';
 import { recentAlbumItem, recentPlaylistItem, recentVideoItem, recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 
-const fallbackCover = '/topics/genre/vpop_600.png';
+const fallbackCover = '/images/cover-placeholder.svg';
 
 function PauseIcon() {
   return <span aria-hidden="true" className="flex gap-1"><span className="h-4 w-1.5 rounded-sm bg-current" /><span className="h-4 w-1.5 rounded-sm bg-current" /></span>;
-}
-
-function MoreHorizontalIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 fill-current"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>;
 }
 
 function ClockIcon() {
@@ -69,7 +66,7 @@ function SectionHeading({ title, href }: { title: string; href?: string }) {
   );
 }
 
-function ArtistSongRow({ song, index, artist, onPlay, onShare, isCurrentTrack, isPlaying }: { song: Song; index: number; artist: ArtistDetail; onPlay: () => void; onShare: () => void; isCurrentTrack: boolean; isPlaying: boolean }) {
+function ArtistSongRow({ song, index, artist, onPlay, isCurrentTrack, isPlaying }: { song: Song; index: number; artist: ArtistDetail; onPlay: () => void; isCurrentTrack: boolean; isPlaying: boolean }) {
   const imageUrl = song.cover_url || artist.avatar_url || fallbackCover;
   const artists = songArtists(song);
 
@@ -87,7 +84,7 @@ function ArtistSongRow({ song, index, artist, onPlay, onShare, isCurrentTrack, i
       </div>
       <ArtistNames artists={artists} className="hidden truncate text-[13px] text-white/65 sm:block" />
       <span className="text-right text-[13px] text-white/75">{formatDuration(song.duration_seconds)}</span>
-      <button type="button" aria-label={`Chia sẻ ${song.title}`} onClick={onShare} className={`${styles.rowMore} grid size-7 place-items-center rounded-full text-white/75 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5]`}><MoreHorizontalIcon /></button>
+      <SongRowActionMenu song={song} buttonClassName="pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100" />
     </li>
   );
 }
@@ -182,7 +179,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
   const { track, isPlaying, playSong, togglePlay } = usePlayer();
   const artistHeroRef = useRef<HTMLElement | null>(null);
   const [request, setRequest] = useState({ slug: '', artist: null as ArtistDetail | null, isLoading: true, error: '' });
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [updatedFollowers, setUpdatedFollowers] = useState<number | null>(null);
   const [isBioOpen, setIsBioOpen] = useState(false);
   const [showCompactSongsHeader, setShowCompactSongsHeader] = useState(false);
 
@@ -201,8 +198,11 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
 
         if (!cancelled) {
           setRequest({ slug, artist, isLoading: false, error: '' });
-          setIsFollowing(false);
+          setUpdatedFollowers(null);
           setIsBioOpen(false);
+          void recordArtistView(artist.id).catch(() => {
+            // Analytics must not prevent the artist page from loading.
+          });
         }
       })
       .catch(() => {
@@ -254,7 +254,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
   const videos = artist.videos ?? [];
   const artistIsPlaying = Boolean(track && isPlaying && songs.some((song) => song.id === track.id));
   const artistHasCurrentTrack = Boolean(track && songs.some((song) => song.id === track.id));
-  const followerCount = (artist.followers_count ?? 0) + (isFollowing ? 1 : 0);
+  const followerCount = updatedFollowers ?? artist.followers_count ?? 0;
   const backgroundImage = artist.avatar_url || fallbackCover;
 
   const handlePlayAll = () => {
@@ -274,17 +274,6 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
     }
 
     playSong(song, songs);
-  };
-
-  const handleShareSong = async (song: Song) => {
-    const url = new URL(songPath(song), window.location.origin).toString();
-    try {
-      if (navigator.share) await navigator.share({ title: song.title, url });
-      else await navigator.clipboard.writeText(url);
-      await recordSongShare(song.id, 'web', getVisitorId());
-    } catch {
-      // Sharing can be dismissed by the user; keep the list interaction quiet.
-    }
   };
 
   return (
@@ -308,7 +297,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
             <h1 id="artist-title" className="truncate text-[34px] font-bold leading-tight text-white sm:text-[44px]">{artist.name}</h1>
             <div className="mt-3 flex flex-wrap items-center gap-3 text-[14px] font-bold text-white">
               <span>{formatCount(followerCount)} người theo dõi</span>
-              <button type="button" aria-pressed={isFollowing} onClick={() => setIsFollowing((value) => !value)} className="h-9 rounded-full border border-white/75 px-5 text-[13px] font-bold text-white transition-colors hover:border-[#00d3e5] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">{isFollowing ? 'Đang theo dõi' : 'Theo dõi'}</button>
+              <FollowButton id={artist.id} onChanged={(_, count) => setUpdatedFollowers(count)} />
             </div>
             <button type="button" onClick={handlePlayAll} disabled={songs.length === 0} className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[#00cfe3] px-6 text-[14px] font-bold text-[#07363a] transition-colors hover:bg-[#34dbea] disabled:cursor-not-allowed disabled:opacity-50">
               {artistIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}
@@ -329,7 +318,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
         </div>
         {songs.length > 0 ? (
           <ol className="mt-2 space-y-0.5">
-            {songs.map((song, index) => <ArtistSongRow key={song.id} song={song} index={index} artist={artist} onPlay={() => handlePlaySong(song)} onShare={() => void handleShareSong(song)} isCurrentTrack={track?.id === song.id} isPlaying={isPlaying && track?.id === song.id} />)}
+            {songs.map((song, index) => <ArtistSongRow key={song.id} song={song} index={index} artist={artist} onPlay={() => handlePlaySong(song)} isCurrentTrack={track?.id === song.id} isPlaying={isPlaying && track?.id === song.id} />)}
           </ol>
         ) : (
           <p className="mt-8 rounded-lg bg-[#30443f] px-4 py-5 text-sm text-white/70">Nghệ sĩ chưa có bài hát nào.</p>

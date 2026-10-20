@@ -1,8 +1,13 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useState, useSyncExternalStore } from 'react';
 import { useLoginModal } from '@/components/auth/LoginModalProvider';
 import UserAvatar from '@/components/auth/UserAvatar';
+import { useLibrary } from '@/components/library/LibraryProvider';
+import CreatePlaylistDialog from '@/components/playlists/CreatePlaylistDialog';
+import { readRecentItems, subscribeRecentHistory } from '@/lib/recent-history';
 
 function ProfileAvatar({ name, avatarUrl, large = false }: { name: string; avatarUrl: string | null; large?: boolean }) {
   return <UserAvatar name={name} avatarUrl={avatarUrl} className={large ? 'size-[96px] text-4xl' : 'size-[72px] text-3xl'} fallbackClassName="bg-[#9a796d]" />;
@@ -35,6 +40,9 @@ function EmptyPlaylistIcon() {
 export default function MyProfilePage() {
   const router = useRouter();
   const { user, openLogin } = useLoginModal();
+  const { data, error, refresh } = useLibrary();
+  const [creating, setCreating] = useState(false);
+  const recentCount = useSyncExternalStore(subscribeRecentHistory, () => readRecentItems().filter((item) => item.category === 'song').length, () => 0);
 
   if (!user) {
     return (
@@ -53,9 +61,9 @@ export default function MyProfilePage() {
   const displayName = user.name || user.username || 'Người dùng Melodify';
   const accountId = user.id.length > 10 ? user.id.slice(-8) : user.id;
   const collections = [
-    { type: 'favorite' as const, title: 'Yêu thích', count: '0 bài hát', color: 'bg-gradient-to-br from-[#ff6f91] to-[#ff4fba]', href: '/favorite' },
-    { type: 'recent' as const, title: 'Nghe gần đây', count: '5 bài hát', color: 'bg-gradient-to-br from-[#1f9ee2] to-[#124791]', href: '/recent' },
-    { type: 'upload' as const, title: 'Đã tải lên', count: '0 bài hát · 0 video', color: 'bg-gradient-to-br from-[#69d99a] to-[#0a5d3c]', href: '/upload' },
+    { type: 'favorite' as const, title: 'Yêu thích', count: data ? `${data.favorite_song_count} bài hát` : 'Đang tải…', color: 'bg-gradient-to-br from-[#ff6f91] to-[#ff4fba]', href: '/favorite' },
+    { type: 'recent' as const, title: 'Nghe gần đây', count: `${recentCount} bài hát`, color: 'bg-gradient-to-br from-[#1f9ee2] to-[#124791]', href: '/recent' },
+    { type: 'upload' as const, title: 'Đã tải lên', count: 'Quản lý nội dung tải lên', color: 'bg-gradient-to-br from-[#69d99a] to-[#0a5d3c]', href: '/upload' },
   ];
 
   return (
@@ -67,11 +75,11 @@ export default function MyProfilePage() {
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="truncate text-[20px] font-bold leading-7 text-[#fff]">{displayName}</h1>
               <span className="text-[12px] leading-7 text-[#8f8f8f]">ID: {accountId}</span>
-              <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold text-white/85">Miễn phí</span>
+              <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold text-white/85">{user.is_premium ? 'VIP' : 'Miễn phí'}</span>
             </div>
             <div className="mt-3 flex flex-wrap gap-6 text-sm font-semibold text-white/65">
-              <button type="button" onClick={() => router.push('/following')} className="group cursor-pointer text-left transition-colors hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] focus-visible:ring-offset-2 focus-visible:ring-offset-[#202a28]">Đang theo dõi · <strong className="text-white transition-colors group-hover:text-[#00d3e5]">0</strong></button>
-              <button type="button" onClick={() => router.push('/followers')} className="group cursor-pointer text-left transition-colors hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] focus-visible:ring-offset-2 focus-visible:ring-offset-[#202a28]">Người theo dõi · <strong className="text-white transition-colors group-hover:text-[#00d3e5]">0</strong></button>
+              <button type="button" onClick={() => router.push('/following')} className="hover:text-cyan-300">Đang theo dõi · <strong>{data?.following_count ?? '…'}</strong></button>
+              <button type="button" onClick={() => router.push('/followers')} className="hover:text-cyan-300">Người theo dõi · <strong>{data?.followers_count ?? '…'}</strong></button>
             </div>
           </div>
         </section>
@@ -90,19 +98,24 @@ export default function MyProfilePage() {
           ))}
         </section>
 
+        {error && <p role="alert" className="mt-5 text-red-300">{error} <button onClick={refresh} className="underline">Thử lại</button></p>}
         <section className="mt-10">
           <div className="flex items-center gap-3">
-            <h2 className="text-3xl font-extrabold tracking-[-0.04em]">Playlist đã tạo (0)</h2>
-            <button type="button" aria-label="Tạo playlist" className="grid size-8 place-items-center rounded-full border-2 border-white text-xl leading-none hover:border-cyan-300 hover:text-cyan-300">+</button>
+            <h2 className="text-3xl font-extrabold tracking-[-0.04em]">Playlist đã tạo ({data?.created_playlists.length ?? '…'})</h2>
+            <button type="button" aria-label="Tạo playlist" onClick={() => setCreating(true)} className="grid size-8 place-items-center rounded-full border-2 border-white text-xl leading-none hover:border-cyan-300 hover:text-cyan-300">+</button>
           </div>
-          <div className="mt-8 flex min-h-[300px] flex-col items-center justify-center rounded-2xl bg-black/10 text-center">
+          {data?.created_playlists.length ? <div className="mt-6 grid grid-cols-2 gap-5 md:grid-cols-4 xl:grid-cols-5">{data.created_playlists.map((playlist) => <Link key={playlist.id} href={`/playlist/${encodeURIComponent(playlist.slug || playlist.id)}`} className="group rounded-lg p-2 hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-cyan-300">
+            <div className="aspect-square rounded-lg bg-white/10 bg-cover bg-center" style={{ backgroundImage: `url("${playlist.cover_url || '/sidebar-favorites.png'}")` }} />
+            <h3 className="mt-3 truncate font-bold group-hover:text-cyan-300">{playlist.name}</h3><p className="mt-1 text-sm text-white/50">{playlist.song_count} bài hát</p>
+          </Link>)}</div> : data ? <div className="mt-8 flex min-h-[300px] flex-col items-center justify-center rounded-2xl bg-black/10 text-center">
             <EmptyPlaylistIcon />
             <h3 className="mt-3 text-lg font-bold">Danh sách playlist chưa có</h3>
             <p className="mt-2 text-sm text-white/55">Hãy tạo playlist đầu tiên của bạn.</p>
-            <button type="button" className="mt-6 rounded-full bg-white/15 px-8 py-3 text-sm font-bold text-white hover:bg-white/25">Tạo playlist</button>
-          </div>
+            <button type="button" onClick={() => setCreating(true)} className="mt-6 rounded-full bg-white/15 px-8 py-3 text-sm font-bold text-white hover:bg-white/25">Tạo playlist</button>
+          </div> : <p className="mt-6 text-white/50">Đang tải playlist…</p>}
         </section>
       </div>
+      {creating && <CreatePlaylistDialog onClose={() => setCreating(false)} />}
     </main>
   );
 }

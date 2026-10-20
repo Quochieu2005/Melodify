@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useState, type FormEvent } from 'react';
+import PasswordResetForm from './PasswordResetForm';
 import {
   ApiError,
   getQrLoginStatus,
@@ -195,6 +196,7 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
   const [method, setMethod] = useState<LoginMethod>('username');
   const [showPassword, setShowPassword] = useState(false);
   const [identifier, setIdentifier] = useState('');
+  const [forgotPassword, setForgotPassword] = useState(false);
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [phoneCode, setPhoneCode] = useState('');
@@ -365,6 +367,15 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
 
   const isLoading = loadingAction !== null;
 
+  if (forgotPassword) {
+    return <div className="fixed inset-0 z-[100] grid place-items-center bg-black/75 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-label="Khôi phục mật khẩu" className={`relative max-h-[90vh] w-full max-w-[480px] overflow-y-auto rounded-2xl p-6 shadow-2xl sm:p-8 ${variant === 'vip' ? 'bg-white' : 'bg-[#242424]'}`}>
+        <button type="button" aria-label="Đóng" onClick={onClose} className={`absolute right-3 top-3 grid size-8 place-items-center rounded-full ${variant === 'vip' ? 'text-slate-500 hover:bg-slate-100' : 'text-white/60 hover:bg-white/10'}`}>×</button>
+        <PasswordResetForm initialEmail={identifier} light={variant === 'vip'} onBack={() => setForgotPassword(false)} />
+      </section>
+    </div>;
+  }
+
   if (variant === 'vip') {
     return (
       <div
@@ -457,7 +468,7 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
                     <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="relative size-5 shrink-0 appearance-none rounded-[3px] border border-[#a8b2b9] bg-white transition-colors checked:border-[#299fe8] checked:bg-[#299fe8] after:absolute after:left-[6px] after:top-[2px] after:h-[10px] after:w-[5px] after:rotate-45 after:border-b-2 after:border-r-2 after:border-white after:opacity-0 after:content-[''] checked:after:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#299fe8]/40" />
                     Ghi nhớ mật khẩu
                   </label>
-                  <button type="button" onClick={() => { setError(null); setNotice('Tính năng khôi phục mật khẩu chưa được kết nối.'); }} className="shrink-0 font-medium text-[#168df0] hover:underline">
+                  <button type="button" onClick={() => setForgotPassword(true)} className="shrink-0 font-medium text-[#168df0] hover:underline">
                     Quên mật khẩu?
                   </button>
                 </div>
@@ -625,7 +636,7 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
                   <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="size-4 accent-cyan-400" />
                   Ghi nhớ đăng nhập
                 </label>
-                {method === 'username' ? <button type="button" className="font-bold text-cyan-400 hover:text-cyan-300">Quên mật khẩu?</button> : null}
+                {method === 'username' ? <button type="button" onClick={() => setForgotPassword(true)} className="font-bold text-cyan-400 hover:text-cyan-300">Quên mật khẩu?</button> : null}
               </div>
 
               <label className="mt-4 flex cursor-pointer items-start gap-2 text-[11px] leading-[1.45] text-white/85">

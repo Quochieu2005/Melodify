@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 
 import { usePlayer } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { artistPath, type ArtistReference } from '@/components/artists/ArtistLink';
-import { getHomeBootstrap, type HomeDiscovery, type Playlist, type Song } from '@/lib/api';
+import { getHomeBootstrap, type HomeDiscovery, type HomeTrendingArtist, type Playlist, type Song } from '@/lib/api';
+import FollowButton from '@/components/follow/FollowButton';
 import { recentPlaylistItem, recordRecentItem, recentArtistItem, recentSongItem, songPath } from '@/lib/recent-history';
 
 import styles from './MusicDiscoverySections.module.css';
@@ -24,13 +26,6 @@ type SongSectionProps = {
   songs: Song[];
 };
 
-const artists = [
-  { name: 'TINH HÀ “SAY HÍ”', followers: '9362 người theo dõi', song: 'YÊU', songArtists: 'TINH HÀ “SAY HÍ”, Wren Evans,...', image: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=900&q=85' },
-  { name: 'CONGB', followers: '7576 người theo dõi', song: 'chờ chút...', songArtists: 'TINH HÀ “SAY HÍ”, CONGB', image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=85' },
-  { name: 'buitruonglinh', followers: '45668 người theo dõi', song: 'MRT (feat. Xuân Định K.Y, ...', songArtists: 'TINH HÀ “SAY HÍ”, ...', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=85' },
-  { name: 'Hngle', followers: '8076 người theo dõi', song: 'Tìm Em', songArtists: 'Hngle, Bảo Anh', image: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=900&q=85' },
-];
-
 function SectionHeader({ id, title, href }: { id: string; title: string; href?: string }) {
   return (
     <div className="mb-5 flex items-center justify-between gap-4">
@@ -41,14 +36,14 @@ function SectionHeader({ id, title, href }: { id: string; title: string; href?: 
 }
 
 function PlaylistCard({ playlist }: { playlist: Playlist }) {
-  const coverUrl = playlist.cover_url || '/topics/genre/vpop_600.png';
+  const coverUrl = playlist.cover_url || '/images/cover-placeholder.svg';
   const subtitle = playlist.type_custom || playlist.type || `${playlist.song_count} bài hát`;
   const href = `/playlist/${encodeURIComponent(playlist.slug || playlist.id)}`;
 
   return (
     <Link href={href} onClick={() => recordRecentItem(recentPlaylistItem(playlist))} className={`${styles.playlistCard} group block outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]`}>
       <div className="relative aspect-square overflow-hidden rounded-[10px] bg-[#18211f]">
-        <div aria-hidden="true" className={`${styles.coverImage} h-full w-full bg-cover bg-center transition-transform duration-300 ease-out group-hover:scale-[1.045]`} style={{ backgroundImage: `url("${coverUrl}")` }} />
+        <Image aria-hidden="true" src={coverUrl} alt="" fill sizes="(max-width: 640px) 50vw, 20vw" unoptimized className={`${styles.coverImage} object-cover transition-transform duration-300 ease-out group-hover:scale-[1.045]`} />
         <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
         <span aria-hidden="true" className="absolute bottom-3 right-3 grid size-12 translate-y-2 place-items-center rounded-full bg-[#00d3e5] text-[#13201e] opacity-0 shadow-lg shadow-black/30 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"><PlayGlyph className="size-6" /></span>
       </div>
@@ -76,7 +71,7 @@ function PlayingBars() {
 }
 
 function SongCard({ song, onPlay, isActive, isPlaying }: { song: Song; onPlay: () => void; isActive: boolean; isPlaying: boolean }) {
-  const coverUrl = song.cover_url || '/topics/genre/vpop_600.png';
+  const coverUrl = song.cover_url || '/images/cover-placeholder.svg';
   const artistCredits: ArtistReference[] = (song.artists?.length ? song.artists : song.artist ? [song.artist] : []).filter((artist) => artist.name.trim());
   const artistNames = artistCredits.map((artist) => artist.name).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật';
   const publisher = song.publisher || 'Melodify';
@@ -84,7 +79,7 @@ function SongCard({ song, onPlay, isActive, isPlaying }: { song: Song; onPlay: (
   return (
     <article className={`${styles.songCard} group flex min-w-0 items-center gap-3 rounded-[8px] p-2 text-left transition-colors hover:bg-white/[0.05] ${isActive ? 'bg-white/[0.08]' : ''}`}>
       <button type="button" onClick={onPlay} aria-label={`Phát ${song.title}`} className="relative size-[72px] shrink-0 overflow-hidden rounded-[4px] bg-[#18211f] outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
-        <span aria-hidden="true" className="absolute inset-0 bg-cover bg-center transition-transform duration-300 ease-out group-hover:scale-[1.06]" style={{ backgroundImage: `url("${coverUrl}")` }} />
+        <Image aria-hidden="true" src={coverUrl} alt="" fill sizes="72px" unoptimized className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.06]" />
         <span aria-hidden="true" className="absolute inset-0 bg-black/10" />
         <span aria-hidden={!isPlaying} className={`absolute inset-0 grid place-items-center bg-black/30 text-[#00d3e5] transition-opacity ${isPlaying ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>{isPlaying ? <PlayingBars /> : <PlayGlyph className="size-6" />}</span>
       </button>
@@ -141,25 +136,47 @@ function SongSection({ id, title, songs }: SongSectionProps) {
   );
 }
 
-function TrendingArtistsSection() {
+function TrendingArtistCard({ artist, onFollowersChanged }: { artist: HomeTrendingArtist; onFollowersChanged: (id: string, count: number) => void }) {
+  const formatCount = (count: number) => new Intl.NumberFormat('vi-VN').format(count);
+  const artistHref = `/artist/${encodeURIComponent(artist.slug || artist.id)}`;
+  const artistImage = artist.avatar_url || '/images/cover-placeholder.svg';
+
+  return (
+    <article className={styles.artistCard}>
+      <div className={styles.artistHero}>
+        <Image aria-hidden="true" src={artistImage} alt="" fill sizes="(max-width: 900px) 50vw, 25vw" unoptimized className={styles.artistHeroImage} />
+        <span aria-hidden="true" className={styles.artistHeroShade} />
+        <div className={styles.artistHeroInfo}>
+          <Link href={artistHref} className="block truncate text-lg font-bold text-white transition-colors hover:text-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">{artist.name}</Link>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <p className="truncate text-sm text-white/75">{formatCount(artist.followers_count || 0)} người theo dõi</p>
+            <FollowButton id={artist.id} pendingText={null} onChanged={(_following, count) => onFollowersChanged(artist.id, count)} className="px-4 py-1 text-[13px]" />
+          </div>
+        </div>
+      </div>
+      {artist.featured_song && (
+        <Link href={songPath(artist.featured_song)} className="group flex min-w-0 items-center gap-3 p-3 transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-300">
+          <Image aria-hidden="true" src={artist.featured_song.cover_url || '/images/cover-placeholder.svg'} alt="" width={56} height={56} unoptimized className={styles.artistSongCover} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold text-white group-hover:text-cyan-300">{artist.featured_song.title}</span>
+            <span className="mt-1 block truncate text-xs text-white/55">{artist.name}</span>
+          </span>
+        </Link>
+      )}
+    </article>
+  );
+}
+
+function TrendingArtistsSection({ artists, onFollowersChanged }: { artists: HomeTrendingArtist[]; onFollowersChanged: (id: string, count: number) => void }) {
+  const showingCatalogArtists = artists[0]?.ranking_source === 'catalog';
   return (
     <section aria-labelledby="trending-artists-heading" className={`${styles.section} mt-14`}>
       <SectionHeader id="trending-artists-heading" title="Nghệ Sĩ Thịnh Hành" href="/trending-artist" />
+      {showingCatalogArtists && <p className="mb-4 text-sm text-white/65">Gợi ý nghệ sĩ có bài hát đã phát hành trên Melodify.</p>}
       <div className={styles.artistTrack}>
-        {artists.map((artist) => (
-          <article key={artist.name} className={`${styles.artistCard} overflow-hidden rounded-[8px] bg-[#292b2b]`}>
-            <div className="group relative aspect-[1.18/1] overflow-hidden bg-[#18211f]">
-              <div aria-hidden="true" className={`${styles.coverImage} h-full w-full bg-cover bg-center transition-transform duration-300 ease-out group-hover:scale-[1.04]`} style={{ backgroundImage: `url(${artist.image})` }} />
-              <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-[#292b2b] via-transparent to-transparent" />
-              <div className="absolute inset-x-5 bottom-4">
-                <h3 className="truncate text-[16px] font-bold text-white">{artist.name}</h3>
-                <div className="mt-2 flex items-center justify-between gap-3"><p className="truncate text-[13px] text-[#c2c5c4]">{artist.followers}</p><button type="button" className="h-8 shrink-0 rounded-full border border-white/30 px-5 text-[13px] font-semibold text-white transition-colors hover:border-[#00d3e5] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">Theo dõi</button></div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-4"><div className="size-14 shrink-0 overflow-hidden rounded-[4px] bg-black/20"><div aria-hidden="true" className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${artist.image})` }} /></div><div className="min-w-0"><p className="truncate text-[14px] font-bold text-white">{artist.song}</p><p className="mt-1 truncate text-[12px] text-[#aeb1b0]">{artist.songArtists}</p></div></div>
-          </article>
-        ))}
+        {artists.filter((artist) => artist.featured_song).map((artist) => <TrendingArtistCard key={artist.id} artist={artist} onFollowersChanged={onFollowersChanged} />)}
       </div>
+      {artists.length === 0 && <p className="text-sm text-white/60">Chưa có nghệ sĩ có bài hát đã phát hành để hiển thị.</p>}
     </section>
   );
 }
@@ -167,30 +184,39 @@ function TrendingArtistsSection() {
 export default function MusicDiscoverySections() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [discovery, setDiscovery] = useState<HomeDiscovery>({ single_new_releases: [], popular_songs: [] });
+  const [trendingArtists, setTrendingArtists] = useState<HomeTrendingArtist[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadHome = (force = false) => getHomeBootstrap({ force }).then((response) => {
+    const loadHome = () => getHomeBootstrap().then((response) => {
       if (cancelled) return;
 
-      const nextDiscovery = response.data.discovery as HomeDiscovery & { tiktok_top_mix?: Song[] };
+      const nextDiscovery = response.data.discovery;
       setDiscovery({
         single_new_releases: nextDiscovery.single_new_releases || [],
-        popular_songs: nextDiscovery.popular_songs || nextDiscovery.tiktok_top_mix || [],
+        popular_songs: nextDiscovery.popular_songs || [],
       });
       setPlaylists(response.data.playlists);
+      setTrendingArtists((response.data.trending_artists || []).filter((artist) => artist.featured_song));
+      setError('');
     }).catch(() => {
       if (!cancelled) {
         setDiscovery({ single_new_releases: [], popular_songs: [] });
         setPlaylists([]);
+        setTrendingArtists([]);
+        setError('Không thể tải nội dung khám phá lúc này.');
       }
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
     });
 
     void loadHome();
-    const refreshTimer = window.setInterval(() => void loadHome(true), 60_000);
+    const refreshTimer = window.setInterval(() => void loadHome(), 60_000);
     const refreshOnFocus = () => {
-      if (document.visibilityState === 'visible') void loadHome(true);
+      if (document.visibilityState === 'visible') void loadHome();
     };
     document.addEventListener('visibilitychange', refreshOnFocus);
 
@@ -213,10 +239,13 @@ export default function MusicDiscoverySections() {
     ];
   }, [playlists]);
 
+  if (loading) return <div role="status" aria-label="Đang tải nội dung khám phá" className="mt-12 h-72 animate-pulse rounded-xl bg-white/5" />;
+  if (error) return <p role="alert" className="mt-12 text-sm text-red-300">{error}</p>;
+
   return <>
     <SongSection id="new-releases-heading" title="Single Mới Phát Hành" songs={discovery.single_new_releases} />
     <SongSection id="popular-songs-heading" title="Nhiều Lượt Nghe Nhất" songs={discovery.popular_songs} />
     {sections.map((section) => section.playlists.length > 0 ? <PlaylistSection key={section.id} {...section} /> : null)}
-    <TrendingArtistsSection />
+    <TrendingArtistsSection artists={trendingArtists} onFollowersChanged={(id, count) => setTrendingArtists((current) => current.map((artist) => artist.id === id ? { ...artist, followers_count: count } : artist))} />
   </>;
 }

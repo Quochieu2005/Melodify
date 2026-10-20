@@ -26,6 +26,11 @@ export type PlayerTrack = {
 type PlayerContextValue = {
   track: PlayerTrack | null;
   isPlaying: boolean;
+  isLoading: boolean;
+  queue: PlayerTrack[];
+  shuffle: boolean;
+  repeatMode: 'off' | 'all' | 'one';
+  volume: number;
   elapsed: number;
   duration: number;
   notice: string | null;
@@ -34,6 +39,10 @@ type PlayerContextValue = {
   playPrevious: () => void;
   playNext: () => void;
   seek: (seconds: number) => void;
+  playAt: (index: number) => void;
+  toggleShuffle: () => void;
+  cycleRepeat: () => void;
+  setVolume: (volume: number) => void;
 };
 
 type PersistedPlayerState = {
@@ -92,7 +101,7 @@ function toPlayerTrack(song: Song, isPremium: boolean): PlayerTrack {
     title: song.title,
     artist: song.artists?.map((artist) => artist.name).filter(Boolean).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật',
     artists: song.artists?.length ? song.artists : song.artist ? [song.artist] : [],
-    coverUrl: song.cover_url || '/topics/genre/vpop_600.png',
+    coverUrl: song.cover_url || '/images/cover-placeholder.svg',
     durationSeconds: song.duration_seconds === null || song.duration_seconds === undefined
       ? previewLimitSeconds
       : previewLimitSeconds === null ? song.duration_seconds : Math.min(song.duration_seconds, previewLimitSeconds),
@@ -134,8 +143,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const userRef = useRef(user);
   const openLoginRef = useRef(openLogin);
   const noticeTimerRef = useRef<number | null>(null);
+  const shuffleRef = useRef(false);
+  const repeatRef = useRef<'off' | 'all' | 'one'>('off');
+  const viewRecordedRef = useRef(false);
   const [track, setTrack] = useState<PlayerTrack | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [queue, setQueue] = useState<PlayerTrack[]>([]);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
+  const [volume, updateVolume] = useState(1);
   const [elapsed, setElapsed] = useState(0);
   const [duration, setDuration] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
@@ -150,6 +167,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audioRef.current?.pause();
       trackRef.current = null;
       queueRef.current = [];
+      setQueue([]);
+      setIsLoading(false);
       setTrack(null);
       setElapsed(0);
       setDuration(0);
@@ -182,6 +201,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audioRef.current?.pause();
       trackRef.current = null;
       queueRef.current = [];
+      setQueue([]);
+      setIsLoading(false);
       setTrack(null);
       setElapsed(0);
       setDuration(0);
@@ -201,6 +222,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       artists: nextTrack.artists,
     });
     trackRef.current = nextTrack;
+    viewRecordedRef.current = false;
     restoredElapsedRef.current = 0;
     setTrack(nextTrack);
     setElapsed(0);
@@ -216,21 +238,28 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         audio.load();
       }
       setIsPlaying(false);
+      setIsLoading(false);
+      showNotice('Bài hát chưa có âm thanh. Vui lòng chọn bài khác.');
       return;
     }
 
     audio.src = nextTrack.audioUrl;
+    setIsLoading(true);
     audio.load();
-    void recordSongView(nextTrack.slug || nextTrack.id, undefined, 'player').catch(() => undefined);
     void audio.play()
       .then(() => {
         if (audioRef.current === audio && trackRef.current?.id === nextTrack.id) {
           setIsPlaying(!audio.paused);
         }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (audioRef.current === audio && trackRef.current?.id === nextTrack.id) {
           setIsPlaying(!audio.paused);
+          // Rapid track changes cancel the previous play promise normally.
+          if (!(error instanceof DOMException && error.name === 'AbortError')) {
+            setIsLoading(false);
+            showNotice('Không thể phát âm thanh. Hãy thử lại hoặc chọn bài khác.');
+          }
         }
       });
   }, [broadcastState, showNotice]);
@@ -244,13 +273,26 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [startTrack]);
 
   const playNext = useCallback(() => {
+    const length = queueRef.current.length;
+    if (shuffleRef.current && length > 1) {
+      const offset = 1 + Math.floor(Math.random() * (length - 1));
+      playAt((currentIndexRef.current + offset) % length);
+      return;
+    }
     const nextIndex = currentIndexRef.current + 1;
     if (nextIndex < queueRef.current.length) playAt(nextIndex);
+    else if (repeatRef.current === 'all' && length > 0) playAt(0);
   }, [playAt]);
 
   const playPrevious = useCallback(() => {
+    if (audioRef.current && audioRef.current.currentTime > 3) {
+      audioRef.current.currentTime = 0;
+      setElapsed(0);
+      return;
+    }
     const previousIndex = currentIndexRef.current - 1;
     if (previousIndex >= 0) playAt(previousIndex);
+    else if (repeatRef.current === 'all') playAt(queueRef.current.length - 1);
   }, [playAt]);
 
   useEffect(() => {
@@ -289,8 +331,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         );
       }
     };
-    const handlePause = () => setIsPlaying(false);
-    const handleAudioError = () => setIsPlaying(false);
+    const handlePlaying = () => {
+      setIsLoading(false);
+      setIsPlaying(true);
+      const currentTrack = trackRef.current;
+      if (currentTrack && !viewRecordedRef.current) {
+        viewRecordedRef.current = true;
+        // Start statistics only after media starts, not in front of the audio request.
+        void recordSongView(currentTrack.slug || currentTrack.id, undefined, 'player').catch(() => undefined);
+      }
+    };
+    const handleWaiting = () => { if (!audio.paused) setIsLoading(true); };
+    const handlePause = () => { setIsPlaying(false); setIsLoading(false); };
+    const handleAudioError = () => {
+      setIsPlaying(false);
+      setIsLoading(false);
+      showNotice('Không tải được âm thanh. Hãy thử lại hoặc chọn bài khác.');
+    };
     const handleLoadedMetadata = () => {
       if (Number.isFinite(audio.duration)) {
         const limit = trackRef.current?.previewLimitSeconds;
@@ -325,7 +382,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       persistCurrentPosition();
     };
     const handleEnded = () => {
-      if (currentIndexRef.current + 1 < queueRef.current.length) playNextRef.current();
+      if (repeatRef.current === 'one') {
+        audio.currentTime = 0;
+        void audio.play().catch(handleAudioError);
+      } else if (shuffleRef.current || repeatRef.current === 'all' || currentIndexRef.current + 1 < queueRef.current.length) playNextRef.current();
       else {
         setIsPlaying(false);
         persistCurrentPosition();
@@ -335,6 +395,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('timeupdate', handleLimitedPlayback);
     audio.addEventListener('play', handlePlay);
+    audio.addEventListener('playing', handlePlaying);
+    audio.addEventListener('waiting', handleWaiting);
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('error', handleAudioError);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -367,6 +429,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (isSameTrack) {
         if (playbackIntent) audio.pause();
         queueRef.current = restoredQueue;
+        setQueue(restoredQueue);
         currentIndexRef.current = restoredIndex;
         trackRef.current = restoredTrack;
         setTrack(restoredTrack);
@@ -379,6 +442,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
       audio.pause();
       queueRef.current = restoredQueue;
+      setQueue(restoredQueue);
       currentIndexRef.current = restoredIndex;
       trackRef.current = restoredTrack;
       restoredElapsedRef.current = restoredElapsed;
@@ -443,6 +507,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             : Math.min(savedElapsed, restoreLimit);
 
           queueRef.current = restoredQueue;
+          setQueue(restoredQueue);
           currentIndexRef.current = restoredIndex;
           trackRef.current = restoredTrack;
           restoredElapsedRef.current = restoredElapsed;
@@ -469,6 +534,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('timeupdate', handleLimitedPlayback);
       audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('playing', handlePlaying);
+      audio.removeEventListener('waiting', handleWaiting);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('error', handleAudioError);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
@@ -481,8 +548,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       syncChannelRef.current = null;
       cancelled = true;
       audioRef.current = null;
+      audio.removeAttribute('src');
+      audio.load();
     };
-  }, [broadcastState, playNext]);
+  }, [broadcastState, playNext, showNotice]);
 
   const playSong = useCallback((song: Song, queue: Song[] = [song]) => {
     const nextQueue = queue.length > 0
@@ -491,6 +560,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const index = Math.max(0, nextQueue.findIndex((item) => item.id === song.id));
 
     queueRef.current = nextQueue;
+    setQueue(nextQueue);
     currentIndexRef.current = index;
     startTrack(nextQueue[index]);
   }, [startTrack]);
@@ -511,15 +581,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         setElapsed(0);
         broadcastState(persistPlayerState(track, queueRef.current, currentIndexRef.current, 0, false));
       }
+      setIsLoading(true);
       void audio.play()
         .then(() => {
           if (audioRef.current === audio && trackRef.current?.id === track.id) {
             setIsPlaying(!audio.paused);
           }
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           if (audioRef.current === audio && trackRef.current?.id === track.id) {
             setIsPlaying(!audio.paused);
+            if (!(error instanceof DOMException && error.name === 'AbortError')) {
+              setIsLoading(false);
+              showNotice('Không thể phát âm thanh. Hãy thử lại hoặc chọn bài khác.');
+            }
           }
         });
     } else {
@@ -530,18 +605,41 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [broadcastState, showNotice, track]);
 
   const seek = useCallback((seconds: number) => {
-    if (!audioRef.current || !track) return;
+    if (!audioRef.current || !track || !Number.isFinite(seconds)) return;
 
     const limit = track.previewLimitSeconds ?? duration;
     const nextTime = Math.min(Math.max(0, seconds), limit);
-    audioRef.current.currentTime = nextTime;
+    if (audioRef.current.readyState === 0) restoredElapsedRef.current = nextTime;
+    else audioRef.current.currentTime = nextTime;
     setElapsed(nextTime);
     broadcastState(persistPlayerState(track, queueRef.current, currentIndexRef.current, nextTime, Boolean(audioRef.current && !audioRef.current.paused)));
   }, [broadcastState, duration, track]);
 
+  const toggleShuffle = useCallback(() => {
+    shuffleRef.current = !shuffleRef.current;
+    setShuffle(shuffleRef.current);
+  }, []);
+
+  const cycleRepeat = useCallback(() => {
+    repeatRef.current = repeatRef.current === 'off' ? 'all' : repeatRef.current === 'all' ? 'one' : 'off';
+    setRepeatMode(repeatRef.current);
+  }, []);
+
+  const setVolume = useCallback((nextVolume: number) => {
+    if (!Number.isFinite(nextVolume)) return;
+    const value = Math.max(0, Math.min(1, nextVolume));
+    updateVolume(value);
+    if (audioRef.current) audioRef.current.volume = value;
+  }, []);
+
   const value = useMemo(() => ({
     track,
     isPlaying,
+    isLoading,
+    queue,
+    shuffle,
+    repeatMode,
+    volume,
     elapsed,
     duration,
     notice,
@@ -550,7 +648,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     playPrevious,
     playNext,
     seek,
-  }), [duration, elapsed, isPlaying, notice, playNext, playPrevious, playSong, seek, togglePlay, track]);
+    playAt,
+    toggleShuffle,
+    cycleRepeat,
+    setVolume,
+  }), [duration, elapsed, isPlaying, isLoading, queue, shuffle, repeatMode, volume, notice, playNext, playPrevious, playSong, seek, togglePlay, track, playAt, toggleShuffle, cycleRepeat, setVolume]);
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }

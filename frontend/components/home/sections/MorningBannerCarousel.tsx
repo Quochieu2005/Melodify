@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type TransitionEvent as ReactTransitionEvent } from 'react';
+import Image from 'next/image';
 import { getHomeBootstrap, type Banner as ApiBanner } from '@/lib/api';
 
 const dragThreshold = 48;
@@ -194,7 +195,7 @@ function BannerCarouselView({ banners, className, twoColumns }: { banners: Banne
             } as CSSProperties}
             onTransitionEnd={handleTransitionEnd}
           >
-            {banners.map((banner) => (
+            {banners.map((banner, index) => (
               <article
                 key={banner.id}
                 style={{
@@ -216,9 +217,15 @@ function BannerCarouselView({ banners, className, twoColumns }: { banners: Banne
                       WebkitMaskImage: '-webkit-radial-gradient(white, black)',
                     }}
                   >
-                    <img
+                    <Image
                       src={banner.image}
                       alt=""
+                      fill
+                      sizes="100vw"
+                      unoptimized
+                      loading={index < visibleCount ? 'eager' : 'lazy'}
+                      decoding="async"
+                      fetchPriority={index === activeSet ? 'high' : 'auto'}
                       draggable={false}
                       className="banner-clip-image pointer-events-none h-full w-full select-none object-contain"
                     />

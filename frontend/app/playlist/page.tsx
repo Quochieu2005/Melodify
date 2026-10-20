@@ -5,5 +5,5 @@ export default async function PlaylistPage({ searchParams }: { searchParams: Pro
   const topicSlug = query.genre || query.topic;
   const topicKind = query.kind === 'genre' || query.genre ? 'genre' : topicSlug ? 'topic' : undefined;
 
-  return <PlaylistGalleryPage topicSlug={topicSlug} topicKind={topicKind} />;
+  return <PlaylistGalleryPage key={`${topicKind || 'all'}:${topicSlug || ''}`} topicSlug={topicSlug} topicKind={topicKind} />;
 }

@@ -5,6 +5,7 @@ use App\Http\Middleware\AuthenticateApiUser;
 use App\Http\Middleware\EnsureAdminIdleSession;
 use App\Http\Middleware\EnsureAdminPermission;
 use App\Http\Middleware\EnsureSuperAdmin;
+use App\Http\Middleware\InvalidateCatalogCache;
 use App\Http\Middleware\OptionalAuthenticateApiUser;
 use App\Http\Middleware\RecordAdminActivity;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -33,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.permission' => EnsureAdminPermission::class,
             'admin.super' => EnsureSuperAdmin::class,
             'admin.audit' => RecordAdminActivity::class,
+            'admin.catalog-cache' => InvalidateCatalogCache::class,
         ]);
         $middleware->redirectGuestsTo(fn (Request $request) => route('admin.login'));
         $middleware->redirectUsersTo(fn (Request $request) => route('admin.dashboard'));

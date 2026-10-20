@@ -37,6 +37,11 @@
   isolation: isolate;
 }
 
+.songRow:hover,
+.songRow:focus-within {
+  z-index: 20;
+}
+
 .songRow::before {
   position: absolute;
   inset: 0;

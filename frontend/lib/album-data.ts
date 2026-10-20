@@ -11,15 +11,6 @@ export type AlbumCard = {
   slug: string | null;
 };
 
-const fallbackCovers = [
-  '/topics/genre/vpop_600.png',
-  '/topics/genre/kpop_600.png',
-  '/topics/genre/vrap_600.png',
-  '/topics/mood/mood_2_600.png',
-  '/topics/scene/scene_11_600.png',
-  '/topics/genre/CPop_600.png',
-];
-
 function stableHash(value: string): number {
   let hash = 2166136261;
 
@@ -31,14 +22,14 @@ function stableHash(value: string): number {
   return hash >>> 0;
 }
 
-export function albumRecordToCard(record: AlbumRecord, index: number): AlbumCard {
+export function albumRecordToCard(record: AlbumRecord): AlbumCard {
   return {
     id: record.id,
     title: record.title,
     artist: record.artist?.name || 'Nghệ sĩ chưa cập nhật',
     artistId: record.artist?.id ?? record.artist_id,
     artistSlug: record.artist?.slug ?? null,
-    coverUrl: record.cover_url || fallbackCovers[index % fallbackCovers.length],
+    coverUrl: record.cover_url || '/images/cover-placeholder.svg',
     slug: record.slug,
   };
 }
@@ -47,7 +38,7 @@ export function pickDailyAlbums(items: AlbumCard[], limit = 6, dateKey = vietnam
   const unique = new Map<string, AlbumCard>();
 
   items.forEach((item) => {
-    const uniqueKey = item.coverUrl || item.id;
+    const uniqueKey = item.id;
     if (!unique.has(uniqueKey)) unique.set(uniqueKey, item);
   });
 

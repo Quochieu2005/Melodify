@@ -12,7 +12,7 @@ export type TopicCard = {
 
 export function topicSlug(topic: Pick<TopicCard, 'id' | 'slug' | 'title'>): string {
   if (topic.slug?.trim()) return topic.slug.trim();
-  if (topic.id && !topic.id.startsWith('fallback-')) return topic.id;
+  if (topic.id) return topic.id;
 
   return topic.title
     .normalize('NFD')
@@ -28,36 +28,6 @@ export function topicHref(topic: Pick<TopicCard, 'id' | 'slug' | 'title' | 'kind
   return `/playlist?${filter}=${encodeURIComponent(topicSlug(topic))}&kind=${filter}`;
 }
 
-const fallbackImages = [
-  '/topics/genre/vpop_600.png',
-  '/topics/genre/vrap_600.png',
-  '/topics/genre/kpop_600.png',
-  '/topics/genre/genre_25_600.png',
-  '/topics/mood/mood_1_600.png',
-  '/topics/scene/scene_11_600.png',
-  '/topics/scene/scene_30_600.png',
-  '/topics/genre/genre_23_600.png',
-];
-
-export const fallbackHomeTopics: TopicCard[] = [
-  ['Nhạc Hàn', 'genre', '/topics/genre/kpop_600.png'],
-  ['Remix', 'genre', '/topics/genre/genre_39_600.png'],
-  ['Thư Giãn', 'mood', '/topics/mood/mood_2_600.png'],
-  ['Nhạc Trẻ', 'genre', '/topics/genre/vpop_600.png'],
-  ['Pop', 'genre', '/topics/genre/genre_101_600.png'],
-  ['Nhạc Hoa', 'genre', '/topics/genre/CPop_600.png'],
-  ['Rap Việt', 'genre', '/topics/genre/vrap_600.png'],
-  ['Bolero', 'genre', '/topics/genre/genre_23_600.png'],
-  ['Chill Out', 'mood', '/topics/mood/mood_108_600.png'],
-  ['Buồn', 'mood', '/topics/mood/mood_3_600.png'],
-].map(([title, kind, image], index) => ({
-  id: `fallback-${index}`,
-  title,
-  image,
-  slug: null,
-  kind: kind as TopicKind,
-}));
-
 function normalizeKind(value: string | null | undefined): TopicKind {
   const normalized = (value ?? '').trim().toLowerCase();
 
@@ -68,21 +38,21 @@ function normalizeKind(value: string | null | undefined): TopicKind {
   return 'topic';
 }
 
-export function topicRecordToCard(record: TopicRecord, index: number): TopicCard {
+export function topicRecordToCard(record: TopicRecord): TopicCard {
   return {
     id: record.id,
     title: record.name,
-    image: record.image_url || fallbackImages[index % fallbackImages.length],
+    image: record.image_url || null,
     slug: record.slug,
     kind: normalizeKind(record.type || record.type_custom),
   };
 }
 
-export function genreRecordToCard(record: GenreRecord, index: number): TopicCard {
+export function genreRecordToCard(record: GenreRecord): TopicCard {
   return {
     id: record.id,
     title: record.name,
-    image: record.image_url || fallbackImages[index % fallbackImages.length],
+    image: record.image_url || null,
     slug: record.slug,
     kind: 'genre',
   };

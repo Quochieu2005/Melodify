@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { useRouter } from 'next/navigation';
-import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
+import { Suspense, useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 
 import SearchBox from './SearchBox';
 import SettingsMenu from './SettingsMenu';
@@ -118,8 +118,8 @@ export default function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-30 h-[80px] w-full bg-[#202a28] px-5 text-white lg:px-7">
-      <div className="flex h-full items-center gap-3 xl:gap-5">
+    <header className="sticky top-0 z-30 h-[80px] w-full bg-[#202a28] px-3 text-white sm:px-5 lg:px-7">
+      <div className="flex h-full min-w-0 items-center gap-2 sm:gap-3 xl:gap-5">
         <div className="hidden items-center gap-3 sm:flex">
           <IconButton label="Quay lại" disabled={!canGoBack} onClick={goBack} className="size-10">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-2"><path d="m15 5-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -129,10 +129,12 @@ export default function Header() {
           </IconButton>
         </div>
 
-        <SearchBox />
+        <div className="min-w-0 flex-1">
+          <Suspense fallback={<div className="h-10 w-full max-w-[555px] rounded-full bg-[#435854]" />}><SearchBox /></Suspense>
+        </div>
 
-        <div className="ml-auto flex shrink-0 items-center gap-3">
-          <IconButton label="Tải nhạc lên" onClick={() => router.push('/upload')}>
+        <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+          <IconButton label="Tải nhạc lên" onClick={() => router.push('/upload')} className="size-10 sm:size-12">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-2"><path d="M12 16V3m0 0L7.5 7.5M12 3l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </IconButton>
 
@@ -173,7 +175,7 @@ export default function Header() {
               ) : null}
             </div>
           ) : (
-            <button type="button" onClick={() => openLogin()} className="h-12 cursor-pointer rounded-full bg-[#08c6d9] px-5 text-sm font-bold text-[#07363a] outline-none transition-colors hover:bg-[#22d7e7] focus-visible:ring-2 focus-visible:ring-white">
+            <button type="button" onClick={() => openLogin()} className="h-10 cursor-pointer whitespace-nowrap rounded-full bg-[#08c6d9] px-3 text-xs font-bold text-[#07363a] outline-none transition-colors hover:bg-[#22d7e7] focus-visible:ring-2 focus-visible:ring-white sm:h-12 sm:px-5 sm:text-sm">
               Đăng nhập
             </button>
           )}

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 const triggerClass =
-  'grid size-12 shrink-0 cursor-pointer place-items-center rounded-full bg-white/8 text-white outline-none transition-colors hover:bg-white/14 focus-visible:ring-2 focus-visible:ring-cyan-300';
+  'grid size-10 shrink-0 cursor-pointer place-items-center rounded-full bg-white/8 text-white outline-none transition-colors hover:bg-white/14 focus-visible:ring-2 focus-visible:ring-cyan-300 sm:size-12';
 
 function GlobeIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-none stroke-current stroke-[1.7]"><circle cx="12" cy="12" r="8" /><path d="M4 12h16M12 4a13 13 0 0 1 0 16M12 4a13 13 0 0 0 0 16" /></svg>;

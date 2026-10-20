@@ -13,6 +13,9 @@ class AuthenticateApiUser
 {
     public function handle(Request $request, Closure $next): Response
     {
+        if ($request->attributes->has('api_token') && $request->user()) {
+            return $next($request);
+        }
         $authorization = (string) $request->header('Authorization');
 
         if (! preg_match('/^Bearer\s+(.+)$/i', $authorization, $matches)) {

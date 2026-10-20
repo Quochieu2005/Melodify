@@ -5,18 +5,20 @@ import { useEffect, useState } from 'react';
 
 import { ArtistNames } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
+import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { getCachedSongFavorite, getVisitorId, setSongFavorite } from '@/lib/api';
 import { songPath } from '@/lib/recent-history';
 
 import { usePlayer } from './PlayerProvider';
 
-function PlayerButton({ label, children, className = '', onClick, disabled = false }: { label: string; children: React.ReactNode; className?: string; onClick?: () => void; disabled?: boolean }) {
+function PlayerButton({ label, children, className = '', onClick, disabled = false, pressed }: { label: string; children: React.ReactNode; className?: string; onClick?: () => void; disabled?: boolean; pressed?: boolean }) {
   return (
     <button
       type="button"
       aria-label={label}
       onClick={onClick}
       disabled={disabled}
+      aria-pressed={pressed}
       className={`grid shrink-0 place-items-center rounded-full text-white/65 outline-none transition-colors hover:text-white disabled:cursor-not-allowed disabled:text-white/25 disabled:hover:text-white/25 focus-visible:ring-2 focus-visible:ring-[#00d3e5] ${className}`}
     >
       {children}
@@ -77,7 +79,8 @@ function playerArtists(track: { artist: string; artists?: { id: string | null; n
 }
 
 export default function MusicPlayer() {
-  const { track, isPlaying, elapsed, duration, notice, togglePlay, playPrevious, playNext, seek } = usePlayer();
+  const { track, isPlaying, isLoading, queue, shuffle, repeatMode, volume, elapsed, duration, notice, togglePlay, playPrevious, playNext, seek, playAt, toggleShuffle, cycleRepeat, setVolume } = usePlayer();
+  const [panel, setPanel] = useState<'volume' | 'queue' | null>(null);
   const [favoriteState, setFavoriteState] = useState<{ songId: string; favorited: boolean }>({ songId: '', favorited: false });
   const [isFavoritePending, setIsFavoritePending] = useState(false);
   const [favoriteError, setFavoriteError] = useState('');
@@ -88,6 +91,13 @@ export default function MusicPlayer() {
     ? favoriteState.favorited
     : getCachedSongFavorite(track.id) ?? false));
   const activeTrackId = track?.id;
+
+  useEffect(() => {
+    if (!panel) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setPanel(null); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [panel]);
 
   useEffect(() => {
     const syncFavorite = (event: Event) => {
@@ -116,7 +126,7 @@ export default function MusicPlayer() {
 
   return (
     <>
-    <div className="fixed bottom-0 left-0 z-50 h-[74px] w-full border-t border-white/[0.04] bg-[#242424] px-2.5 py-1.5 text-white shadow-[0_-12px_30px_rgba(0,0,0,0.2)] sm:px-3">
+    <div role="region" aria-label="Trình phát nhạc" className="fixed bottom-0 left-0 z-50 h-[74px] w-full border-t border-white/[0.04] bg-[#242424] px-2.5 py-1.5 text-white shadow-[0_-12px_30px_rgba(0,0,0,0.2)] sm:px-3">
       <div className="grid h-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 lg:grid-cols-[minmax(240px,350px)_minmax(280px,1fr)_minmax(220px,350px)] lg:gap-4">
         {track ? (
           <div className="flex min-w-0 items-center gap-2.5">
@@ -131,7 +141,7 @@ export default function MusicPlayer() {
             <div className="ml-auto hidden items-center gap-2 sm:flex">
               <button type="button" aria-label={isLiked ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'} aria-pressed={isLiked} disabled={isFavoritePending} onClick={() => void handleFavorite()} className="grid size-7 place-items-center rounded-full text-white/65 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-50"><HeartIcon filled={isLiked} /></button>
               <span role="status" aria-live="polite" className="sr-only">{favoriteError}</span>
-              <PlayerButton label="Thêm tùy chọn" className="size-7 text-base tracking-[0.1em]">•••</PlayerButton>
+              <SongRowActionMenu placement="up" onStatus={setFavoriteError} song={{ id: track.id, slug: track.slug ?? null, title: track.title, duration_seconds: track.durationSeconds, artist: track.artists?.[0] ?? null, artists: track.artists, cover_url: track.coverUrl, audio_url: track.audioUrl, preview_url: null, premium_only: track.premiumOnly }} />
             </div>
           </div>
         ) : (
@@ -143,13 +153,13 @@ export default function MusicPlayer() {
 
         <div className="hidden min-w-0 flex-col items-center justify-center gap-1 lg:flex">
           <div className="flex items-center gap-3">
-            <PlayerButton label="Phát ngẫu nhiên" className="size-5" disabled={!track}><ShuffleIcon /></PlayerButton>
+            <PlayerButton label="Phát ngẫu nhiên" pressed={shuffle} onClick={toggleShuffle} className={`size-5 ${shuffle ? '!text-[#00d3e5]' : ''}`} disabled={!track}><ShuffleIcon /></PlayerButton>
             <PlayerButton label="Bài trước" className="size-6" onClick={playPrevious} disabled={!track}><PreviousIcon /></PlayerButton>
             <button type="button" aria-label={isPlaying ? 'Tạm dừng' : 'Phát'} aria-pressed={isPlaying} onClick={togglePlay} disabled={!track} className="grid size-9 place-items-center rounded-full bg-white text-[#202020] outline-none transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:bg-white/25 disabled:text-white/40 disabled:hover:scale-100 focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
-              {isPlaying ? <span className="flex gap-1"><span className="h-4 w-1 rounded-full bg-current" /><span className="h-4 w-1 rounded-full bg-current" /></span> : <PlayGlyph className="size-5" />}
+              {isLoading ? <span role="status" aria-label="Đang tải âm thanh" className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : isPlaying ? <span className="flex gap-1"><span className="h-4 w-1 rounded-full bg-current" /><span className="h-4 w-1 rounded-full bg-current" /></span> : <PlayGlyph className="size-5" />}
             </button>
             <PlayerButton label="Bài tiếp theo" className="size-6" onClick={playNext} disabled={!track}><NextIcon /></PlayerButton>
-            <PlayerButton label="Lặp lại" className="size-5" disabled={!track}><RepeatIcon /></PlayerButton>
+            <PlayerButton label={repeatMode === 'one' ? 'Lặp lại một bài' : 'Lặp lại'} pressed={repeatMode !== 'off'} onClick={cycleRepeat} className={`relative size-5 ${repeatMode !== 'off' ? '!text-[#00d3e5]' : ''}`} disabled={!track}><RepeatIcon />{repeatMode === 'one' ? <span className="absolute text-[9px] font-bold">1</span> : null}</PlayerButton>
           </div>
           {track ? <div className="flex w-full max-w-[500px] items-center gap-1.5 text-[10px] text-white/45">
             <span>{formatTime(displayElapsed)}</span>
@@ -159,13 +169,18 @@ export default function MusicPlayer() {
         </div>
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
+          <PlayerButton label={isPlaying ? 'Tạm dừng' : 'Phát'} onClick={togglePlay} className="size-9 bg-white !text-[#202020] lg:hidden" disabled={!track}>{isLoading ? <span role="status" aria-label="Đang tải âm thanh" className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : isPlaying ? <span className="font-bold">Ⅱ</span> : <PlayGlyph className="size-5" />}</PlayerButton>
           {track ? <span className="hidden rounded bg-white/75 px-1.5 py-0.5 text-[10px] font-semibold text-[#202020] sm:inline-block">128 kbps</span> : null}
-          <PlayerButton label="Âm lượng" className="size-7" disabled={!track}><VolumeIcon /></PlayerButton>
-          <PlayerButton label="Lời bài hát" className="hidden size-7 sm:grid" disabled={!track}><LyricsIcon /></PlayerButton>
-          <PlayerButton label="Danh sách phát" className="size-7" disabled={!track}><QueueIcon /></PlayerButton>
+          <PlayerButton label="Âm lượng" pressed={panel === 'volume'} onClick={() => setPanel(panel === 'volume' ? null : 'volume')} className="size-7" disabled={!track}><VolumeIcon /></PlayerButton>
+          {track ? <Link aria-label="Lời bài hát" href={`${songPath({ id: track.id, slug: track.slug ?? null, title: track.title })}#lyrics`} className="hidden size-7 place-items-center rounded-full text-white/65 hover:text-white sm:grid"><LyricsIcon /></Link> : <PlayerButton label="Lời bài hát" className="hidden size-7 sm:grid" disabled><LyricsIcon /></PlayerButton>}
+          <PlayerButton label="Danh sách phát" pressed={panel === 'queue'} onClick={() => setPanel(panel === 'queue' ? null : 'queue')} className="size-7" disabled={!track}><QueueIcon /></PlayerButton>
         </div>
       </div>
     </div>
+    {panel ? <section aria-label={panel === 'queue' ? 'Hàng đợi phát nhạc' : 'Điều chỉnh âm lượng'} className="fixed bottom-[82px] right-3 z-[60] max-h-[60vh] w-[min(360px,calc(100vw-24px))] overflow-y-auto rounded-xl border border-white/10 bg-[#242a28] p-4 text-white shadow-2xl">
+      <div className="mb-3 flex items-center justify-between"><h2 className="font-bold">{panel === 'queue' ? 'Danh sách phát' : 'Âm lượng'}</h2><button type="button" aria-label="Đóng bảng điều khiển" onClick={() => setPanel(null)} className="size-8 rounded-full hover:bg-white/10">×</button></div>
+      {panel === 'volume' ? <div className="flex items-center gap-3"><button type="button" aria-label={volume === 0 ? 'Bật âm thanh' : 'Tắt âm thanh'} onClick={() => setVolume(volume === 0 ? 1 : 0)} className="rounded-lg px-2 py-1 hover:bg-white/10">{volume === 0 ? 'Bật' : 'Tắt'}</button><input type="range" aria-label="Mức âm lượng" min="0" max="1" step="0.01" value={volume} onChange={(event) => setVolume(Number(event.target.value))} className="min-w-0 flex-1 accent-[#00d3e5]" /><span className="w-10 text-right text-xs">{Math.round(volume * 100)}%</span></div> : <ol>{queue.map((item, index) => <li key={`${item.id}-${index}`}><button type="button" aria-current={item.id === track?.id ? 'true' : undefined} onClick={() => playAt(index)} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-white/10 aria-[current=true]:text-[#00d3e5]"><span className="w-5 text-xs">{index + 1}</span><span className="min-w-0"><span className="block truncate text-sm font-bold">{item.title}</span><span className="block truncate text-xs text-white/50">{item.artist}</span></span></button></li>)}</ol>}
+    </section> : null}
     {notice ? <div role="status" className="fixed bottom-[88px] right-4 z-[60] max-w-[min(90vw,380px)] rounded-xl border border-cyan-200/20 bg-[#173d35] px-4 py-3 text-sm font-semibold text-cyan-50 shadow-2xl">{notice}</div> : null}
     </>
   );
