@@ -21,7 +21,7 @@ class InitializeMongoDb extends Command
         );
 
         $collections = [
-            'admins', 'admin_notifications', 'banners', 'users', 'artists', 'artist_followers', 'genres', 'albums', 'songs',
+            'admins', 'admin_notifications', 'banners', 'users', 'artists', 'artist_followers', 'artist_view_events', 'genres', 'albums', 'songs',
             'song_artists', 'song_genres', 'song_audio_files', 'song_videos', 'lyrics', 'playlists',
             'playlist_songs', 'playlist_favorites', 'playlist_shares', 'album_favorites', 'album_shares', 'chart_shares', 'favorites', 'song_shares', 'listening_history', 'devices', 'song_play_events',
             'comments', 'comment_likes', 'notifications', 'subscription_plans', 'subscriptions',
@@ -47,6 +47,8 @@ class InitializeMongoDb extends Command
             'banners' => [[['slug' => 1], ['unique' => true]], [['sort_order' => 1], []], [['status' => 1], []]],
             'users' => [[['slug' => 1], ['unique' => true]], [['email' => 1], ['unique' => true, 'sparse' => true]], [['username' => 1], ['unique' => true, 'sparse' => true]], [['phone' => 1], ['unique' => true, 'sparse' => true]], [['is_premium' => 1], []], [['created_at' => -1], []]],
             'artists' => [[['slug' => 1], ['unique' => true]], [['user_id' => 1], ['unique' => true, 'sparse' => true]]],
+            'artist_followers' => [[['user_id' => 1, 'artist_id' => 1], ['unique' => true]], [['artist_id' => 1, 'user_id' => 1], []]],
+            'artist_view_events' => [[['viewed_at' => -1, 'artist_id' => 1], []]],
             'genres' => [[['slug' => 1], ['unique' => true]], [['name' => 1], ['unique' => true]]],
             'topics' => [[['slug' => 1], ['unique' => true]], [['sort_order' => 1], []], [['status' => 1], []]],
             'albums' => [[['slug' => 1], ['unique' => true]], [['artist_id' => 1], []]],
@@ -56,8 +58,8 @@ class InitializeMongoDb extends Command
             'topic_songs' => [[['topic_id' => 1, 'song_id' => 1], ['unique' => true]], [['topic_id' => 1, 'position' => 1], []], [['song_id' => 1, 'position' => 1], []]],
             'lyrics' => [[['song_id' => 1, 'language' => 1], ['unique' => true]]],
             'song_audio_files' => [[['song_id' => 1, 'file_type' => 1, 'status' => 1], []]],
-            'song_videos' => [[['slug' => 1], ['unique' => true, 'sparse' => true]], [['song_id' => 1, 'status' => 1, 'sort_order' => 1], []], [['created_at' => -1], []]],
-            'playlists' => [[['slug' => 1], ['unique' => true]], [['user_id' => 1], []], [['sort_order' => 1], []], [['status' => 1], []]],
+            'song_videos' => [[['slug' => 1], ['unique' => true, 'sparse' => true]], [['song_id' => 1, 'status' => 1, 'sort_order' => 1], []], [['artist_ids' => 1, 'status' => 1], []], [['created_at' => -1], []]],
+            'playlists' => [[['slug' => 1], ['unique' => true]], [['user_id' => 1], []], [['sort_order' => 1], []], [['status' => 1], []], [['artist_ids' => 1, 'status' => 1, 'visibility' => 1], []]],
             'media_assets' => [[['public_id' => 1], ['unique' => true]], [['folder' => 1], []], [['created_at' => -1], []]],
             'playlist_songs' => [[['playlist_id' => 1, 'song_id' => 1], ['unique' => true]], [['playlist_id' => 1, 'position' => 1], []], [['song_id' => 1, 'position' => 1], []]],
             'playlist_favorites' => [[['playlist_id' => 1, 'user_id' => 1], ['unique' => true]], [['user_id' => 1, 'created_at' => -1], []]],

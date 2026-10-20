@@ -1,11 +1,15 @@
 <?php
 
 use App\Http\Controllers\Api\CatalogController;
+use App\Http\Controllers\Api\FollowController;
 use App\Http\Controllers\Api\PasswordAuthController;
 use App\Http\Controllers\Api\PhoneAuthController;
 use App\Http\Controllers\Api\QrAuthController;
 use App\Http\Controllers\Api\SocialAuthController;
+use App\Http\Controllers\Api\SongReportController;
 use App\Http\Controllers\Api\SubscriptionPlanController;
+use App\Http\Controllers\Api\UserLibraryController;
+use App\Http\Controllers\Api\UserPlaylistController;
 use App\Http\Controllers\Api\VipCheckoutController;
 use App\Http\Controllers\AudioController;
 use App\Http\Controllers\VideoController;
@@ -54,26 +58,26 @@ Route::get('/health', function () {
     ]);
 })->middleware('admin.timing');
 
-Route::prefix('v1')->name('api.v1.')->middleware('admin.timing')->group(function () {
+Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.optional'])->group(function () {
     Route::post('/auth/social', [SocialAuthController::class, 'login'])->name('auth.social');
     Route::post('/auth/login', [PasswordAuthController::class, 'login'])->name('auth.login');
     Route::post('/auth/password/forgot', [PasswordAuthController::class, 'requestPasswordReset'])
-        ->middleware('throttle:5,1')
+        ->middleware('throttle:5,1,password-forgot:')
         ->name('auth.password.forgot');
     Route::post('/auth/password/verify-otp', [PasswordAuthController::class, 'verifyPasswordResetOtp'])
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:10,1,password-verify:')
         ->name('auth.password.verify-otp');
     Route::post('/auth/password/reset', [PasswordAuthController::class, 'resetPassword'])
-        ->middleware('throttle:5,1')
+        ->middleware('throttle:5,1,password-reset:')
         ->name('auth.password.reset');
     Route::post('/auth/{provider}', [SocialAuthController::class, 'login'])
         ->whereIn('provider', ['google', 'facebook'])
         ->name('auth.provider');
     Route::post('/auth/phone/request-otp', [PhoneAuthController::class, 'requestOtp'])
-        ->middleware('throttle:5,1')
+        ->middleware('throttle:5,1,phone-request:')
         ->name('auth.phone.request-otp');
     Route::post('/auth/phone/verify', [PhoneAuthController::class, 'verify'])
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:10,1,phone-verify:')
         ->name('auth.phone.verify');
     Route::post('/auth/qr/start', [QrAuthController::class, 'start'])
         ->middleware('throttle:20,1')
@@ -83,6 +87,9 @@ Route::prefix('v1')->name('api.v1.')->middleware('admin.timing')->group(function
         ->name('auth.qr.status');
 
     Route::middleware('api.user')->group(function () {
+        Route::post('/me/library/import', [UserLibraryController::class, 'import'])->middleware('throttle:20,1')->name('me.library.import');
+        Route::post('/artists/{identifier}/follow', [FollowController::class, 'artist'])->middleware('throttle:60,1')->name('artists.follow');
+        Route::post('/users/{identifier}/follow', [FollowController::class, 'user'])->middleware('throttle:60,1')->name('users.follow');
         Route::get('/auth/me', [SocialAuthController::class, 'me'])->name('auth.me');
         Route::post('/auth/logout', [SocialAuthController::class, 'logout'])->name('auth.logout');
         Route::post('/auth/qr/scan', [QrAuthController::class, 'scan'])
@@ -93,12 +100,25 @@ Route::prefix('v1')->name('api.v1.')->middleware('admin.timing')->group(function
             ->name('vip.checkout');
         Route::get('/vip/transactions', [VipCheckoutController::class, 'index'])
             ->name('vip.transactions.index');
+        Route::get('/me/playlists', [UserPlaylistController::class, 'index'])->name('me.playlists.index');
+        Route::post('/me/playlists', [UserPlaylistController::class, 'store'])
+            ->middleware('throttle:20,1')
+            ->name('me.playlists.store');
+        Route::post('/me/playlists/{playlistId}/songs', [UserPlaylistController::class, 'addSongs'])
+            ->middleware('throttle:30,1')
+            ->name('me.playlists.songs.store');
     });
+
+    Route::get('/me/library', [UserLibraryController::class, 'index'])->name('me.library');
+    Route::get('/users/{identifier}', [FollowController::class, 'show'])->name('users.show');
+    Route::get('/search', [CatalogController::class, 'search'])->middleware('throttle:120,1')->name('search');
 
     Route::get('/topics', [CatalogController::class, 'topics'])->name('topics.index');
     Route::get('/topics/{slug}', [CatalogController::class, 'topic'])->name('topics.show');
     Route::get('/genres', [CatalogController::class, 'genres'])->name('genres.index');
     Route::get('/genres/{slug}', [CatalogController::class, 'genre'])->name('genres.show');
+    Route::get('/for-you/artists', [CatalogController::class, 'forYouArtists'])->name('for-you.artists');
+    Route::get('/for-you/song', [CatalogController::class, 'forYouSong'])->name('for-you.song');
     Route::get('/banners', [CatalogController::class, 'banners'])->name('banners.index');
     Route::get('/banners/{slug}', [CatalogController::class, 'banner'])->name('banners.show');
     Route::get('/albums', [CatalogController::class, 'albums'])->name('albums.index');
@@ -110,6 +130,10 @@ Route::prefix('v1')->name('api.v1.')->middleware('admin.timing')->group(function
         ->name('albums.share');
     Route::get('/albums/{slug}', [CatalogController::class, 'album'])->name('albums.show');
     Route::get('/artists', [CatalogController::class, 'artists'])->name('artists.index');
+    Route::get('/artists/trending', [CatalogController::class, 'trendingArtists'])->name('artists.trending');
+    Route::post('/artists/{slug}/view', [CatalogController::class, 'recordArtistView'])
+        ->middleware(['api.user.optional', 'throttle:60,1,artist-view'])
+        ->name('artists.view');
     Route::get('/artists/{slug}', [CatalogController::class, 'artist'])->name('artists.show');
     Route::get('/playlists', [CatalogController::class, 'playlists'])->name('playlists.index');
     Route::get('/playlists/{slug}', [CatalogController::class, 'playlist'])->name('playlists.show');
@@ -130,6 +154,9 @@ Route::prefix('v1')->name('api.v1.')->middleware('admin.timing')->group(function
     Route::get('/songs', [CatalogController::class, 'songs'])->name('songs.index');
     Route::get('/songs/popular', [CatalogController::class, 'popularSongs'])->name('songs.popular');
     Route::get('/favorites/songs', [CatalogController::class, 'favoriteSongs'])->name('favorites.songs');
+    Route::post('/favorites/songs/reorder', [CatalogController::class, 'reorderFavoriteSongs'])
+        ->middleware('throttle:30,1')
+        ->name('favorites.songs.reorder');
     Route::get('/songs/external/{externalId}/audio', [AudioController::class, 'streamExternal'])->name('songs.external-audio');
     Route::get('/songs/{slug}/audio', [AudioController::class, 'stream'])
         ->middleware('api.user.optional')
@@ -143,6 +170,9 @@ Route::prefix('v1')->name('api.v1.')->middleware('admin.timing')->group(function
     Route::post('/songs/{slug}/share', [CatalogController::class, 'recordSongShare'])
         ->middleware('throttle:60,1')
         ->name('songs.share');
+    Route::post('/songs/{slug}/report', [SongReportController::class, 'store'])
+        ->middleware(['api.user.optional', 'throttle:10,1'])
+        ->name('songs.report');
     Route::get('/songs/{slug}/lyrics', [CatalogController::class, 'lyrics'])->name('songs.lyrics');
     Route::get('/songs/{slug}', [CatalogController::class, 'song'])->name('songs.show');
     Route::get('/videos', [CatalogController::class, 'videos'])->name('videos.index');

@@ -8,7 +8,7 @@ import { ArtistNames } from '@/components/artists';
 import styles from '@/components/home/sections/AlbumGrid.module.css';
 import { recentPlaylistItem, recordRecentItem } from '@/lib/recent-history';
 
-const fallbackCover = '/topics/genre/vpop_600.png';
+const fallbackCover = '/images/cover-placeholder.svg';
 
 type PlaylistFilterKind = 'topic' | 'genre';
 

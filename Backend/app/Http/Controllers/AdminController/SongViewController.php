@@ -3,21 +3,24 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\AdminResourceRequest;
 use App\Models\Artist;
 use App\Models\Favorite;
 use App\Models\Lyric;
 use App\Models\Song;
+use App\Models\SongArtist;
 use App\Models\SongAudioFile;
 use App\Models\SongPlayEvent;
-use App\Models\SongArtist;
 use App\Models\SongShare;
 use App\Rules\PlainText;
 use App\Services\CloudinaryService;
 use App\Services\Music\LyricsClient;
 use App\Services\Music\NhacCuaTuiClient;
-use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Throwable;
 
@@ -26,7 +29,7 @@ class SongViewController extends Controller
     public function lyricsIndex(Request $request): View
     {
         $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+            'q' => ['nullable', 'string', 'max:100', new PlainText],
         ], [
             'q.max' => 'Từ khóa tìm kiếm không được dài hơn 100 ký tự.',
         ]);
@@ -91,20 +94,24 @@ class SongViewController extends Controller
             ->where('file_type', 'full')
             ->first();
 
-        $externalId = $audioFile?->external_id;
-        if (blank($externalId) && $song->external_source === 'nhaccuatui') {
-            $externalId = $song->external_id;
+        $audioExternalId = null;
+        if ($song->external_source === 'nhaccuatui'
+            && ($audioFile?->source === 'nhaccuatui' || blank($audioFile?->source))) {
+            $audioExternalId = $audioFile?->external_id ?: $song->external_id;
         }
+        $lyricsExternalId = $song->external_source === 'nhaccuatui'
+            ? $song->external_id
+            : $audioFile?->external_id;
 
-        if (filled($externalId)) {
+        if (filled($audioExternalId)) {
             try {
-                $externalTrack = $nhaccuatui->getSong((string) $externalId);
+                $externalTrack = $nhaccuatui->getSong((string) $audioExternalId);
                 if (filled($externalTrack['streamUrl'] ?? null)) {
-                    $audioFile ??= new SongAudioFile();
+                    $audioFile ??= new SongAudioFile;
                     $audioFile->song_id = (string) $song->getKey();
                     $audioFile->file_type = 'full';
                     $audioFile->file_url = $externalTrack['streamUrl'];
-                    $audioFile->external_id = (string) ($externalTrack['trackId'] ?? $externalId);
+                    $audioFile->external_id = (string) ($externalTrack['trackId'] ?? $audioExternalId);
                     $audioFile->source = 'nhaccuatui';
                     $audioFile->duration_seconds = isset($externalTrack['trackTimeMillis'])
                         ? (int) round(((int) $externalTrack['trackTimeMillis']) / 1000)
@@ -118,9 +125,9 @@ class SongViewController extends Controller
             }
         }
 
-        if (filled($externalId) && (! $lyric || blank($lyric->plain_lyrics) || blank($lyric->synced_lyrics))) {
+        if (filled($lyricsExternalId) && (! $lyric || blank($lyric->plain_lyrics) || blank($lyric->synced_lyrics))) {
             try {
-                $externalLyrics = $nhaccuatui->getLyrics((string) $externalId);
+                $externalLyrics = $nhaccuatui->getLyrics((string) $lyricsExternalId);
                 if ($externalLyrics && (filled($externalLyrics['plainLyrics'] ?? null) || filled($externalLyrics['syncedLyrics'] ?? null))) {
                     $lyric ??= new Lyric([
                         'song_id' => (string) $song->getKey(),
@@ -213,6 +220,7 @@ class SongViewController extends Controller
         $lyric->is_synced = true;
         $lyric->source = $source ?: 'External';
         $lyric->save();
+        $this->bumpCatalogContentRevision();
 
         return redirect()->route('admin.songs.lyrics', $song->getKey())
             ->with('success', 'Đã tải lời LRC đồng bộ thật từ '.($source ?: 'nguồn bên ngoài').'.');
@@ -222,10 +230,10 @@ class SongViewController extends Controller
     {
         $song = Song::query()->findOrFail($id);
         $data = $request->validate([
-            'plain_lyrics' => ['nullable', 'string', 'max:50000', new PlainText()],
-            'synced_lyrics' => ['nullable', 'string', 'max:80000', new PlainText()],
-            'audio_file' => ['nullable', 'file', 'mimes:mp3,wav,ogg,m4a,aac,webm', 'max:102400'],
-            'audio_url' => ['nullable', 'url:http,https', 'max:500', new PlainText()],
+            'plain_lyrics' => ['nullable', 'string', 'max:50000', new PlainText],
+            'synced_lyrics' => ['nullable', 'string', 'max:80000', new PlainText],
+            'audio_file' => AdminResourceRequest::audioFileRules(),
+            'audio_url' => ['nullable', 'url:http,https', 'max:500', new PlainText],
             'remove_audio' => ['nullable', 'boolean'],
         ]);
         $plainLyrics = trim((string) ($data['plain_lyrics'] ?? ''));
@@ -277,6 +285,7 @@ class SongViewController extends Controller
 
         if ($plainLyrics === '' && $syncedLyrics === '') {
             Lyric::query()->where('song_id', $songId)->delete();
+            $this->bumpCatalogContentRevision();
 
             return redirect()->route('admin.songs.lyrics', $song->getKey())
                 ->with('success', 'Đã xóa lời bài hát.');
@@ -292,6 +301,7 @@ class SongViewController extends Controller
         $lyric->is_synced = $this->hasTimedLyrics($lyric);
         $lyric->source = 'Admin';
         $lyric->save();
+        $this->bumpCatalogContentRevision();
 
         return redirect()->route('admin.songs.lyrics', $song->getKey())
             ->with('success', 'Đã lưu lời bài hát.');
@@ -306,16 +316,34 @@ class SongViewController extends Controller
         $audio = SongAudioFile::query()
             ->where('song_id', (string) $song->getKey())
             ->where('file_type', 'full')
-            ->first() ?: new SongAudioFile();
+            ->first() ?: new SongAudioFile;
+        $oldSource = (string) ($audio->source ?? '');
+        $oldPublicId = (string) ($audio->public_id ?? '');
         $audio->song_id = (string) $song->getKey();
         $audio->file_type = 'full';
         $audio->file_url = $data['file_url'];
         $audio->public_id = $data['public_id'] ?? null;
         $audio->duration_seconds = $data['duration_seconds'] ?: $song->duration_seconds;
+        $audio->external_id = ($data['source'] ?? 'admin') === 'nhaccuatui'
+            ? ($data['external_id'] ?? null)
+            : null;
         $audio->premium_only = false;
         $audio->status = 'active';
         $audio->source = $data['source'] ?? 'admin';
         $audio->save();
+
+        if (($data['duration_seconds'] ?? 0) > 0 && (int) $song->duration_seconds !== (int) $data['duration_seconds']) {
+            $song->duration_seconds = (int) $data['duration_seconds'];
+            $song->save();
+        }
+
+        if ($oldSource === 'cloudinary' && $oldPublicId !== '' && $oldPublicId !== (string) ($data['public_id'] ?? '')) {
+            try {
+                app(CloudinaryService::class)->deleteAudio($oldPublicId);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
     }
 
     private function hasTimedLyrics(?Lyric $lyric): bool
@@ -324,10 +352,15 @@ class SongViewController extends Controller
             && preg_match('/\[\d+:\d+(?:\.\d+)?\]/', (string) $lyric->synced_lyrics) === 1;
     }
 
+    private function bumpCatalogContentRevision(): void
+    {
+        Cache::store('file')->put('api:catalog-content-revision:v1', (string) Str::uuid());
+    }
+
     public function index(Request $request): View
     {
         $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+            'q' => ['nullable', 'string', 'max:100', new PlainText],
             'period' => ['nullable', 'in:all,7,30'],
             'sort' => ['nullable', 'in:views,favorites,shares'],
         ], [
@@ -359,8 +392,8 @@ class SongViewController extends Controller
             ? collect()
             : SongArtist::query()
                 ->whereIn('song_id', $songIds)
-                ->orderBy('artist_role')
                 ->get()
+                ->sortBy(fn (SongArtist $link): int => mb_strtolower(trim((string) ($link->artist_role ?? ''))) === 'primary' ? 0 : 1)
                 ->groupBy(fn (SongArtist $link): string => (string) $link->song_id)
                 ->map(fn ($links): SongArtist => $links->first());
         $artistIds = $artistLinksBySong->pluck('artist_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all();

@@ -1,10 +1,12 @@
 "use client";
+import FollowButton from '@/components/follow/FollowButton';
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArtistLink, ArtistNames } from "@/components/artists";
 import { PlayGlyph } from "@/components/icons/PlayGlyph";
 import { usePlayer } from "@/components/player";
-import { getChart, getVisitorId, recordChartShare, recordSongShare, type ChartRecord, type ChartSong } from "@/lib/api";
+import { SongRowActionMenu } from "@/components/songs/SongRowActionMenu";
+import { getChart, getVisitorId, recordChartShare, type ChartRecord, type ChartSong } from "@/lib/api";
 import {
   recentSongItem,
   recordRecentItem,
@@ -45,15 +47,6 @@ function DownloadIcon() {
     </svg>
   );
 }
-function MoreHorizontalIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 fill-current">
-      <circle cx="5" cy="12" r="1.6" />
-      <circle cx="12" cy="12" r="1.6" />
-      <circle cx="19" cy="12" r="1.6" />
-    </svg>
-  );
-}
 function formatDuration(seconds: number | null | undefined) {
   if (seconds === null || seconds === undefined) return "--:--";
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
@@ -61,13 +54,11 @@ function formatDuration(seconds: number | null | undefined) {
 function ChartSongRow({
   song,
   onPlay,
-  onShare,
   isCurrent,
   isPlaying,
 }: {
   song: ChartSong;
   onPlay: () => void;
-  onShare: () => void;
   isCurrent: boolean;
   isPlaying: boolean;
 }) {
@@ -100,7 +91,7 @@ function ChartSongRow({
         <div
           className="group/cover relative size-11 shrink-0 overflow-hidden rounded-[4px] bg-black/20 bg-cover bg-center"
           style={{
-            backgroundImage: `url("${song.cover_url || "/topics/genre/vpop_600.png"}")`,
+            backgroundImage: `url("${song.cover_url || "/images/cover-placeholder.svg"}")`,
           }}
         >
           {" "}
@@ -131,14 +122,7 @@ function ChartSongRow({
       <span className="text-right text-sm text-white/75">
         {formatDuration(song.duration_seconds)}
       </span>{" "}
-      <button
-        type="button"
-        onClick={onShare}
-        aria-label={`Chia sẻ ${song.title}`}
-        className={`${styles.rowMore} grid size-7 place-items-center rounded-full text-white/75 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-cyan-300`}
-      >
-        <MoreHorizontalIcon />
-      </button>{" "}
+      <SongRowActionMenu song={song} buttonClassName="pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100" />{" "}
     </li>
   );
 }
@@ -243,17 +227,6 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
       setShareStatus("");
     }
   };
-  const handleShareSong = async (song: ChartSong) => {
-    const url = new URL(songPath(song), window.location.origin).toString();
-    try {
-      if (navigator.share) await navigator.share({ title: song.title, url });
-      else await navigator.clipboard.writeText(url);
-      await recordSongShare(song.id, 'web', getVisitorId());
-      setShareStatus(`Đã chia sẻ bài hát ${song.title}.`);
-    } catch {
-      setShareStatus("");
-    }
-  };
   const handleDownload = () => {
     const content = `${chart.title}\n\n${songs.map((song) => `${song.rank}. ${song.title} — ${song.artists?.map((artist) => artist.name).join(", ") || song.artist?.name || "Nghệ sĩ chưa cập nhật"}`).join("\n")}`;
     const href = URL.createObjectURL(
@@ -277,7 +250,7 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
             aria-label={`Ảnh bìa ${chart.title}`}
             className="aspect-square w-full max-w-[260px] rounded-[10px] bg-cover bg-center shadow-2xl shadow-black/25"
             style={{
-              backgroundImage: `url("${chart.cover_url || "/topics/genre/vpop_600.png"}")`,
+              backgroundImage: `url("${chart.cover_url || "/images/cover-placeholder.svg"}")`,
             }}
           />{" "}
           <div className="flex min-w-0 flex-col lg:min-h-[260px]">
@@ -353,7 +326,6 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
                   key={song.id}
                   song={song}
                   onPlay={() => handlePlaySong(song)}
-                  onShare={() => void handleShareSong(song)}
                   isCurrent={track?.id === song.id}
                   isPlaying={isPlaying && track?.id === song.id}
                 />
@@ -405,12 +377,7 @@ export default function ChartDetailPage({ slug }: { slug: string }) {
                       {artist.name}
                     </h3>
                   </ArtistLink>
-                  <button
-                    type="button"
-                    className="mt-2 rounded-full border border-white/35 px-4 py-1.5 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"
-                  >
-                    Theo dõi
-                  </button>
+                  {artist.id && <FollowButton id={artist.id} className="mt-2" />}
                 </article>
               ))}
             </div>

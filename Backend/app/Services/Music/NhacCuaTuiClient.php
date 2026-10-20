@@ -51,7 +51,7 @@ class NhacCuaTuiClient
         return ['results' => array_slice(array_values($items), 0, $limit)];
     }
 
-    public function getSong(string $songId): array
+    public function getSong(string $songId, bool $includeCountry = true): array
     {
         $songId = trim($songId);
         if ($songId === '' || ! preg_match('/^[A-Za-z0-9]+$/', $songId)) {
@@ -73,7 +73,7 @@ class NhacCuaTuiClient
         $track = $this->normalizeTrack($data, $songId);
         $artistId = trim((string) ($track['artistId'] ?? ''));
 
-        if (blank($track['countryCode']) && $artistId !== '') {
+        if ($includeCountry && blank($track['countryCode']) && $artistId !== '') {
             try {
                 $artist = $this->getArtist($artistId);
                 $track['countryCode'] = $this->countryCode($artist);
@@ -254,6 +254,7 @@ class NhacCuaTuiClient
                 'Referer' => 'https://www.nhaccuatui.com/',
             ])
             ->withUserAgent(config('services.nhaccuatui.user_agent'))
+            ->connectTimeout(5)
             ->timeout((int) config('services.nhaccuatui.timeout', 15));
     }
 

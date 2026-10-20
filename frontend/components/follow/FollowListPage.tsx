@@ -2,6 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import Link from 'next/link';
+import { useLibrary } from '@/components/library/LibraryProvider';
+import UserAvatar from '@/components/auth/UserAvatar';
+import FollowButton from './FollowButton';
 
 import { useLoginModal } from '@/components/auth/LoginModalProvider';
 
@@ -41,6 +45,8 @@ export default function FollowListPage({ kind }: FollowListPageProps) {
   const { user, openLogin } = useLoginModal();
   const isFollowing = kind === 'following';
   const [followAudience, setFollowAudience] = useState<'artists' | 'users'>('artists');
+  const { data, error, refresh } = useLibrary();
+  const people = isFollowing ? (followAudience === 'artists' ? data?.following_artists : data?.following_users) : data?.followers;
 
   if (!user) {
     return (
@@ -66,10 +72,10 @@ export default function FollowListPage({ kind }: FollowListPageProps) {
         <nav aria-label="Danh sách theo dõi" className="mt-7 border-b border-white/10">
           <div className="flex gap-6">
             <FollowTab active={isFollowing} onClick={() => router.push('/following')}>
-              Đang theo dõi · 0
+              Đang theo dõi · {data?.following_count ?? '…'}
             </FollowTab>
             <FollowTab active={!isFollowing} onClick={() => router.push('/followers')}>
-              Người theo dõi · 0
+              Người theo dõi · {data?.followers_count ?? '…'}
             </FollowTab>
           </div>
         </nav>
@@ -97,14 +103,21 @@ export default function FollowListPage({ kind }: FollowListPageProps) {
           </div>
         ) : null}
 
-        <section className="flex min-h-[390px] flex-1 flex-col items-center justify-center pb-6 text-center sm:min-h-[460px]">
+        {error && <p role="alert" className="mt-6 text-red-300">{error} <button onClick={refresh} className="underline">Thử lại</button></p>}
+        {people?.length ? <section className="mt-8 grid grid-cols-2 gap-6 md:grid-cols-4 xl:grid-cols-5">{people.map((person) => <article key={person.id} className="flex flex-col items-center gap-3 rounded-xl p-3 text-center hover:bg-white/5">
+          <Link href={isFollowing && followAudience === 'artists' ? `/artist/${encodeURIComponent('slug' in person ? person.slug || person.id : person.id)}` : `/user/${encodeURIComponent(person.id)}`} className="group w-full">
+            <UserAvatar name={person.name} avatarUrl={person.avatar_url} className="mx-auto aspect-square h-auto w-full max-w-44 text-5xl" />
+            <h2 className="mt-3 font-bold group-hover:text-cyan-300">{person.name}</h2>
+          </Link>
+          <FollowButton kind={isFollowing && followAudience === 'artists' ? 'artist' : 'user'} id={person.id} />
+        </article>)}</section> : <section className="flex min-h-[390px] flex-1 flex-col items-center justify-center pb-6 text-center sm:min-h-[460px]">
           <EmptyFollowIcon />
           <p className="mt-4 text-lg font-bold text-white">
-            {isFollowing
+            {!data ? 'Đang tải danh sách…' : isFollowing
               ? followAudience === 'artists' ? 'Bạn chưa theo dõi nghệ sĩ nào' : 'Bạn chưa theo dõi người dùng nào'
               : 'Bạn chưa được theo dõi bởi bất kỳ ai'}
           </p>
-        </section>
+        </section>}
       </div>
     </main>
   );

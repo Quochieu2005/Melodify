@@ -4,7 +4,8 @@ import Link from 'next/link';
 
 import { usePlayer } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
-import { getVisitorId, recordSongShare, type ChartRecord, type ChartSong } from '@/lib/api';
+import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
+import { type ChartRecord, type ChartSong } from '@/lib/api';
 import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 
 function ChartPlayIcon() {
@@ -55,17 +56,6 @@ export default function ChartCard({ chart, className = '' }: { chart: ChartRecor
     playSong(song, songs);
   };
 
-  const handleShareSong = async (song: ChartSong) => {
-    const url = `${window.location.origin}${songPath(song)}`;
-    try {
-      if (navigator.share) await navigator.share({ title: song.title, url });
-      else await navigator.clipboard.writeText(url);
-      await recordSongShare(song.id, 'web', getVisitorId());
-    } catch {
-      // The share sheet can be dismissed without an error message.
-    }
-  };
-
   return (
     <article className={`min-h-[410px] rounded-[12px] p-4 text-white sm:p-5 ${toneClass(chart.tone)} ${className}`.trim()}>
       <div className="flex items-center justify-between gap-3">
@@ -85,12 +75,12 @@ export default function ChartCard({ chart, className = '' }: { chart: ChartRecor
             const isCurrent = track?.id === song.id;
             const artists = song.artists?.map((artist) => artist.name).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật';
             return (
-              <li key={`${chart.slug}-${song.id}`} className="group relative grid grid-cols-[24px_56px_minmax(0,1fr)] items-center gap-3 rounded-[14px] px-1 py-2 transition-colors hover:bg-white/10 focus-within:bg-white/10">
+              <li key={`${chart.slug}-${song.id}`} className="group relative z-0 grid grid-cols-[24px_56px_minmax(0,1fr)] items-center gap-3 rounded-[14px] px-1 py-2 transition-colors hover:z-20 hover:bg-white/10 focus-within:z-20 focus-within:bg-white/10">
                 <div className="flex h-[54px] flex-col items-center justify-center gap-1 text-center">
                   <span className="text-lg font-bold">{song.rank}</span>
                   <Trend value={song.trend} />
                 </div>
-                <div className="relative size-14 overflow-hidden rounded-[6px] bg-black/20 bg-cover bg-center" style={{ backgroundImage: `url("${song.cover_url || '/topics/genre/vpop_600.png'}")` }}>
+                <div className="relative size-14 overflow-hidden rounded-[6px] bg-black/20 bg-cover bg-center" style={{ backgroundImage: `url("${song.cover_url || '/images/cover-placeholder.svg'}")` }}>
                   <button type="button" onClick={() => handlePlaySong(song)} aria-label={isCurrent && isPlaying ? `Tạm dừng ${song.title}` : `Phát ${song.title}`} className="pointer-events-none absolute inset-0 grid place-items-center bg-black/35 text-white opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
                     <span className="grid size-9 place-items-center rounded-full bg-white text-[#202a28]">{isCurrent && isPlaying ? <PauseIcon /> : <PlayGlyph className="size-4" />}</span>
                   </button>
@@ -100,7 +90,7 @@ export default function ChartCard({ chart, className = '' }: { chart: ChartRecor
                   <p className="mt-1 truncate text-xs text-white/55">{artists}</p>
                   <p className="mt-1 flex min-w-0 items-center gap-1 truncate text-[11px] text-white/75"><PublisherMark />{song.publisher || 'Melodify'}</p>
                 </div>
-                <button type="button" onClick={() => void handleShareSong(song)} aria-label={`Chia sẻ ${song.title}`} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-lg font-bold tracking-[3px] text-white opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">...</button>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"><SongRowActionMenu song={song} buttonClassName="pointer-events-none opacity-100 group-hover:pointer-events-auto group-focus-within:pointer-events-auto" /></div>
               </li>
             );
           })}

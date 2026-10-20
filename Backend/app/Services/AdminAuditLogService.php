@@ -123,6 +123,10 @@ class AdminAuditLogService
             $input['avatar_file'] = '[đã tải lên]';
         }
 
+        foreach (array_keys($request->allFiles()) as $fileKey) {
+            $input[$fileKey] = '[uploaded file]';
+        }
+
         return $input;
     }
 

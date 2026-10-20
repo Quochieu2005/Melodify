@@ -1,4 +1,5 @@
 'use client';
+import FollowButton from '@/components/follow/FollowButton';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -7,11 +8,14 @@ import { usePlayer } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { getPlaylist, getVisitorId, recordPlaylistShare, togglePlaylistFavorite, type Playlist, type Song, type SongArtistCredit } from '@/lib/api';
 import { ArtistLink, ArtistNames } from '@/components/artists';
+import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
+import { AddSongsToPlaylistDialog } from '@/components/playlists/AddSongsToPlaylistDialog';
 import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
+import { downloadSongFiles, setSongFavorites } from '@/lib/song-actions';
 
 import styles from '@/components/albums/AlbumDetailPage.module.css';
 
-const fallbackCover = '/topics/genre/vpop_600.png';
+const fallbackCover = '/images/cover-placeholder.svg';
 const maxHeaderArtists = 3;
 
 function HeartIcon({ filled }: { filled: boolean }) {
@@ -142,7 +146,7 @@ function PlaylistSongRow({ song, index, coverUrl, checked, onToggle, onPlay, isC
       </div>
       <ArtistNames artists={songArtists(song)} className="hidden truncate text-[13px] text-white/65 sm:block" />
       <span className="text-right text-[13px] text-white/75">{formatDuration(song.duration_seconds)}</span>
-      <button type="button" aria-label={`Tùy chọn bài ${song.title}`} className={`${styles.rowMore} grid size-7 place-items-center rounded-full text-white/75 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5]`}><MoreHorizontalIcon /></button>
+      <SongRowActionMenu song={song} buttonClassName="pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100" />
     </li>
   );
 }
@@ -159,6 +163,7 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
   const [isFavoritePending, setIsFavoritePending] = useState(false);
   const [isSharePending, setIsSharePending] = useState(false);
   const [shareStatus, setShareStatus] = useState('');
+  const [isPlaylistDialogOpen, setIsPlaylistDialogOpen] = useState(false);
   const actionMenusRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -229,6 +234,7 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
 
   const songs = playlist.songs ?? [];
   const visibleSongs = songs.slice(0, request.visibleCount);
+  const selectedSongs = songs.filter((song) => selectedIds.includes(song.id));
   const hasMoreSongs = request.visibleCount < songs.length;
   const allSongsSelected = songs.length > 0 && selectedIds.length === songs.length;
   const playlistHasCurrentTrack = Boolean(track && songs.some((song) => song.id === track.id));
@@ -244,6 +250,20 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
 
   const toggleAllSongs = () => {
     setSelectedIds(allSongsSelected ? [] : songs.map((song) => song.id));
+  };
+
+  const handleAddSelectedToFavorites = async () => {
+    const results = await setSongFavorites(selectedSongs, true, getVisitorId());
+    const addedCount = results.filter((result) => result.status === 'fulfilled').length;
+    const failedCount = results.length - addedCount;
+    setShareStatus(failedCount === 0
+      ? `Đã thêm ${addedCount} bài vào Yêu thích.`
+      : `Đã thêm ${addedCount} bài; ${failedCount} bài chưa cập nhật được.`);
+  };
+
+  const handleDownloadSelected = () => {
+    downloadSongFiles(selectedSongs);
+    setShareStatus(`Đang tải ${selectedSongs.length} bài đã chọn.`);
   };
 
   const handlePlayAll = () => {
@@ -365,7 +385,7 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
 
               <div className="mt-4 flex flex-wrap items-center gap-4">
                 <button type="button" onClick={handlePlayAll} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#00cfe3] px-6 text-[14px] font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">{playlistIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}{playlistIsPlaying ? 'Tạm dừng' : 'Phát tất cả'}</button>
-                <button type="button" className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3c4140] px-7 text-[14px] font-bold text-white transition-colors hover:bg-[#4a504e]"><DownloadIcon />Tải về</button>
+                <button type="button" onClick={() => downloadSongFiles(songs)} disabled={songs.length === 0} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3c4140] px-7 text-[14px] font-bold text-white transition-colors hover:bg-[#4a504e] disabled:cursor-not-allowed disabled:opacity-50"><DownloadIcon />Tải về</button>
               </div>
             </div>
             <span className="sr-only" aria-live="polite">{shareStatus}</span>
@@ -375,7 +395,7 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
         <section aria-labelledby="playlist-songs-heading" className="mt-10">
           <h2 id="playlist-songs-heading" className="sr-only">Danh sách bài hát trong playlist</h2>
           {selectedIds.length > 0 ? (
-            <div className="mb-3 flex min-h-8 flex-wrap items-center gap-2"><SelectionCheckbox checked={allSongsSelected} label="Chọn tất cả bài hát" onChange={toggleAllSongs} /><button type="button" className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><span aria-hidden="true">☷</span>Thêm vào playlist</button><button type="button" className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><span aria-hidden="true">♡</span>Thêm vào Yêu thích</button><button type="button" className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><DownloadIcon />Tải về</button></div>
+            <div className="mb-3 flex min-h-8 flex-wrap items-center gap-2"><SelectionCheckbox checked={allSongsSelected} label="Chọn tất cả bài hát" onChange={toggleAllSongs} /><button type="button" onClick={() => setIsPlaylistDialogOpen(true)} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><span aria-hidden="true">☷</span>Thêm vào playlist</button><button type="button" onClick={() => void handleAddSelectedToFavorites()} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><span aria-hidden="true">♡</span>Thêm vào Yêu thích</button><button type="button" onClick={handleDownloadSelected} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><DownloadIcon />Tải về</button></div>
           ) : (
             <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4"><span>#</span><span>Tiêu đề</span><span className="hidden sm:block">Nghệ sĩ</span><span className="grid size-5 place-items-center justify-self-end text-[18px] leading-none">◷</span><span aria-hidden="true" /></div>
           )}
@@ -383,6 +403,8 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
           {visibleSongs.length > 0 ? <ol className="mt-2 space-y-0.5">{visibleSongs.map((song, index) => <PlaylistSongRow key={song.id} song={song} index={index} coverUrl={coverUrl} checked={selectedIds.includes(song.id)} onToggle={() => toggleSong(song.id)} onPlay={() => handlePlaySong(song)} isCurrentTrack={track?.id === song.id} isPlaying={isPlaying && track?.id === song.id} />)}</ol> : <p className="mt-8 rounded-lg bg-[#30443f] px-4 py-5 text-sm text-white/70">Playlist chưa có bài hát.</p>}
           {hasMoreSongs ? <button type="button" onClick={() => setRequest((current) => ({ ...current, visibleCount: current.visibleCount + 30 }))} className="mt-5 inline-flex items-center gap-2 text-[14px] font-bold text-white transition-colors hover:text-[#00d3e5]">Xem thêm <span aria-hidden="true">⌄</span></button> : null}
         </section>
+
+        <AddSongsToPlaylistDialog songs={selectedSongs} open={isPlaylistDialogOpen} onClose={() => setIsPlaylistDialogOpen(false)} onAdded={setShareStatus} />
 
         {collaborators.length > 0 ? (
           <section id="playlist-collaborators" aria-labelledby="playlist-collaborators-heading" className="scroll-mt-24 mt-14">
@@ -394,7 +416,7 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
                   <ArtistAvatar artist={artist} />
                   <h3 className="mt-3 truncate text-[14px] font-bold text-white">{artist.name}</h3>
                   </ArtistLink>
-                  <button type="button" className="mt-2 rounded-full border border-white/35 px-4 py-1.5 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10">Theo dõi</button>
+                  {artist.id && <FollowButton id={artist.id} className="mt-2" />}
                 </article>
               ))}
             </div>

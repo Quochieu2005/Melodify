@@ -1,4 +1,3 @@
-export { default as FeaturedSongsSection } from './sections/FeaturedSongsSection';
 export { default as HeroSection } from './sections/HeroSection';
 export { default as HomeTopicsSection } from './sections/HomeTopicsSection';
 export { default as AlbumHotSection } from './sections/AlbumHotSection';

@@ -2,7 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import { useLoginModal } from '@/components/auth/LoginModalProvider';
+import { useLibrary } from '@/components/library/LibraryProvider';
+import CreatePlaylistDialog from '@/components/playlists/CreatePlaylistDialog';
 
 const navigation = [
   {
@@ -23,7 +26,7 @@ const navigation = [
   },
   {
     label: 'Dành cho bạn',
-    href: '/home#for-you',
+    href: '/for-you',
     icon: (
       <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-current">
         <rect x="2" y="10" width="2.5" height="10" rx="1.25" />
@@ -104,7 +107,17 @@ function Navigation({ items, onLogin, isAuthenticated, isLibrary = false }: { it
 
 export default function Sidebar() {
   const { openLogin, user, logout } = useLoginModal();
+  const { data, error, refresh } = useLibrary();
+  const [creating, setCreating] = useState(false);
+  const pathname = usePathname();
+  const hasCollections = Boolean(data && (data.created_playlists.length || data.favorite_playlists.length || data.favorite_albums.length));
+  const groups = data ? [
+    { title: 'Playlist đã tạo', create: true, items: data.created_playlists.map((item) => ({ ...item, href: `/playlist/${encodeURIComponent(item.slug || item.id)}` })) },
+    { title: 'Playlist yêu thích', items: data.favorite_playlists.map((item) => ({ ...item, href: `/playlist/${encodeURIComponent(item.slug || item.id)}` })) },
+    { title: 'Album yêu thích', items: data.favorite_albums.map((item) => ({ ...item, name: item.title, href: `/album/${encodeURIComponent(item.slug || item.id)}` })) },
+  ] : [];
   return (
+    <>
     <aside className="relative z-20 sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-[#151329] text-[#f7f5ff] lg:flex">
       <Link href="/home" className="flex items-center gap-3 px-5 pb-7 pt-6 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-300">
         <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-violet-400 to-fuchsia-500 text-xl shadow-[0_8px_22px_rgba(124,92,255,0.32)]">♫</span>
@@ -120,7 +133,16 @@ export default function Sidebar() {
         <div className="mt-3"><Navigation items={library} onLogin={openLogin} isAuthenticated={Boolean(user)} isLibrary /></div>
       </section>
 
-      <div className="mt-auto p-5">
+      {hasCollections ? <div className="sidebar-collections mt-8 space-y-8 px-6 pb-28">
+        {groups.map((group) => <section key={group.title} aria-label={group.title}>
+          <div className="mb-4 flex items-center justify-between gap-2"><h2 className="text-xs font-bold uppercase text-white/50">{group.title}</h2>{group.create && <button type="button" aria-label="Tạo playlist" onClick={() => user ? setCreating(true) : openLogin()} className="grid size-5 place-items-center rounded-full border border-white/50 text-white/60 hover:border-cyan-300 hover:text-cyan-300">+</button>}</div>
+          <ul className="space-y-2">{group.items.map((item) => <li key={item.id}><Link href={item.href} aria-current={pathname === item.href ? 'page' : undefined} className={`group flex items-center gap-3 rounded-lg p-1.5 text-sm text-white/75 transition-colors hover:bg-white/10 hover:text-cyan-300 focus-visible:outline-2 focus-visible:outline-cyan-300 ${pathname === item.href ? 'bg-white/10 text-cyan-300' : ''}`}>
+            <span role="img" aria-label={item.name} className="relative size-10 shrink-0 overflow-hidden rounded bg-white/10 bg-cover bg-center" style={{ backgroundImage: `url("${item.cover_url || '/sidebar-favorites.png'}")` }}><span className="absolute inset-0 grid place-items-center bg-black/35 text-white opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">▶</span></span><span className="line-clamp-2 leading-5">{item.name}</span>
+          </Link></li>)}</ul>
+          {!group.items.length && <p className="text-xs text-white/40">Chưa có {group.title.toLowerCase()}.</p>}
+        </section>)}
+        {error && <button type="button" onClick={refresh} className="text-xs text-red-300">Không thể cập nhật thư viện. Thử lại</button>}
+      </div> : <div className="sidebar-account mt-auto p-5">
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
           {user ? (
             <>
@@ -134,7 +156,9 @@ export default function Sidebar() {
             </>
           )}
         </div>
-      </div>
+      </div>}
     </aside>
+    {creating && <CreatePlaylistDialog onClose={() => setCreating(false)} />}
+    </>
   );
 }

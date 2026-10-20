@@ -1,4 +1,5 @@
 'use client';
+import FollowButton from '@/components/follow/FollowButton';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -6,10 +7,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArtistLink, ArtistNames } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { usePlayer } from '@/components/player';
-import { ApiError, getArtist, getSong, getVisitorId, listSongs, recordSongShare, toggleSongFavorite, type AlbumRecord, type Lyric, type Song, type SongArtistCredit } from '@/lib/api';
+import { ApiError, getArtist, getSong, getVisitorId, recordSongShare, toggleSongFavorite, type AlbumRecord, type Lyric, type Song, type SongArtistCredit } from '@/lib/api';
 import { recentAlbumItem, recentSongItem, recordRecentItem } from '@/lib/recent-history';
 
-const fallbackCover = '/topics/genre/vpop_600.png';
+const fallbackCover = '/images/cover-placeholder.svg';
 const sidebarSurfaceStyle = {
   background: 'linear-gradient(180deg, #213d39 0%, #202a28 28%, #171817 68%, #111 100%)',
 };
@@ -148,7 +149,7 @@ function ArtistPanel({ artists }: { artists: SongArtistCredit[] }) {
               <ArtistLink artist={artist} className="block truncate text-[15px] font-bold text-white hover:text-cyan-300">{artist.name}</ArtistLink>
               <p className="mt-1 text-xs text-white/50">Nghệ sĩ</p>
             </div>
-            <button type="button" className="shrink-0 rounded-full border border-white/70 px-4 py-1.5 text-xs font-bold transition-colors hover:border-cyan-300 hover:text-cyan-300">Theo dõi</button>
+                  {artist.id && <FollowButton id={artist.id} />}
           </div>
         ))}
       </div>
@@ -175,22 +176,12 @@ export default function SongDetailPage({ slug }: { slug: string }) {
       setIsLoading(true);
       setError('');
       try {
-        let songResponse: Song & { lyrics: Lyric[] };
-        try {
-          songResponse = (await getSong(slug, getVisitorId())).data;
-        } catch (loadError) {
-          if (loadError instanceof ApiError && loadError.status !== 404) throw loadError;
-          const searchQuery = decodeURIComponent(slug).replace(/-/g, ' ');
-          const searchResponse = await listSongs({ query: searchQuery, perPage: 1 });
-          const fallbackSong = searchResponse.data[0];
-          if (!fallbackSong) throw new Error('Song not found');
-          songResponse = { ...fallbackSong, lyrics: [] };
-        }
+        const songResponse = (await getSong(slug, getVisitorId())).data;
         if (cancelled) return;
         setSong(songResponse);
         recordRecentItem(recentSongItem(songResponse));
-      } catch {
-        if (!cancelled) setError('Không thể tải bài hát lúc này.');
+      } catch (cause) {
+        if (!cancelled) setError(cause instanceof ApiError && cause.status === 404 ? 'Không tìm thấy bài hát.' : 'Không thể tải bài hát lúc này.');
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -200,6 +191,12 @@ export default function SongDetailPage({ slug }: { slug: string }) {
 
     return () => { cancelled = true; };
   }, [slug]);
+
+  useEffect(() => {
+    if (!song || isLoading || window.location.hash !== '#lyrics') return;
+    const frame = window.requestAnimationFrame(() => document.getElementById('lyrics')?.scrollIntoView({ block: 'start' }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [song, isLoading]);
 
   const artists = useMemo(() => song ? songArtists(song) : [], [song]);
   const currentTrack = Boolean(song && track?.id === song.id);
@@ -349,7 +346,7 @@ export default function SongDetailPage({ slug }: { slug: string }) {
         </div>
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
-          <section aria-labelledby="lyrics-heading">
+          <section id="lyrics" aria-labelledby="lyrics-heading" className="scroll-mt-24">
             <h2 id="lyrics-heading" className="text-[26px] font-bold">Lời bài hát</h2>
             <div className="mt-4 rounded-xl bg-[#242424] p-5 sm:p-6">
               <p className="border-b border-white/10 pb-4 text-xs text-white/55">Đăng bởi <span className="font-bold text-white">{song.publisher || 'Melodify'}</span></p>

@@ -73,6 +73,22 @@ export type Playlist = {
   is_favorite?: boolean;
 };
 
+export type UserPlaylistSummary = {
+  id: string;
+  name: string;
+  slug: string;
+  cover_url: string | null;
+  song_count: number;
+};
+
+export type SongReportReason =
+  | "incorrect_audio"
+  | "incorrect_information"
+  | "duplicate"
+  | "inappropriate"
+  | "copyright"
+  | "other";
+
 export type HomeDiscovery = {
   single_new_releases: Song[];
   popular_songs: Song[];
@@ -145,11 +161,13 @@ export type VipTransactionHistory = {
 
 export type HomeBootstrap = {
   banners: Banner[];
+  charts: ChartRecord[];
   topics: TopicRecord[];
   genres: GenreRecord[];
   albums: AlbumRecord[];
   playlists: Playlist[];
   discovery: HomeDiscovery;
+  trending_artists: HomeTrendingArtist[];
 };
 
 export type Artist = {
@@ -159,8 +177,22 @@ export type Artist = {
   slug: string | null;
   bio: string | null;
   avatar_url: string | null;
+  followers_count?: number;
   verified: boolean;
   status: string;
+};
+
+export type HomeTrendingArtist = Artist & {
+  weekly_plays: number;
+  weekly_views: number;
+  trending_score: number;
+  ranking_source: 'weekly' | 'catalog';
+  featured_song: (Pick<Song, "id" | "slug" | "title" | "cover_url" | "publisher"> & Pick<Song, "artist" | "artists"> & { weekly_plays: number }) | null;
+};
+
+export type TrendingArtistsResponse = {
+  data: HomeTrendingArtist[];
+  meta: { date: string; limit: number; period_days: number; source: 'weekly' | 'catalog'; total: number };
 };
 
 export type ArtistDetail = Artist & {
@@ -322,8 +354,36 @@ export type SocialProvider = "google" | "facebook";
 
 export const AUTH_TOKEN_STORAGE_KEY = "melodify_access_token";
 export const AUTH_USER_STORAGE_KEY = "melodify_auth_user";
+const LIBRARY_IMPORT_SESSION_KEY = "melodify_library_imported";
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
 const songFavoriteStates = new Map<string, boolean>();
+const importedLibraries = new Map<string, Promise<void>>();
+
+export function notifyLibraryChanged() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("melodify-library-changed"));
+}
+
+async function importLegacyLibrary(token: string) {
+  if (typeof window !== "undefined" && window.sessionStorage.getItem(LIBRARY_IMPORT_SESSION_KEY) === "1") {
+    return;
+  }
+  let pending = importedLibraries.get(token);
+  if (!pending) {
+    pending = fetch(`${API_URL}/v1/me/library/import`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ visitor_id: getVisitorId() }),
+    }).then(async (response) => {
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new ApiError(response.status, body.message || "Không thể đồng bộ thư viện.");
+      }
+      if (typeof window !== "undefined") window.sessionStorage.setItem(LIBRARY_IMPORT_SESSION_KEY, "1");
+    }).catch((error) => { importedLibraries.delete(token); throw error; });
+    importedLibraries.set(token, pending);
+  }
+  return pending;
+}
 
 function rememberSongFavorite(songId: string, favorited: boolean) {
   songFavoriteStates.set(songId, favorited);
@@ -339,6 +399,9 @@ export function getCachedSongFavorite(songId: string) {
 export function saveAuthSession(auth: AuthResponse): void {
   if (typeof window === "undefined") return;
 
+  songFavoriteStates.clear();
+  importedLibraries.clear();
+  window.sessionStorage.removeItem(LIBRARY_IMPORT_SESSION_KEY);
   window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, auth.token);
   window.localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(auth.user));
   window.dispatchEvent(new Event("melodify-auth-changed"));
@@ -347,6 +410,9 @@ export function saveAuthSession(auth: AuthResponse): void {
 export function clearAuthSession(): void {
   if (typeof window === "undefined") return;
 
+  songFavoriteStates.clear();
+  importedLibraries.clear();
+  window.sessionStorage.removeItem(LIBRARY_IMPORT_SESSION_KEY);
   window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
   window.localStorage.removeItem(AUTH_USER_STORAGE_KEY);
   window.dispatchEvent(new Event("melodify-auth-changed"));
@@ -444,8 +510,12 @@ export async function apiFetch<T>(
   }
 
   const request = (async () => {
+    if (storedToken && (/^\/v1\/(me\/library|favorites\/songs)/.test(path) || /\/(favorite)(\?|$)/.test(path) || /^\/v1\/(songs|albums|playlists)\/[^/]+(?:\?|$)/.test(path))) {
+      await importLegacyLibrary(storedToken);
+    }
     const response = await fetch(`${API_URL}${path}`, {
       ...init,
+      cache: "no-store",
       headers: {
         Accept: "application/json",
         ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
@@ -458,7 +528,9 @@ export async function apiFetch<T>(
       throw new ApiError(response.status, body.message ?? "API request failed");
     }
 
-    return response.json() as Promise<T>;
+    const payload = await response.json() as T;
+    if (method !== "GET" && (/\/(favorite|follow)(\?|$)/.test(path) || path.startsWith("/v1/me/playlists"))) notifyLibraryChanged();
+    return payload;
   })();
 
   if (method !== "GET") return request;
@@ -488,23 +560,12 @@ export function getVipTransactionHistory(page = 1) {
   return apiFetch<VipTransactionHistory>(`/v1/vip/transactions?page=${page}`);
 }
 
-let homeBootstrapPromise: Promise<{
-  data: HomeBootstrap;
-  meta: { date: string; refresh_minutes: number };
-}> | null = null;
-
-export function getHomeBootstrap(options: { force?: boolean } = {}) {
-  if (options.force || !homeBootstrapPromise) {
-    homeBootstrapPromise = apiFetch<{
-      data: HomeBootstrap;
-      meta: { date: string; refresh_minutes: number };
-    }>("/v1/home/bootstrap").catch((error) => {
-      homeBootstrapPromise = null;
-      throw error;
-    });
-  }
-
-  return homeBootstrapPromise;
+export function getHomeBootstrap() {
+  // apiFetch shares only concurrent requests; a new visit gets fresh API data.
+  return apiFetch<{
+    data: HomeBootstrap;
+    meta: { date: string; refresh_minutes: number };
+  }>("/v1/home/bootstrap");
 }
 
 export async function uploadImage(file: File) {
@@ -545,6 +606,58 @@ export function listFavoriteSongs(visitorId?: string) {
   return apiFetch<{ data: Song[]; meta: { total: number } }>(
     `/v1/favorites/songs${query}`,
   );
+}
+
+export function reorderFavoriteSongs(songIds: string[], visitorId?: string) {
+  return apiFetch<{ ordered: boolean }>("/v1/favorites/songs/reorder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ song_ids: songIds, ...(visitorId ? { visitor_id: visitorId } : {}) }),
+  });
+}
+
+export function listUserPlaylists() {
+  return apiFetch<{ data: UserPlaylistSummary[] }>("/v1/me/playlists");
+}
+
+export function createUserPlaylist(name: string) {
+  return apiFetch<{ data: UserPlaylistSummary }>("/v1/me/playlists", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function addSongsToUserPlaylist(playlistId: string, songIds: string[]) {
+  return apiFetch<{ message: string; added_count: number }>(
+    `/v1/me/playlists/${encodeURIComponent(playlistId)}/songs`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ song_ids: songIds }),
+    },
+  );
+}
+
+export function reportSong(
+  song: Pick<Song, "id" | "slug">,
+  reason: SongReportReason,
+  details: string,
+  visitorId?: string,
+) {
+  return apiFetch<{ message: string; report_id: string }>(
+    `/v1/songs/${encodeURIComponent(song.slug || song.id)}/report`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason, details, ...(visitorId ? { visitor_id: visitorId } : {}) }),
+    },
+  );
+}
+
+export function getSongDownloadUrl(song: Song) {
+  return song.audio_url || song.stream_url || song.source_url || song.preview_url
+    || `${API_URL}/v1/songs/${encodeURIComponent(song.slug || song.id)}/audio`;
 }
 
 export async function getSong(songId: string, visitorId?: string) {
@@ -705,17 +818,30 @@ export async function listTopics(
 }
 
 export async function listGenres(
-  options: { query?: string; perPage?: number } = {},
+  options: { query?: string; perPage?: number; page?: number } = {},
 ) {
   const params = new URLSearchParams();
 
   if (options.query?.trim()) params.set("q", options.query.trim());
   params.set("per_page", String(options.perPage ?? 50));
+  if (options.page) params.set("page", String(options.page));
 
   const query = params.toString();
   return apiFetch<PaginatedResponse<GenreRecord>>(
     `/v1/genres${query ? `?${query}` : ""}`,
   );
+}
+
+export async function listAllGenres() {
+  const firstPage = await listGenres({ perPage: 50, page: 1 });
+  if (firstPage.meta.last_page <= 1) return firstPage.data;
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: firstPage.meta.last_page - 1 }, (_, index) =>
+      listGenres({ perPage: 50, page: index + 2 }),
+    ),
+  );
+  return [firstPage, ...remainingPages].flatMap((page) => page.data);
 }
 
 export async function listPlaylists(
@@ -905,6 +1031,31 @@ export async function listArtists(
   const query = params.toString();
   return apiFetch<PaginatedResponse<Artist>>(
     `/v1/artists${query ? `?${query}` : ""}`,
+  );
+}
+
+export function getForYouArtists(genreIds: string[]) {
+  const params = new URLSearchParams();
+  genreIds.forEach((id) => params.append("genre_ids[]", id));
+  return apiFetch<{ data: Artist[] }>(`/v1/for-you/artists?${params.toString()}`);
+}
+
+export function getForYouSong(genreIds: string[], artistIds: string[], excludeSongIds: string[] = []) {
+  const params = new URLSearchParams();
+  genreIds.forEach((id) => params.append("genre_ids[]", id));
+  artistIds.forEach((id) => params.append("artist_ids[]", id));
+  excludeSongIds.forEach((id) => params.append("exclude_song_ids[]", id));
+  return apiFetch<{ data: Song | null }>(`/v1/for-you/song?${params.toString()}`);
+}
+
+export function getTrendingArtists() {
+  return apiFetch<TrendingArtistsResponse>("/v1/artists/trending");
+}
+
+export function recordArtistView(artistId: string) {
+  return apiFetch<{ recorded: boolean }>(
+    `/v1/artists/${encodeURIComponent(artistId)}/view`,
+    jsonRequest({ visitor_id: getVisitorId() }),
   );
 }
 

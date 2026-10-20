@@ -26,7 +26,17 @@ class SongImportService
     {
         $track = $this->nhaccuatui->getSong($songId);
         $externalId = (string) ($track['trackId'] ?? $songId);
-        $artistNames = $this->artistNames((string) ($track['artistName'] ?? ''));
+        $artistNames = collect($track['artists'] ?? [])
+            ->filter(fn ($artist): bool => is_array($artist) && filled($artist['name'] ?? null))
+            ->pluck('name')
+            ->map(fn ($name): string => trim((string) $name))
+            ->filter()
+            ->unique(fn (string $name): string => $this->artistKey($name))
+            ->values()
+            ->all();
+        if ($artistNames === []) {
+            $artistNames = $this->artistNames((string) ($track['artistName'] ?? ''));
+        }
         $artists = $this->syncArtists($track, $artistNames, $admin);
 
         $song = Song::query()
@@ -35,7 +45,7 @@ class SongImportService
             ->first();
 
         if (! $song) {
-            $song = new Song();
+            $song = new Song;
             $song->external_source = 'nhaccuatui';
             $song->external_id = $externalId;
             if ($admin) {
@@ -105,7 +115,7 @@ class SongImportService
     }
 
     /** @param array<int, string> $names
-     *  @return array<int, Artist>
+     * @return array<int, Artist>
      */
     private function syncArtists(array $track, array $names, ?object $admin): array
     {
@@ -128,7 +138,7 @@ class SongImportService
             $artist ??= $this->findArtistByName($name);
 
             if (! $artist) {
-                $artist = new Artist();
+                $artist = new Artist;
                 $artist->name = $name;
                 $artist->slug = $this->uniqueSlug(Artist::class, Str::slug($name), null);
                 if ($admin) {
@@ -244,7 +254,7 @@ class SongImportService
 
     private function artistKey(string $name): string
     {
-        return Str::lower(preg_replace('/[^a-z0-9]+/', '', Str::ascii($name)) ?? '');
+        return preg_replace('/[^a-z0-9]+/', '', Str::lower(Str::ascii($name))) ?? '';
     }
 
     private function syncArtistAvatar(Artist $artist, array $track): void

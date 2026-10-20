@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Mobile",
+    "name": "Melodify",
     "slug": "Mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -28,11 +28,13 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#151817",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-audio",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

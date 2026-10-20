@@ -18,7 +18,7 @@ export type RecentItem = {
 const STORAGE_KEY = 'melodify_recent_history';
 const MAX_ITEMS = 100;
 const HISTORY_EVENT = 'melodify-recent-history-changed';
-const fallbackCover = '/topics/genre/vpop_600.png';
+const fallbackCover = '/images/cover-placeholder.svg';
 
 function canUseStorage() {
   return typeof window !== 'undefined';

@@ -1,5 +1,5 @@
-import { Slot } from 'expo-router';
+import RootProviders from '@/components/app/RootProviders';
 
 export default function WebLayout() {
-  return <Slot />;
+  return <RootProviders />;
 }

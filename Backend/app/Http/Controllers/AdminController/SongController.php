@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\AdminController;
 
+use App\Http\Requests\Admin\AdminResourceRequest;
 use App\Models\Album;
 use App\Models\Artist;
 use App\Models\Genre;
@@ -9,22 +10,24 @@ use App\Models\Lyric;
 use App\Models\Playlist;
 use App\Models\PlaylistSong;
 use App\Models\Song;
-use App\Models\SongGenre;
 use App\Models\SongArtist;
+use App\Models\SongAudioFile;
+use App\Models\SongGenre;
 use App\Models\Topic;
 use App\Models\TopicSong;
-use App\Services\Music\NhacCuaTuiClient;
+use App\Services\CloudinaryService;
 use App\Services\Music\LyricsClient;
+use App\Services\Music\NhacCuaTuiClient;
 use App\Services\Music\SongImportService;
-use App\Http\Requests\Admin\AdminResourceRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Illuminate\View\View;
 use RuntimeException;
+use Throwable;
 
 class SongController extends CrudResourceController
 {
@@ -90,6 +93,7 @@ class SongController extends CrudResourceController
             'selectedGenreId' => null,
             'selectedPlaylistId' => null,
             'lyric' => null,
+            'audioFile' => null,
         ]));
     }
 
@@ -109,8 +113,9 @@ class SongController extends CrudResourceController
                 ->value('topic_id'),
             'selectedArtistId' => SongArtist::query()
                 ->where('song_id', (string) $item->getKey())
-                ->orderBy('artist_role')
-                ->value('artist_id'),
+                ->get()
+                ->sortBy(fn (SongArtist $link): int => mb_strtolower(trim((string) ($link->artist_role ?? ''))) === 'primary' ? 0 : 1)
+                ->first()?->artist_id,
             'selectedGenreId' => SongGenre::query()
                 ->where('song_id', (string) $item->getKey())
                 ->value('genre_id'),
@@ -119,13 +124,48 @@ class SongController extends CrudResourceController
                 ->orderBy('position')
                 ->value('playlist_id'),
             'lyric' => Lyric::query()->where('song_id', (string) $item->getKey())->first(),
+            'audioFile' => SongAudioFile::query()
+                ->where('song_id', (string) $item->getKey())
+                ->where('file_type', 'full')
+                ->where('status', 'active')
+                ->first(),
         ]));
     }
 
-    public function store(AdminResourceRequest $request): RedirectResponse
+    public function store(AdminResourceRequest $request, ?CloudinaryService $cloudinary = null): RedirectResponse
     {
+        $cloudinary ??= app(CloudinaryService::class);
         $data = $this->normalize($request->validated());
         $externalId = trim((string) ($data['external_id'] ?? ''));
+        $uploadedCover = null;
+        $uploadedAudio = null;
+
+        try {
+            $uploadedCover = $this->uploadCoverImage($request, $cloudinary, (string) ($data['slug'] ?? $data['title']));
+            if ($uploadedCover) {
+                $data['cover_url'] = $uploadedCover['url'];
+                $data['cover_public_id'] = $uploadedCover['public_id'];
+            } else {
+                $data['cover_public_id'] = null;
+            }
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->withErrors([
+                'cover_image_file' => 'Không thể tải ảnh bìa lên. Hãy kiểm tra định dạng ảnh và cấu hình lưu trữ rồi thử lại.',
+            ])->withInput();
+        }
+
+        try {
+            $uploadedAudio = $this->uploadFullAudio($request, $cloudinary, (string) ($data['slug'] ?? $data['title']));
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->discardUploadedCover($cloudinary, $uploadedCover);
+
+            return back()->withErrors([
+                'audio_file' => 'Không thể tải file âm thanh lên. Hãy kiểm tra file hoặc cấu hình lưu trữ rồi thử lại.',
+            ])->withInput();
+        }
 
         if ($externalId !== '') {
             try {
@@ -133,6 +173,8 @@ class SongController extends CrudResourceController
                 $song->update($data);
             } catch (RuntimeException $exception) {
                 report($exception);
+                $this->discardUploadedAudio($cloudinary, $uploadedAudio);
+                $this->discardUploadedCover($cloudinary, $uploadedCover);
 
                 return back()->withErrors([
                     'external_id' => 'Không thể lấy dữ liệu bài hát từ NhacCuaTui. Vui lòng chọn lại bài hoặc thử lại.',
@@ -149,16 +191,60 @@ class SongController extends CrudResourceController
         if ($externalId === '' || filled($request->input('plain_lyrics')) || filled($request->input('synced_lyrics'))) {
             $this->syncLyrics($song, $request->input('plain_lyrics'), $request->input('synced_lyrics'));
         }
+        if ($uploadedAudio) {
+            try {
+                $this->saveUploadedAudio($song, $uploadedAudio, $cloudinary);
+            } catch (Throwable $exception) {
+                report($exception);
+                $this->forgetHomeCache();
+
+                return back()->withErrors([
+                    'audio_file' => 'Bài hát đã được tạo nhưng chưa lưu được file âm thanh. Hãy tải file lại trong phần chỉnh sửa.',
+                ])->withInput();
+            }
+        }
         $this->forgetHomeCache();
 
         return redirect()->route("admin.{$this->resource}.index")
             ->with('success', "Đã tạo {$this->title} thành công.");
     }
 
-    public function update(AdminResourceRequest $request, string $id): RedirectResponse
+    public function update(AdminResourceRequest $request, string $id, ?CloudinaryService $cloudinary = null): RedirectResponse
     {
+        $cloudinary ??= app(CloudinaryService::class);
         $item = ($this->model)::query()->findOrFail($id);
         $data = $this->normalize($request->validated(), $item->getKey());
+        $oldCoverPublicId = (string) ($item->cover_public_id ?? '');
+        $submittedCoverUrl = trim((string) $request->input('cover_url', ''));
+        $uploadedCover = null;
+        $uploadedAudio = null;
+
+        try {
+            $uploadedCover = $this->uploadCoverImage($request, $cloudinary, (string) ($data['slug'] ?? $data['title']));
+            if ($uploadedCover) {
+                $data['cover_url'] = $uploadedCover['url'];
+                $data['cover_public_id'] = $uploadedCover['public_id'];
+            } elseif ($submittedCoverUrl !== (string) ($item->cover_url ?? '')) {
+                $data['cover_public_id'] = null;
+            }
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->withErrors([
+                'cover_image_file' => 'Không thể tải ảnh bìa lên. Ảnh hiện tại được giữ nguyên; hãy kiểm tra định dạng rồi thử lại.',
+            ])->withInput();
+        }
+
+        try {
+            $uploadedAudio = $this->uploadFullAudio($request, $cloudinary, (string) ($data['slug'] ?? $data['title']));
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->discardUploadedCover($cloudinary, $uploadedCover);
+
+            return back()->withErrors([
+                'audio_file' => 'Không thể tải file âm thanh lên. File hiện tại vẫn được giữ nguyên; hãy thử lại.',
+            ])->withInput();
+        }
 
         if ($request->boolean('sync_external')
             && $item->external_source === 'nhaccuatui'
@@ -170,6 +256,8 @@ class SongController extends CrudResourceController
                 );
             } catch (RuntimeException $exception) {
                 report($exception);
+                $this->discardUploadedAudio($cloudinary, $uploadedAudio);
+                $this->discardUploadedCover($cloudinary, $uploadedCover);
 
                 return back()->withErrors([
                     'external_id' => 'Không thể lấy lại dữ liệu bài hát từ NhacCuaTui. Vui lòng thử lại.',
@@ -178,11 +266,30 @@ class SongController extends CrudResourceController
         }
 
         $item->update($data);
+        if ($oldCoverPublicId !== '' && $oldCoverPublicId !== (string) ($item->cover_public_id ?? '')) {
+            try {
+                $cloudinary->deleteImage($oldCoverPublicId);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
         $this->syncArtist($item, $request->input('artist_name'));
         $this->syncTopics($item, $request->input('topic_id'));
         $this->syncGenre($item, $request->input('genre_id'));
         $this->addToPlaylist($item, $request->input('playlist_id'));
         $this->syncLyrics($item, $request->input('plain_lyrics'), $request->input('synced_lyrics'));
+        if ($uploadedAudio) {
+            try {
+                $this->saveUploadedAudio($item, $uploadedAudio, $cloudinary);
+            } catch (Throwable $exception) {
+                report($exception);
+                $this->forgetHomeCache();
+
+                return back()->withErrors([
+                    'audio_file' => 'Không thể thay thế file âm thanh. File cũ vẫn được giữ nguyên; hãy thử lại.',
+                ])->withInput();
+            }
+        }
         $this->forgetHomeCache();
 
         return redirect()->route("admin.{$this->resource}.index")
@@ -291,7 +398,15 @@ class SongController extends CrudResourceController
     protected function normalize(array $data, mixed $ignoreId = null): array
     {
         $data = parent::normalize($data, $ignoreId);
-        unset($data['topic_ids'], $data['topic_id'], $data['artist_id'], $data['genre_id'], $data['playlist_id'], $data['plain_lyrics'], $data['synced_lyrics'], $data['sync_external']);
+
+        // The unique sparse compound index only excludes documents when both
+        // provider fields are absent. A blank hidden form input becomes null
+        // and otherwise makes every manually-created song collide at (null, null).
+        if (blank($data['external_id'] ?? null)) {
+            unset($data['external_id'], $data['external_source']);
+        }
+
+        unset($data['topic_ids'], $data['topic_id'], $data['artist_id'], $data['genre_id'], $data['playlist_id'], $data['plain_lyrics'], $data['synced_lyrics'], $data['sync_external'], $data['audio_file'], $data['cover_image_file']);
         $data['is_featured'] = (int) ($data['is_featured'] ?? 0);
         $data['is_hot'] = (int) ($data['is_hot'] ?? 0);
 
@@ -302,11 +417,127 @@ class SongController extends CrudResourceController
         return $data;
     }
 
+    private function uploadFullAudio(Request $request, CloudinaryService $cloudinary, string $slug): ?array
+    {
+        if (! $request->hasFile('audio_file')) {
+            return null;
+        }
+
+        $publicId = $cloudinary->datedPublicId($slug.'-full-audio').'-'.Str::lower(Str::random(8));
+        $uploaded = $cloudinary->uploadAudio(
+            $request->file('audio_file'),
+            config('cloudinary.audio_folder', 'melodify/audio'),
+            $publicId,
+        );
+        $fileUrl = $uploaded['secure_url'] ?? $uploaded['url'] ?? null;
+
+        if (blank($fileUrl)) {
+            throw new RuntimeException('Cloudinary không trả về URL cho file âm thanh.');
+        }
+
+        return [
+            'file_url' => $fileUrl,
+            'public_id' => $uploaded['public_id'] ?? $publicId,
+            'duration_seconds' => isset($uploaded['duration']) ? (int) round((float) $uploaded['duration']) : null,
+        ];
+    }
+
+    private function uploadCoverImage(Request $request, CloudinaryService $cloudinary, string $slug): ?array
+    {
+        if (! $request->hasFile('cover_image_file')) {
+            return null;
+        }
+
+        $publicId = $cloudinary->datedPublicId($slug.'-cover').'-'.Str::lower(Str::random(8));
+        $uploaded = $cloudinary->uploadImage(
+            $request->file('cover_image_file'),
+            config('cloudinary.image_folder', 'melodify/covers'),
+            $publicId,
+        );
+        $url = $uploaded['secure_url'] ?? $uploaded['url'] ?? null;
+
+        if (blank($url)) {
+            throw new RuntimeException('Cloudinary không trả về URL cho ảnh bìa.');
+        }
+
+        return [
+            'url' => $url,
+            'public_id' => $uploaded['public_id'] ?? $publicId,
+        ];
+    }
+
+    private function saveUploadedAudio(Song $song, array $uploaded, CloudinaryService $cloudinary): void
+    {
+        $audio = SongAudioFile::query()
+            ->where('song_id', (string) $song->getKey())
+            ->where('file_type', 'full')
+            ->first() ?: new SongAudioFile;
+        $oldSource = (string) ($audio->source ?? '');
+        $oldPublicId = (string) ($audio->public_id ?? '');
+
+        $audio->song_id = (string) $song->getKey();
+        $audio->file_type = 'full';
+        $audio->file_url = $uploaded['file_url'];
+        $audio->public_id = $uploaded['public_id'] ?? null;
+        $audio->external_id = null;
+        $audio->duration_seconds = $uploaded['duration_seconds'] ?: $song->duration_seconds;
+        $audio->premium_only = false;
+        $audio->status = 'active';
+        $audio->source = 'cloudinary';
+
+        try {
+            $audio->save();
+            if (($uploaded['duration_seconds'] ?? 0) > 0) {
+                $song->duration_seconds = (int) $uploaded['duration_seconds'];
+                $song->save();
+            }
+        } catch (Throwable $exception) {
+            $this->discardUploadedAudio($cloudinary, $uploaded);
+            throw $exception;
+        }
+
+        if ($oldSource === 'cloudinary' && $oldPublicId !== '' && $oldPublicId !== (string) ($uploaded['public_id'] ?? '')) {
+            try {
+                $cloudinary->deleteAudio($oldPublicId);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
+    }
+
+    private function discardUploadedAudio(CloudinaryService $cloudinary, ?array $uploaded): void
+    {
+        if (! filled($uploaded['public_id'] ?? null)) {
+            return;
+        }
+
+        try {
+            $cloudinary->deleteAudio((string) $uploaded['public_id']);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+    }
+
+    private function discardUploadedCover(CloudinaryService $cloudinary, ?array $uploaded): void
+    {
+        if (! filled($uploaded['public_id'] ?? null)) {
+            return;
+        }
+
+        try {
+            $cloudinary->deleteImage((string) $uploaded['public_id']);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+    }
+
     private function forgetHomeCache(): void
     {
         $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
+        Cache::store('file')->put('api:catalog-content-revision:v1', (string) Str::uuid());
         Cache::store('file')->forget('api:home-discovery:v2:'.$dateKey);
-        Cache::store('file')->forget('api:home-bootstrap:v2:'.$dateKey);
+        Cache::store('file')->forget('api:home-bootstrap:v6:'.$dateKey);
+        Cache::store('file')->forget('api:trending-artists:v3:'.$dateKey);
     }
 
     private function availableTopics()
@@ -340,8 +571,8 @@ class SongController extends CrudResourceController
         // row-by-row lookups caused dozens of Mongo round trips for ten songs.
         $artistLinksBySong = SongArtist::query()
             ->whereIn('song_id', $songIds)
-            ->orderBy('artist_role')
             ->get()
+            ->sortBy(fn (SongArtist $link): int => mb_strtolower(trim((string) ($link->artist_role ?? ''))) === 'primary' ? 0 : 1)
             ->groupBy(fn (SongArtist $link): string => (string) $link->song_id)
             ->map(fn (Collection $links): SongArtist => $links->first());
         $artistIds = $artistLinksBySong->pluck('artist_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all();
@@ -415,13 +646,49 @@ class SongController extends CrudResourceController
 
     private function syncArtist(Song $song, mixed $artistName): void
     {
-        $artistName = trim((string) $artistName);
-
-        if ($artistName !== '') {
-            $song->artist_name = $artistName;
+        if ($artistName === null) {
+            return;
         }
 
+        $artistName = trim((string) $artistName);
+        $previousArtistName = trim((string) ($song->artist_name ?? ''));
+        $songId = (string) $song->getKey();
+        $hasArtistLinks = SongArtist::query()->where('song_id', $songId)->exists();
+
+        $song->artist_name = $artistName;
         $song->save();
+
+        // Keep structured provider credits intact unless the admin changed the
+        // visible credit; this avoids re-splitting a provider fallback string.
+        if ($artistName === $previousArtistName && $hasArtistLinks) {
+            return;
+        }
+
+        SongArtist::query()->where('song_id', $songId)->delete();
+        $artistNames = app(SongImportService::class)->artistNames($artistName);
+        if ($artistNames === []) {
+            return;
+        }
+
+        $artistsByName = Artist::query()
+            ->whereIn('name', $artistNames)
+            ->get()
+            ->keyBy(fn (Artist $artist): string => mb_strtolower(trim((string) $artist->name)));
+        $position = 0;
+
+        foreach ($artistNames as $name) {
+            $artist = $artistsByName->get(mb_strtolower(trim($name)));
+            if (! $artist) {
+                continue;
+            }
+
+            SongArtist::query()->create([
+                'song_id' => $songId,
+                'artist_id' => (string) $artist->getKey(),
+                'artist_role' => $position === 0 ? 'primary' : 'featured',
+            ]);
+            $position++;
+        }
     }
 
     private function syncGenre(Song $song, mixed $genreId): void
