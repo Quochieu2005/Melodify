@@ -27,6 +27,15 @@ EXPO_PUBLIC_API_URL=http://<LAN-IP-cua-may>:8000/api
 
 Khi chạy trên điện thoại thật, không dùng `localhost`. Điện thoại và máy tính chạy backend phải cùng mạng Wi-Fi.
 
+Nếu chạy Laravel bằng development server, cần bind backend vào giao diện mạng để điện thoại truy cập được:
+
+```bash
+cd Backend
+php artisan serve --host=0.0.0.0 --port=8000
+```
+
+Sau đó đặt `EXPO_PUBLIC_API_URL` thành `http://<LAN-IP-cua-may>:8000/api`, khởi động lại Expo và chỉ cho phép kết nối trên mạng riêng tin cậy. Nếu `.env` đang để `localhost`, ứng dụng native sẽ tự đổi hostname sang máy đang chạy Expo; backend vẫn phải lắng nghe địa chỉ LAN.
+
 Các lệnh:
 
 ```bash

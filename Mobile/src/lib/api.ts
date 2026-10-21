@@ -10,7 +10,7 @@ const isIpv4Address = (value: string | undefined): value is string => {
 };
 
 // On a physical device, localhost points to the phone. During Expo LAN
-// development, use the same computer address as Metro and the LAN API port.
+// development, use the computer running Metro and the Laravel API (port 8000).
 const expoLanApiUrl = Platform.OS !== 'web' && isIpv4Address(expoDevHost)
   && !expoDevHost.startsWith('127.')
   ? `http://${expoDevHost}:8000/api`
@@ -22,6 +22,11 @@ const defaultApiUrl = Platform.OS === 'android'
 
 const envUrl = process.env.EXPO_PUBLIC_API_URL;
 const isLocalEnv = !envUrl || envUrl.includes('localhost') || envUrl.includes('127.0.0.1');
+
+const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL ?? Constants.expoConfig?.extra?.apiUrl;
+const deviceConfiguredApiUrl = Platform.OS !== 'web' && isIpv4Address(expoDevHost) && configuredApiUrl
+  ? configuredApiUrl.replace(/^(https?:\/\/)(localhost|127\.0\.0\.1)(?=[:/])/i, `$1${expoDevHost}`)
+  : configuredApiUrl;
 
 export const API_URL = (
   (Platform.OS !== 'web' && isLocalEnv && expoLanApiUrl ? expoLanApiUrl : envUrl) ??
