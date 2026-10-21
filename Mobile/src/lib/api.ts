@@ -18,7 +18,10 @@ const expoLanApiUrl = Platform.OS !== 'web' && isIpv4Address(expoDevHost)
 
 const defaultApiUrl = Platform.OS === 'android'
   ? 'http://10.0.2.2:8000/api'
-  : 'http://127.0.0.1:8000/api';
+  : 'http://192.168.1.211:8000/api';
+
+const envUrl = process.env.EXPO_PUBLIC_API_URL;
+const isLocalEnv = !envUrl || envUrl.includes('localhost') || envUrl.includes('127.0.0.1');
 
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL ?? Constants.expoConfig?.extra?.apiUrl;
 const deviceConfiguredApiUrl = Platform.OS !== 'web' && isIpv4Address(expoDevHost) && configuredApiUrl
@@ -26,8 +29,9 @@ const deviceConfiguredApiUrl = Platform.OS !== 'web' && isIpv4Address(expoDevHos
   : configuredApiUrl;
 
 export const API_URL = (
-  deviceConfiguredApiUrl ??
+  (Platform.OS !== 'web' && isLocalEnv && expoLanApiUrl ? expoLanApiUrl : envUrl) ??
   expoLanApiUrl ??
+  (Platform.OS !== 'web' ? 'http://192.168.1.211:8000/api' : undefined) ??
   defaultApiUrl
 ).replace(/\/+$/, '');
 
@@ -237,6 +241,59 @@ export type AuthResponse = {
   expires_at: string;
   user: AuthUser;
 };
+
+export type SubscriptionPlanRecord = {
+  id: string;
+  name: string;
+  slug: string | null;
+  price: number;
+  billing_cycle: 'monthly' | 'yearly' | string;
+  billing_months: number;
+  description: string | null;
+  offline_download: boolean;
+  ads_enabled: boolean;
+  unlimited_skip: boolean;
+};
+
+export type VipPaymentMethod =
+  | 'card'
+  | 'shopeepay'
+  | 'atm'
+  | 'momo'
+  | 'zalopay'
+  | 'vnpay'
+  | 'viettelpay';
+
+export type VipCheckoutOrder = {
+  payment_id: string;
+  payment_code: string;
+  amount: number;
+  currency: string;
+  method: VipPaymentMethod;
+  status: 'pending' | string;
+  plan: { id: string; name: string };
+  requires_gateway_confirmation: boolean;
+};
+
+export type VipTransactionRecord = {
+  id: string;
+  payment_code: string;
+  created_at: string | null;
+  amount: number;
+  currency: string;
+  method: string;
+  status: string;
+  plan_name: string;
+  transaction_code: string;
+  gateway: string;
+};
+
+export type VipTransactionHistory = {
+  user: { id: string; name: string; username: string | null; email: string | null; phone: string | null };
+  data: VipTransactionRecord[];
+  meta: { current_page: number; last_page: number; total: number };
+};
+
 
 async function getAuthToken(): Promise<string | null> {
   if (tokenValue !== undefined) {
@@ -553,4 +610,19 @@ export async function uploadImage(uri: string, fileName = 'image.jpg', mimeType 
     method: 'POST',
     body: form,
   });
+}
+
+export function getSubscriptionPlans() {
+  return apiFetch<{ data: SubscriptionPlanRecord[] }>('/v1/subscription-plans');
+}
+
+export function createVipCheckout(planId: string, method: VipPaymentMethod) {
+  return apiFetch<{ message: string; data: VipCheckoutOrder }>(
+    '/v1/vip/checkout',
+    jsonRequest({ plan_id: planId, method }),
+  );
+}
+
+export function getVipTransactions(page = 1) {
+  return apiFetch<VipTransactionHistory>('/v1/vip/transactions?page=' + page);
 }

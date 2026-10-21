@@ -8,7 +8,7 @@ import { PageHeading, PrimaryButton, ScrollPage, SectionHeading, StateMessage, s
 import { AppIcon } from '@/components/shared/AppIcon';
 import { useRemoteData } from '@/hooks/useRemoteData';
 import {
-  createUserPlaylist, getForYouArtists, getForYouSong, getLibrary, getSavedAuthUser, getVisitorId,
+  clearAuthSession, createUserPlaylist, getForYouArtists, getForYouSong, getLibrary, getSavedAuthUser, getVisitorId,
   listFavoriteSongs, listGenres, loginWithPassword, searchCatalog, saveAuthSession,
   type Artist, type Genre, type SearchKind, type SearchResults, type Song,
 } from '@/lib/api';
@@ -66,7 +66,7 @@ export function SearchScreen() {
       {results ? (
         <>
           {songs.length ? <View style={styles.section}><SectionHeading title="Bài hát" />{songs.map((song) => <SongRow key={song.id} song={song} songs={songs} showFavorite />)}</View> : null}
-          {artists.length ? <View style={styles.section}><SectionHeading title="Nghệ sĩ" />{artists.map((artist) => <Pressable key={artist.id} onPress={() => router.push(('/artist/' + (artist.slug || artist.id)) as never)} style={styles.entityRow}><Artwork uri={artist.avatar_url} round /><Text style={styles.entityName}>{artist.name}</Text><AppIcon name="chevron" color="#00D3E5" size={18} /></Pressable>)}</View> : null}
+          {artists.length ? <View style={styles.section}><SectionHeading title="Nghệ sĩ" />{artists.map((artist) => <Pressable key={artist.id} onPress={() => router.push(('/artist/' + (artist.slug || artist.id)) as never)} style={styles.entityRow}><Artwork uri={artist.avatar_url} round /><Text style={styles.entityName}>{artist.name}</Text><AppIcon name="chevron" color="#00B5AD" size={18} /></Pressable>)}</View> : null}
           {albums.length ? <EntityResults title="Album" items={albums.map((item) => ({ id: item.id, name: item.title, image: item.cover_url, route: '/album/' + (item.slug || item.id) }))} /> : null}
           {playlists.length ? <EntityResults title="Playlist" items={playlists.map((item) => ({ id: item.id, name: item.name, image: item.cover_url, route: '/playlist/' + (item.slug || item.id) }))} /> : null}
           {users.length ? <EntityResults title="Người dùng" items={users.map((item) => ({ id: item.id, name: item.name, image: item.avatar_url, route: '/user/' + (item.username || item.id) }))} /> : null}
@@ -79,7 +79,7 @@ export function SearchScreen() {
 
 function EntityResults({ title, items }: { title: string; items: { id: string; name: string; image: string | null; route: string }[] }) {
   const router = useRouter();
-  return <View style={styles.section}><SectionHeading title={title} />{items.map((item) => <Pressable key={item.id} onPress={() => router.push(item.route as never)} style={styles.entityRow}><Artwork uri={item.image} /><Text style={styles.entityName}>{item.name}</Text><AppIcon name="chevron" color="#00D3E5" size={18} /></Pressable>)}</View>;
+  return <View style={styles.section}><SectionHeading title={title} />{items.map((item) => <Pressable key={item.id} onPress={() => router.push(item.route as never)} style={styles.entityRow}><Artwork uri={item.image} /><Text style={styles.entityName}>{item.name}</Text><AppIcon name="chevron" color="#00B5AD" size={18} /></Pressable>)}</View>;
 }
 
 export function FavoritesScreen() {
@@ -132,26 +132,37 @@ export function LibraryScreen() {
       setSavingPlaylist(false);
     }
   };
-  return <AppShell><ScrollPage><PageHeading title="Thư viện" subtitle={user ? 'Xin chào, ' + user.name : 'Tập hợp nhạc và nghệ sĩ bạn đã lưu.'} />
+  const logout = async () => {
+    await clearAuthSession();
+    setUser(null);
+    await reload();
+  };
+  return <AppShell><ScrollPage><PageHeading title="Thư viện" subtitle={user ? `Xin chào, ${user.name} • ${user.is_premium ? '👑 VIP' : 'Miễn phí'}` : 'Tập hợp nhạc và nghệ sĩ bạn đã lưu.'} />
     <View style={styles.shortcuts}>
+      <Shortcut title="Gói VIP Melodify" detail={user?.is_premium ? 'Tài khoản VIP đang hoạt động' : 'Nâng cấp nghe nhạc không giới hạn, không quảng cáo'} onPress={() => router.push('/vip' as never)} />
       <Shortcut title="Bài hát yêu thích" count={data?.favorite_song_count} onPress={() => router.push('/favorite' as never)} />
       <Shortcut title="Nghe gần đây" onPress={() => router.push('/recent' as never)} />
       <Shortcut title="Playlist của bạn" onPress={() => router.push('/playlist' as never)} />
       <Shortcut title="Đang theo dõi" count={data?.following_count} onPress={() => router.push('/following' as never)} />
       <Shortcut title="Người theo dõi" count={data?.followers_count} onPress={() => router.push('/followers' as never)} />
-      {!user ? <Shortcut title="Đăng nhập" detail="Đăng nhập để đồng bộ thư viện" onPress={() => router.push('/login' as never)} /> : null}
+      {!user ? <Shortcut title="Đăng nhập" detail="Đăng nhập để đồng bộ thư viện" onPress={() => router.push('/login' as never)} /> : (
+        <Pressable onPress={() => void logout()} style={styles.logoutButton}>
+          <AppIcon name="logout" color="#FF8A80" size={17} />
+          <Text style={styles.logoutText}>Đăng xuất tài khoản</Text>
+        </Pressable>
+      )}
     </View>
     {loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}
-    {user ? <View style={styles.section}><SectionHeading title="Playlist của bạn" /><View style={styles.createPlaylist}><TextInput value={playlistName} onChangeText={setPlaylistName} placeholder="Tên playlist mới" placeholderTextColor="#8F9994" style={styles.playlistInput} /><Pressable disabled={savingPlaylist} onPress={() => void createPlaylist()} style={styles.createButton}><Text style={styles.createText}>{savingPlaylist ? '…' : '+'}</Text></Pressable></View>{playlistError ? <Text style={styles.error}>{playlistError}</Text> : null}{data?.created_playlists.map((playlist) => <Pressable key={playlist.id} onPress={() => router.push(('/playlist/' + (playlist.slug || playlist.id)) as never)} style={styles.entityRow}><Artwork uri={playlist.cover_url} /><Text style={styles.entityName}>{playlist.name}</Text><AppIcon name="chevron" color="#00D3E5" size={18} /></Pressable>)}{data && !data.created_playlists.length ? <Text style={styles.detail}>Bạn chưa tạo playlist nào.</Text> : null}</View> : null}
-    {data?.favorite_playlists.length ? <View style={styles.section}><SectionHeading title="Playlist yêu thích" />{data.favorite_playlists.map((playlist) => <Pressable key={playlist.id} onPress={() => router.push(('/playlist/' + (playlist.slug || playlist.id)) as never)} style={styles.entityRow}><Artwork uri={playlist.cover_url} /><Text style={styles.entityName}>{playlist.name}</Text><AppIcon name="chevron" color="#00D3E5" size={18} /></Pressable>)}</View> : null}
-    {data?.following_artists.length ? <View style={styles.section}><SectionHeading title="Nghệ sĩ đang theo dõi" />{data.following_artists.map((artist) => <Pressable key={artist.id} onPress={() => router.push(('/artist/' + (artist.slug || artist.id)) as never)} style={styles.entityRow}><Artwork uri={artist.avatar_url} round /><Text style={styles.entityName}>{artist.name}</Text><AppIcon name="chevron" color="#00D3E5" size={18} /></Pressable>)}</View> : null}
-    {data?.favorite_albums.length ? <View style={styles.section}><SectionHeading title="Album yêu thích" />{data.favorite_albums.map((album) => <Pressable key={album.id} onPress={() => router.push(('/album/' + (album.slug || album.id)) as never)} style={styles.entityRow}><Artwork uri={album.cover_url} /><Text style={styles.entityName}>{album.title}</Text><AppIcon name="chevron" color="#00D3E5" size={18} /></Pressable>)}</View> : null}
+    {user ? <View style={styles.section}><SectionHeading title="Playlist của bạn" /><View style={styles.createPlaylist}><TextInput value={playlistName} onChangeText={setPlaylistName} placeholder="Tên playlist mới" placeholderTextColor="#8F9994" style={styles.playlistInput} /><Pressable disabled={savingPlaylist} onPress={() => void createPlaylist()} style={styles.createButton}><Text style={styles.createText}>{savingPlaylist ? '…' : '+'}</Text></Pressable></View>{playlistError ? <Text style={styles.error}>{playlistError}</Text> : null}{data?.created_playlists.map((playlist) => <Pressable key={playlist.id} onPress={() => router.push(('/playlist/' + (playlist.slug || playlist.id)) as never)} style={styles.entityRow}><Artwork uri={playlist.cover_url} /><Text style={styles.entityName}>{playlist.name}</Text><AppIcon name="chevron" color="#00B5AD" size={18} /></Pressable>)}{data && !data.created_playlists.length ? <Text style={styles.detail}>Bạn chưa tạo playlist nào.</Text> : null}</View> : null}
+    {data?.favorite_playlists.length ? <View style={styles.section}><SectionHeading title="Playlist yêu thích" />{data.favorite_playlists.map((playlist) => <Pressable key={playlist.id} onPress={() => router.push(('/playlist/' + (playlist.slug || playlist.id)) as never)} style={styles.entityRow}><Artwork uri={playlist.cover_url} /><Text style={styles.entityName}>{playlist.name}</Text><AppIcon name="chevron" color="#00B5AD" size={18} /></Pressable>)}</View> : null}
+    {data?.following_artists.length ? <View style={styles.section}><SectionHeading title="Nghệ sĩ đang theo dõi" />{data.following_artists.map((artist) => <Pressable key={artist.id} onPress={() => router.push(('/artist/' + (artist.slug || artist.id)) as never)} style={styles.entityRow}><Artwork uri={artist.avatar_url} round /><Text style={styles.entityName}>{artist.name}</Text><AppIcon name="chevron" color="#00B5AD" size={18} /></Pressable>)}</View> : null}
+    {data?.favorite_albums.length ? <View style={styles.section}><SectionHeading title="Album yêu thích" />{data.favorite_albums.map((album) => <Pressable key={album.id} onPress={() => router.push(('/album/' + (album.slug || album.id)) as never)} style={styles.entityRow}><Artwork uri={album.cover_url} /><Text style={styles.entityName}>{album.title}</Text><AppIcon name="chevron" color="#00B5AD" size={18} /></Pressable>)}</View> : null}
     {data && !data.following_artists.length && !data.favorite_albums.length && data.favorite_song_count === 0 ? <StateMessage empty="Thư viện của bạn chưa có nội dung đã lưu." /> : null}
   </ScrollPage></AppShell>;
 }
 
 function Shortcut({ title, count, detail, onPress }: { title: string; count?: number; detail?: string; onPress: () => void }) {
-  return <Pressable onPress={onPress} style={[styles.shortcut, surfaceStyles.card]}><View style={styles.shortcutCopy}><Text style={styles.shortcutTitle}>{title}</Text>{detail ? <Text style={styles.detail}>{detail}</Text> : null}</View>{count !== undefined ? <Text style={styles.count}>{count}</Text> : <AppIcon name="chevron" color="#00D3E5" size={18} />}</Pressable>;
+  return <Pressable onPress={onPress} style={[styles.shortcut, surfaceStyles.card]}><View style={styles.shortcutCopy}><Text style={styles.shortcutTitle}>{title}</Text>{detail ? <Text style={styles.detail}>{detail}</Text> : null}</View>{count !== undefined ? <Text style={styles.count}>{count}</Text> : <AppIcon name="chevron" color="#00B5AD" size={18} />}</Pressable>;
 }
 
 export function LoginScreen() {
@@ -306,54 +317,56 @@ export function ForYouScreen() {
 }
 
 const styles = StyleSheet.create({
-  searchBox: { minHeight: 48, flexDirection: 'row', alignItems: 'center', borderRadius: 13, paddingLeft: 14, backgroundColor: '#29332F', borderWidth: 1, borderColor: '#35403C' },
-  input: { flex: 1, color: '#F5F7F6', paddingVertical: 12, fontSize: 14 },
-  searchButton: { margin: 4, minWidth: 55, height: 39, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#00D3E5' },
-  searchButtonText: { color: '#082326', fontWeight: '900' },
+  searchBox: { minHeight: 48, flexDirection: 'row', alignItems: 'center', borderRadius: 13, paddingLeft: 14, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
+  input: { flex: 1, color: '#0F172A', paddingVertical: 12, fontSize: 14 },
+  searchButton: { margin: 4, minWidth: 55, height: 39, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#00B5AD' },
+  searchButtonText: { color: '#FFFFFF', fontWeight: '900' },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  pill: { paddingVertical: 7, paddingHorizontal: 11, borderRadius: 18, backgroundColor: '#202A28', borderWidth: 1, borderColor: '#35403C' },
-  pillActive: { backgroundColor: 'rgba(0,211,229,0.16)', borderColor: '#00D3E5' },
-  pillText: { color: '#AEB8B3', fontSize: 11, fontWeight: '700' },
-  pillTextActive: { color: '#00D3E5' },
+  pill: { paddingVertical: 7, paddingHorizontal: 11, borderRadius: 18, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
+  pillActive: { backgroundColor: 'rgba(0,211,229,0.16)', borderColor: '#00B5AD' },
+  pillText: { color: '#64748B', fontSize: 11, fontWeight: '700' },
+  pillTextActive: { color: '#00B5AD' },
   section: { gap: 7 },
   entityRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 11, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
-  entityName: { flex: 1, color: '#F5F7F6', fontSize: 14, fontWeight: '800' },
+  entityName: { flex: 1, color: '#0F172A', fontSize: 14, fontWeight: '800' },
   createPlaylist: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 7 },
-  playlistInput: { flex: 1, minHeight: 42, paddingHorizontal: 12, color: '#F5F7F6', borderRadius: 11, backgroundColor: '#202A28', borderWidth: 1, borderColor: '#35403C' },
-  createButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#00D3E5' },
-  createText: { color: '#082326', fontSize: 24, fontWeight: '900' },
+  playlistInput: { flex: 1, minHeight: 42, paddingHorizontal: 12, color: '#0F172A', borderRadius: 11, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
+  createButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#00B5AD' },
+  createText: { color: '#FFFFFF', fontSize: 24, fontWeight: '900' },
   shortcuts: { gap: 9 },
   shortcut: { padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
   shortcutCopy: { flex: 1, gap: 4 },
-  shortcutTitle: { color: '#F5F7F6', fontSize: 14, fontWeight: '800' },
+  shortcutTitle: { color: '#0F172A', fontSize: 14, fontWeight: '800' },
   detail: { color: '#9CA8A2', fontSize: 12 },
-  count: { color: '#00D3E5', fontWeight: '900' },
-  form: { gap: 13, padding: 15, borderRadius: 15, backgroundColor: '#202A28' },
-  field: { minHeight: 48, paddingHorizontal: 13, borderRadius: 11, color: '#F5F7F6', backgroundColor: '#151817', borderWidth: 1, borderColor: '#35403C' },
+  count: { color: '#00B5AD', fontWeight: '900' },
+  form: { gap: 13, padding: 15, borderRadius: 15, backgroundColor: '#FFFFFF' },
+  field: { minHeight: 48, paddingHorizontal: 13, borderRadius: 11, color: '#0F172A', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' },
   error: { color: '#FF8A80', fontSize: 12 },
   success: { color: '#54DDA5', fontSize: 12, fontWeight: '800' },
   stepHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  stepLabel: { color: '#00D3E5', fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
-  closeText: { color: '#AEB8B3', fontSize: 13, fontWeight: '800' },
+  stepLabel: { color: '#00B5AD', fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  closeText: { color: '#64748B', fontSize: 13, fontWeight: '800' },
   choiceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
-  choice: { width: '48%', minHeight: 78, justifyContent: 'center', gap: 5, padding: 12, borderRadius: 13, backgroundColor: '#202A28', borderWidth: 1, borderColor: '#35403C' },
-  choiceSelected: { borderColor: '#00D3E5', backgroundColor: '#213738' },
-  choiceTitle: { color: '#F5F7F6', fontSize: 14, fontWeight: '900' },
-  choiceTitleSelected: { color: '#00D3E5' },
+  choice: { width: '48%', minHeight: 78, justifyContent: 'center', gap: 5, padding: 12, borderRadius: 13, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
+  choiceSelected: { borderColor: '#00B5AD', backgroundColor: '#E6FAF7' },
+  choiceTitle: { color: '#0F172A', fontSize: 14, fontWeight: '900' },
+  choiceTitleSelected: { color: '#00B5AD' },
   choiceMeta: { color: '#9CA8A2', fontSize: 10 },
-  check: { position: 'absolute', top: 8, right: 9, color: '#00D3E5', fontSize: 15, fontWeight: '900' },
-  help: { color: '#AEB8B3', fontSize: 12 },
+  check: { position: 'absolute', top: 8, right: 9, color: '#00B5AD', fontSize: 15, fontWeight: '900' },
+  help: { color: '#64748B', fontSize: 12 },
   artistGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  artistPick: { width: '30.5%', minHeight: 112, alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8, borderRadius: 13, backgroundColor: '#202A28', borderWidth: 1, borderColor: '#35403C' },
-  artistPickName: { color: '#EDF1EF', fontSize: 10, fontWeight: '800', textAlign: 'center' },
+  artistPick: { width: '30.5%', minHeight: 112, alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8, borderRadius: 13, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
+  artistPickName: { color: '#0F172A', fontSize: 10, fontWeight: '800', textAlign: 'center' },
   buttons: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   flex: { flex: 1 },
   secondaryButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderRadius: 24, borderWidth: 1, borderColor: '#64716B' },
   secondaryText: { color: '#E7ECE9', fontSize: 12, fontWeight: '800' },
-  recommendationBox: { minHeight: 190, justifyContent: 'center', gap: 16, padding: 18, borderRadius: 17, backgroundColor: '#202A28', borderWidth: 1, borderColor: '#35403C' },
-  recommendationTitle: { color: '#F5F7F6', fontSize: 21, fontWeight: '900', textAlign: 'center' },
-  recommendationSub: { color: '#AEB8B3', fontSize: 13, lineHeight: 20, textAlign: 'center' },
+  recommendationBox: { minHeight: 190, justifyContent: 'center', gap: 16, padding: 18, borderRadius: 17, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
+  recommendationTitle: { color: '#0F172A', fontSize: 21, fontWeight: '900', textAlign: 'center' },
+  recommendationSub: { color: '#64748B', fontSize: 13, lineHeight: 20, textAlign: 'center' },
   recommendationSong: { flexDirection: 'row', alignItems: 'center', gap: 13 },
   chartCopy: { flex: 1, gap: 5 },
-  songTitle: { color: '#F5F7F6', fontSize: 15, fontWeight: '900' },
+  songTitle: { color: '#0F172A', fontSize: 15, fontWeight: '900' },
+  logoutButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, borderWidth: 1, borderColor: '#5C3331', backgroundColor: 'rgba(255, 138, 128, 0.08)', marginTop: 8 },
+  logoutText: { color: '#FF8A80', fontSize: 13, fontWeight: '800' },
 });

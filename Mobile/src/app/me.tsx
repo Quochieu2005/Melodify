@@ -1,1 +1,1 @@
-export { LibraryScreen as default } from '@/screens/DiscoveryScreens';
+export { MyProfileScreen as default } from '@/screens/MyProfileScreen';

@@ -40,7 +40,7 @@ export function InlineAction({ label, onPress }: { label: string; onPress: () =>
 
 export function StateMessage({ loading, error, empty, onRetry }: { loading?: boolean; error?: string; empty?: string; onRetry?: () => void }) {
   if (loading) {
-    return <View style={styles.state}><ActivityIndicator color="#00D3E5" /><Text style={styles.stateText}>Đang tải dữ liệu…</Text></View>;
+    return <View style={styles.state}><ActivityIndicator color="#00B5AD" /><Text style={styles.stateText}>Đang tải dữ liệu…</Text></View>;
   }
   if (error) {
     return <View style={styles.state}><Text style={styles.stateText}>{error}</Text>{onRetry ? <Pressable onPress={onRetry}><Text style={styles.action}>Thử lại</Text></Pressable> : null}</View>;
@@ -54,25 +54,36 @@ export function PrimaryButton({ label, onPress, disabled = false }: { label: str
 }
 
 export const surfaceStyles = StyleSheet.create({
-  card: { backgroundColor: '#202A28', borderRadius: 14, borderWidth: 1, borderColor: '#303B37', overflow: 'hidden' },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
   body: { padding: 14 },
-  muted: { color: '#9CA8A2', fontSize: 13, lineHeight: 19 },
-  title: { color: '#F5F7F6', fontSize: 15, fontWeight: '800' },
+  muted: { color: '#64748B', fontSize: 13, lineHeight: 19 },
+  title: { color: '#0F172A', fontSize: 15, fontWeight: '800' },
 });
 
 const styles = StyleSheet.create({
-  page: { width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 18, paddingBottom: 22, gap: 20 },
+  page: { width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 22, gap: 20 },
   noPadding: { paddingHorizontal: 0 },
   pageHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   headingCopy: { flex: 1, gap: 5 },
-  title: { color: '#F5F7F6', fontSize: 25, fontWeight: '900', letterSpacing: -0.5 },
-  subtitle: { color: '#9CA8A2', fontSize: 13, lineHeight: 19 },
+  title: { color: '#0F172A', fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  subtitle: { color: '#64748B', fontSize: 13, lineHeight: 19 },
   sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  sectionTitle: { color: '#F5F7F6', fontSize: 18, fontWeight: '900' },
-  action: { color: '#00D3E5', fontSize: 13, fontWeight: '800', paddingVertical: 5 },
-  state: { minHeight: 100, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16, backgroundColor: '#202A28', borderRadius: 14 },
-  stateText: { color: '#B9C2BE', fontSize: 13, textAlign: 'center', lineHeight: 19 },
-  primaryButton: { minHeight: 46, paddingHorizontal: 18, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: '#00D3E5' },
-  primaryText: { color: '#092326', fontSize: 14, fontWeight: '900' },
+  sectionTitle: { color: '#0F172A', fontSize: 18, fontWeight: '900' },
+  action: { color: '#00B5AD', fontSize: 13, fontWeight: '700', paddingVertical: 5 },
+  state: { minHeight: 100, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16, backgroundColor: '#F8FAFC', borderRadius: 14 },
+  stateText: { color: '#64748B', fontSize: 13, textAlign: 'center', lineHeight: 19 },
+  primaryButton: { minHeight: 46, paddingHorizontal: 18, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: '#00B5AD' },
+  primaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   disabled: { opacity: 0.5 },
 });
