@@ -44,7 +44,7 @@ function SearchInput({ initialQuery }: { initialQuery: string }) {
     setIsOpen(false); setActive(-1);
     router.push(href || `/search?key=${encodeURIComponent(term)}&t=all`);
   }
-  return <div ref={containerRef} className="relative min-w-0 w-full max-w-[555px] flex-1">
+  return <div ref={containerRef} suppressHydrationWarning className="relative min-w-0 w-full max-w-[555px] flex-1">
     <form role="search" onSubmit={(event) => { event.preventDefault(); go(active >= 0 ? items[active]?.href : undefined); }} className={`flex h-10 items-center rounded-full bg-[#435854] px-4 text-white ${isOpen ? 'ring-1 ring-white' : 'focus-within:ring-2 focus-within:ring-cyan-300/60'}`}>
       <button type="submit" aria-label="Tìm" className="shrink-0"><svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-none stroke-current stroke-2"><circle cx="10.5" cy="10.5" r="7" /><path d="m16 16 5 5" /></svg></button>
       <input aria-label="Tìm kiếm" role="combobox" aria-expanded={isOpen} aria-controls="search-suggestions" aria-autocomplete="list" aria-activedescendant={active >= 0 ? `search-option-${active}` : undefined} type="search" maxLength={100} value={query}
