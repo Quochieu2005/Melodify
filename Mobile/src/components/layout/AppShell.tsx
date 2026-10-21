@@ -2,6 +2,7 @@ import { useState, type PropsWithChildren } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -41,12 +42,17 @@ export default function AppShell({
     currentTime,
     duration,
     togglePlay,
+    qualityOptions,
+    selectedQualityId,
+    setQuality,
   } = useMusic();
 
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   const [queueSheetOpen, setQueueSheetOpen] = useState(false);
   const [favorite, setFavorite] = useState(Boolean(track?.is_favorite));
   const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [qualityModalVisible, setQualityModalVisible] = useState(false);
+  const selectedQuality = qualityOptions.find((quality) => quality.quality_id === selectedQualityId);
 
   const progressPercent =
     duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
@@ -176,6 +182,19 @@ export default function AppShell({
               </View>
             </Pressable>
 
+            {track ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Chất lượng nghe: ${selectedQuality?.label ?? track.audio_quality ?? 'mặc định'}`}
+                onPress={() => setQualityModalVisible(true)}
+                style={styles.qualityButton}
+              >
+                <Text numberOfLines={1} style={styles.qualityButtonText}>
+                  {selectedQuality?.label ?? track.audio_quality ?? 'Chất lượng'}
+                </Text>
+              </Pressable>
+            ) : null}
+
             {/* 3-Gạch Hamburger Menu Button -> Mở Bottom Sheet (Ảnh 3) */}
             <Pressable
               accessibilityLabel="Danh sách phát và chọn bài"
@@ -262,6 +281,55 @@ export default function AppShell({
         visible={queueSheetOpen}
         onClose={() => setQueueSheetOpen(false)}
       />
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={qualityModalVisible}
+        onRequestClose={() => setQualityModalVisible(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setQualityModalVisible(false)}>
+          <Pressable
+            style={styles.qualityModal}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View style={styles.qualityHeader}>
+              <Text style={styles.qualityTitle}>Chất lượng nghe</Text>
+              <Pressable
+                accessibilityLabel="Đóng"
+                onPress={() => setQualityModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeButtonText}>×</Text>
+              </Pressable>
+            </View>
+            {qualityOptions.length ? qualityOptions.map((quality) => (
+              <Pressable
+                key={quality.quality_id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedQualityId === quality.quality_id, disabled: quality.available === false || !quality.audio_url }}
+                disabled={quality.available === false || !quality.audio_url}
+                onPress={() => {
+                  void setQuality(quality.quality_id).then((changed) => {
+                    if (changed) setQualityModalVisible(false);
+                  });
+                }}
+                style={styles.qualityRow}
+              >
+                <View style={styles.qualityInfo}>
+                  <Text style={styles.qualityLabel}>{quality.label}</Text>
+                  {quality.bitrate ? <Text style={styles.qualityBitrate}>{quality.bitrate} kbps</Text> : null}
+                  {quality.available === false ? <Text style={styles.qualityBitrate}>Chưa có luồng phát/tải cho chất lượng này.</Text> : null}
+                </View>
+                <View style={styles.qualityState}>
+                  {quality.premium_only ? <Text style={styles.vipBadge}>VIP</Text> : null}
+                  {selectedQualityId === quality.quality_id ? <Text style={styles.qualityCheck}>✓</Text> : null}
+                </View>
+              </Pressable>
+            )) : <Text style={styles.noQualities}>Bài hát này không có thông tin chất lượng từ API.</Text>}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -406,6 +474,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  qualityButton: { maxWidth: 86, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 7, backgroundColor: '#E2F4EF' },
+  qualityButtonText: { color: '#164E48', fontSize: 10, fontWeight: '800' },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', padding: 14, backgroundColor: 'rgba(15,23,42,0.52)' },
+  qualityModal: { width: '100%', maxHeight: '65%', padding: 18, borderRadius: 18, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DDE8E4' },
+  qualityHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  qualityTitle: { color: '#0F172A', fontSize: 18, fontWeight: '900' },
+  closeButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#F1F5F9' },
+  closeButtonText: { color: '#334155', fontSize: 22 },
+  qualityRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  qualityInfo: { flex: 1, gap: 3 },
+  qualityLabel: { color: '#0F172A', fontSize: 14, fontWeight: '800' },
+  qualityBitrate: { color: '#64748B', fontSize: 11 },
+  qualityState: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  vipBadge: { overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 5, backgroundColor: '#FEF3C7', color: '#92400E', fontSize: 10, fontWeight: '900' },
+  qualityCheck: { color: '#00B5AD', fontSize: 18, fontWeight: '900' },
+  noQualities: { paddingVertical: 14, color: '#64748B', fontSize: 13, lineHeight: 19 },
   tabs: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,

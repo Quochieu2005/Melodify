@@ -56,6 +56,26 @@
                         <span class="admin-lyrics-time" data-audio-duration>00:00</span>
                         <button type="button" class="admin-lyrics-volume" data-audio-mute aria-label="Tắt tiếng">⌁</button>
                     </div>
+                    @if(!empty($audioQualities))
+                        <div class="admin-lyrics-quality-control">
+                            <label class="admin-form-label" for="song-audio-quality">Chất lượng nghe thử</label>
+                            <select id="song-audio-quality" class="ant-input admin-form-input" data-audio-quality aria-describedby="song-audio-quality-help">
+                                <option value="{{ $audioUrl }}">Tự động · {{ $audioLabel }}</option>
+                                @foreach($audioQualities as $quality)
+                                    @php
+                                        $qualityText = $quality['label'].($quality['premium_only'] ? ' · VIP' : '');
+                                        if (!$quality['available']) $qualityText .= ' · NCT chưa cấp luồng phát';
+                                    @endphp
+                                    <option value="{{ $quality['url'] ?? '' }}" @disabled(!$quality['available'])>
+                                        {{ $qualityText }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <p class="admin-field-help" id="song-audio-quality-help" data-audio-quality-status>
+                                Admin có thể nghe thử chất lượng VIP nếu NhacCuaTui trả luồng phát. Mức bị vô hiệu hóa hiện chưa có URL audio từ nguồn.
+                            </p>
+                        </div>
+                    @endif
                     <div class="admin-lyrics-player-note">
                         <span>{{ $audioLabel === 'Bản đầy đủ' ? 'Bạn đang nghe toàn bộ bài hát.' : 'Đây là bản nghe thử.' }}</span>
                         <span data-lyrics-position>00:00</span>
@@ -165,6 +185,8 @@
     const position = document.querySelector('[data-lyrics-position]');
     const state = document.querySelector('[data-audio-state]');
     const mute = document.querySelector('[data-audio-mute]');
+    const qualitySelect = document.querySelector('[data-audio-quality]');
+    const qualityStatus = document.querySelector('[data-audio-quality-status]');
     if (!editor || !linesHost) return;
 
     const toSeconds = (minutes, seconds) => (Number(minutes) * 60) + Number(seconds);
@@ -320,18 +342,19 @@
     const previewCurrent = document.querySelector('[data-preview-current]');
     const previewMute = document.querySelector('[data-preview-mute]');
     const previewLimitSeconds = 30;
-    if (previewAudio) {
-        const updatePreviewPlayer = () => {
-            const previewTime = Math.min(previewLimitSeconds, Math.max(0, previewAudio.currentTime || 0));
-            if (previewCurrent) previewCurrent.textContent = formatTime(previewTime);
-            if (previewSeek) previewSeek.value = String(previewTime);
-            if (previewTime >= previewLimitSeconds) {
-                previewAudio.currentTime = previewLimitSeconds;
-                previewAudio.pause();
-            }
-            if (previewToggle) previewToggle.textContent = previewAudio.paused ? '▶' : '❚❚';
-        };
+    const updatePreviewPlayer = () => {
+        if (!previewAudio) return;
+        const previewTime = Math.min(previewLimitSeconds, Math.max(0, previewAudio.currentTime || 0));
+        if (previewCurrent) previewCurrent.textContent = formatTime(previewTime);
+        if (previewSeek) previewSeek.value = String(previewTime);
+        if (previewTime >= previewLimitSeconds) {
+            previewAudio.currentTime = previewLimitSeconds;
+            previewAudio.pause();
+        }
+        if (previewToggle) previewToggle.textContent = previewAudio.paused ? '▶' : '❚❚';
+    };
 
+    if (previewAudio) {
         previewToggle?.addEventListener('click', () => {
             if (previewAudio.paused) {
                 if (previewAudio.currentTime >= previewLimitSeconds) previewAudio.currentTime = 0;
@@ -357,6 +380,42 @@
         previewAudio.addEventListener('ended', updatePreviewPlayer);
         updatePreviewPlayer();
     }
+
+    qualitySelect?.addEventListener('change', () => {
+        const selected = qualitySelect.selectedOptions[0];
+        const source = selected?.value;
+        if (!source) return;
+
+        const resumeAt = audio.currentTime || 0;
+        const shouldResume = !audio.paused;
+        audio.pause();
+        if (state) state.textContent = 'Đang chuyển chất lượng nghe…';
+        if (qualityStatus) qualityStatus.textContent = `Đang nghe thử: ${selected.textContent.trim()}`;
+
+        const resumePlayback = () => {
+            audio.currentTime = Number.isFinite(audio.duration) ? Math.min(resumeAt, Math.max(0, audio.duration - 0.25)) : resumeAt;
+            if (shouldResume) {
+                audio.play().catch(() => {
+                    if (state) state.textContent = 'Không thể phát chất lượng này';
+                });
+            } else if (state) {
+                state.textContent = 'Đã đổi chất lượng · sẵn sàng phát';
+            }
+        };
+
+        audio.addEventListener('loadedmetadata', resumePlayback, { once: true });
+        audio.src = source;
+        audio.load();
+
+        if (previewAudio) {
+            previewAudio.pause();
+            previewAudio.src = source;
+            previewAudio.load();
+            previewAudio.currentTime = 0;
+            if (previewSeek) previewSeek.value = '0';
+            updatePreviewPlayer();
+        }
+    });
 
     const updatePlayer = () => {
         const now = formatTime(audio.currentTime);

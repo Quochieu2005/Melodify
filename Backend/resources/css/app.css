@@ -646,6 +646,19 @@
     display: flex;
     gap: 12px;
 }
+.admin-lyrics-quality-control {
+    display: grid;
+    gap: 7px;
+    margin-top: 16px;
+    max-width: 420px;
+}
+.admin-lyrics-quality-control .admin-form-label,
+.admin-lyrics-quality-control .admin-field-help {
+    margin: 0;
+}
+.admin-lyrics-quality-control select:disabled {
+    color: var(--admin-text-muted);
+}
 .admin-lyrics-play {
     align-items: center;
     background: var(--admin-accent);

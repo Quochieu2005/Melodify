@@ -94,12 +94,18 @@ class SongController extends CrudResourceController
             'selectedPlaylistId' => null,
             'lyric' => null,
             'audioFile' => null,
+            'audioQualities' => [],
         ]));
     }
 
     public function edit(string $id): View
     {
         $item = ($this->model)::query()->findOrFail($id);
+        $audioFile = SongAudioFile::query()
+            ->where('song_id', (string) $item->getKey())
+            ->where('file_type', 'full')
+            ->where('status', 'active')
+            ->first();
 
         return view("{$this->viewDirectory}.edit", $this->viewData([
             'item' => $item,
@@ -124,11 +130,8 @@ class SongController extends CrudResourceController
                 ->orderBy('position')
                 ->value('playlist_id'),
             'lyric' => Lyric::query()->where('song_id', (string) $item->getKey())->first(),
-            'audioFile' => SongAudioFile::query()
-                ->where('song_id', (string) $item->getKey())
-                ->where('file_type', 'full')
-                ->where('status', 'active')
-                ->first(),
+            'audioFile' => $audioFile,
+            'audioQualities' => $this->audioQualityLabels($audioFile),
         ]));
     }
 
@@ -317,7 +320,12 @@ class SongController extends CrudResourceController
                     'album' => $track['collectionName'] ?? null,
                     'genre' => $track['primaryGenreName'] ?? null,
                     'artwork_url' => $track['artworkUrl100'] ?? null,
-                    'audio_url' => $track['streamUrl'] ?? null,
+                    'audio_qualities' => collect($track['streamOptions'] ?? [])->map(fn (array $option): array => [
+                        'label' => $option['label'] ?? 'Chất lượng nhạc',
+                        'bitrate' => $option['bitrate'] ?? null,
+                        'premium_only' => (bool) ($option['premiumOnly'] ?? false),
+                        'available' => (bool) ($option['available'] ?? filled($option['streamUrl'] ?? null)),
+                    ])->values()->all(),
                     'country_code' => $track['countryCode'] ?? null,
                 ])->values()->all(),
             ]);
@@ -386,6 +394,12 @@ class SongController extends CrudResourceController
                     'country_code' => $track['countryCode'] ?? null,
                     'plain_lyrics' => $lyrics['plainLyrics'] ?? null,
                     'synced_lyrics' => $lyrics['syncedLyrics'] ?? null,
+                    'audio_qualities' => collect($track['streamOptions'] ?? [])->map(fn (array $option): array => [
+                        'label' => $option['label'] ?? 'Chất lượng nhạc',
+                        'bitrate' => $option['bitrate'] ?? null,
+                        'premium_only' => (bool) ($option['premiumOnly'] ?? false),
+                        'available' => (bool) ($option['available'] ?? filled($option['streamUrl'] ?? null)),
+                    ])->values()->all(),
                 ],
             ]);
         } catch (RuntimeException $exception) {
@@ -482,6 +496,7 @@ class SongController extends CrudResourceController
         $audio->external_id = null;
         $audio->duration_seconds = $uploaded['duration_seconds'] ?: $song->duration_seconds;
         $audio->premium_only = false;
+        $audio->stream_options = null;
         $audio->status = 'active';
         $audio->source = 'cloudinary';
 
@@ -503,6 +518,20 @@ class SongController extends CrudResourceController
                 report($exception);
             }
         }
+    }
+
+    private function audioQualityLabels(?SongAudioFile $audio): array
+    {
+        if ($audio?->source !== 'nhaccuatui') {
+            return [];
+        }
+
+        return collect($audio->stream_options ?? [])->map(fn (array $option): array => [
+            'label' => $option['label'] ?? 'Chất lượng nhạc',
+            'bitrate' => $option['bitrate'] ?? null,
+            'premium_only' => (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false),
+            'available' => (bool) ($option['available'] ?? filled($option['streamUrl'] ?? $option['stream_url'] ?? null)),
+        ])->values()->all();
     }
 
     private function discardUploadedAudio(CloudinaryService $cloudinary, ?array $uploaded): void

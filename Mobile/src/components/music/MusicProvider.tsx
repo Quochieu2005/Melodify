@@ -9,8 +9,9 @@ import {
   type PropsWithChildren,
 } from 'react';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { Alert } from 'react-native';
 
-import { getAudioSource, getSong, getVisitorId, recordSongView, type Lyric, type Song } from '@/lib/api';
+import { getAudioSource, getSavedAuthUser, getSong, getVisitorId, recordSongView, type Lyric, type Song, type SongAudioQuality } from '@/lib/api';
 import { findActiveLyricIndex, parseLrcLyrics, type ParsedLyricLine } from '@/lib/lyrics';
 import { recordRecentSong } from '@/lib/recent-history';
 
@@ -25,6 +26,9 @@ type MusicContextValue = {
   currentTime: number;
   duration: number;
   error: string;
+  qualityOptions: SongAudioQuality[];
+  selectedQualityId: string | null;
+  setQuality: (qualityId: string) => Promise<boolean>;
   repeatMode: RepeatMode;
   isShuffle: boolean;
   parsedLyrics: ParsedLyricLine[];
@@ -53,6 +57,7 @@ export function MusicProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState('');
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('all');
   const [isShuffle, setIsShuffle] = useState(false);
+  const [selectedQualityId, setSelectedQualityId] = useState<string | null>(null);
 
   const repeatModeRef = useRef(repeatMode);
   const nextRef = useRef<() => void>(() => {});
@@ -76,7 +81,13 @@ export function MusicProvider({ children }: PropsWithChildren) {
       setCurrentIndex(index);
 
       try {
-        const source = await getAudioSource(song);
+        const savedUser = await getSavedAuthUser();
+        const isPremium = Number(savedUser?.is_premium ?? 0) === 1;
+        const playableQualities = song.audio_qualities?.filter((quality) => quality.available !== false && Boolean(quality.audio_url)) ?? [];
+        const defaultQuality = playableQualities.find((quality) => !quality.premium_only)
+          ?? (isPremium ? playableQualities[0] : undefined);
+        setSelectedQualityId(defaultQuality?.quality_id ?? null);
+        const source = await getAudioSource(song, defaultQuality?.quality_id);
         player.replace(source);
         player.play();
         void recordRecentSong(song).catch(() => undefined);
@@ -114,6 +125,44 @@ export function MusicProvider({ children }: PropsWithChildren) {
     },
     [loadSong]
   );
+
+  const setQuality = useCallback(async (qualityId: string) => {
+    if (!track || selectedQualityId === qualityId) return true;
+    const quality = track.audio_qualities?.find((item) => item.quality_id === qualityId);
+    if (!quality) return false;
+
+    if (quality.available === false || !quality.audio_url) {
+      Alert.alert('Chất lượng chưa khả dụng', 'NCT có thông tin chất lượng VIP nhưng chưa trả luồng phát/tải cho yêu cầu này.');
+      return false;
+    }
+
+    try {
+      if (track.premium_only || quality.premium_only) {
+        const user = await getSavedAuthUser();
+        if (Number(user?.is_premium ?? 0) !== 1) {
+          Alert.alert(
+            'Chất lượng VIP',
+            user ? 'Bạn cần mua hoặc gia hạn gói VIP để nghe/tải chất lượng này.' : 'Đăng nhập và mua gói VIP để nghe/tải chất lượng này.',
+          );
+          return false;
+        }
+      }
+
+      const wasPlaying = status.playing;
+      const position = status.currentTime;
+      const source = await getAudioSource(track, qualityId);
+      player.pause();
+      player.replace(source);
+      setSelectedQualityId(qualityId);
+      if (position > 0) void player.seekTo(position);
+      if (wasPlaying) player.play();
+      setError('');
+      return true;
+    } catch {
+      setError('Không thể chuyển chất lượng phát lúc này. Vui lòng thử lại.');
+      return false;
+    }
+  }, [player, selectedQualityId, status.currentTime, status.playing, track]);
 
   const togglePlay = useCallback(() => {
     if (!track) {
@@ -272,6 +321,9 @@ export function MusicProvider({ children }: PropsWithChildren) {
       currentTime: status.currentTime,
       duration: status.duration,
       error: error || status.error || '',
+      qualityOptions: track?.audio_qualities ?? [],
+      selectedQualityId,
+      setQuality,
       repeatMode,
       isShuffle,
       parsedLyrics,
@@ -305,6 +357,8 @@ export function MusicProvider({ children }: PropsWithChildren) {
       repeatMode,
       seekTo,
       status,
+      selectedQualityId,
+      setQuality,
       togglePlay,
       toggleRepeat,
       toggleShuffle,

@@ -321,22 +321,32 @@ class SongImportService
     private function syncAudioFile(Song $song, array $track): void
     {
         $url = $track['streamUrl'] ?? $track['previewUrl'] ?? null;
+        $streamOptions = is_array($track['streamOptions'] ?? null) ? $track['streamOptions'] : [];
 
-        if (! filled($url)) {
+        if (! filled($url) && $streamOptions === []) {
             return;
         }
 
-        $isFull = filled($track['streamUrl'] ?? null);
+        $isFull = filled($track['streamUrl'] ?? null) || $streamOptions !== [];
         $audio = SongAudioFile::query()->firstOrNew([
             'song_id' => (string) $song->getKey(),
             'file_type' => $isFull ? 'full' : 'preview',
         ]);
+
+        // An administrator-uploaded file is an intentional override; syncing
+        // NCT metadata must not replace it or attach stale provider qualities.
+        if ($audio->exists && $audio->source !== 'nhaccuatui' && blank($audio->external_id)) {
+            return;
+        }
+
         $audio->file_url = $url;
         $audio->duration_seconds = $song->duration_seconds;
         $audio->premium_only = false;
+        $audio->stream_options = $isFull && $this->source($track) === 'nhaccuatui' ? $streamOptions : null;
         $audio->status = 'active';
         $audio->source = $this->source($track);
         $audio->external_id = (string) ($track['trackId'] ?? '');
+        $audio->refreshed_at = now();
         $audio->save();
     }
 

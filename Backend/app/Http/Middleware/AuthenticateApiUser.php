@@ -42,7 +42,8 @@ class AuthenticateApiUser
 
         // Make both request->user() and auth()->user() resolve to the API user.
         Auth::guard('web')->setUser($user);
-        $request->setUserResolver(fn (?string $guard = null) => $user);
+        $request->setUserResolver(fn (?string $guard = null) => $guard === null || $guard === 'web' ? $user : Auth::guard($guard)->user()
+        );
         $request->attributes->set('api_token', $token);
 
         return $next($request);

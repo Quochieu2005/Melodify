@@ -39,7 +39,8 @@ class OptionalAuthenticateApiUser
             $token->forceFill(['last_used_at' => now()])->saveQuietly();
         }
         Auth::guard('web')->setUser($user);
-        $request->setUserResolver(fn (?string $guard = null) => $user);
+        $request->setUserResolver(fn (?string $guard = null) => $guard === null || $guard === 'web' ? $user : Auth::guard($guard)->user()
+        );
         $request->attributes->set('api_token', $token);
 
         return $next($request);

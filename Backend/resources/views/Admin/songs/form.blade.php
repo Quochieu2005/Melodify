@@ -69,6 +69,54 @@
                 <input id="song-audio-file" name="audio_file" type="file" accept=".mp3,.wav,.ogg,.m4a,.aac,.webm,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac,audio/webm" class="ant-input admin-form-input @error('audio_file') is-invalid @enderror">
                 <p class="admin-field-help">Không bắt buộc. Hỗ trợ MP3, WAV, OGG, M4A, AAC và WEBM, tối đa 100 MB. Khi sửa bài hát, không chọn file mới thì file hiện tại được giữ; tải file mới lên sẽ thay thế và cập nhật audio cho các trang dùng API.</p>
                 <div data-song-audio-metadata-status class="admin-field-help" role="status" aria-live="polite">Khi chọn file, Melodify sẽ đọc tag có sẵn ngay trên trình duyệt (tên bài, nghệ sĩ, album, thời lượng, lời và ảnh bìa nếu file có). File nhạc chỉ được tải lên khi bạn lưu biểu mẫu.</div>
+                <div data-song-audio-qualities class="admin-field-help" role="status" aria-live="polite" style="margin-top:10px;padding:12px;border:1px solid #d9e2e7;border-radius:8px;background:#f8fafb;"></div>
+                <script>
+                    (() => {
+                        const container = document.querySelector('[data-song-audio-qualities]');
+                        const fileInput = document.querySelector('#song-audio-file');
+                        if (!container) return;
+                        let currentApiQualities = @json($audioQualities ?? []);
+
+                        const render = (qualities, mode = 'api') => {
+                            if (mode !== 'upload') currentApiQualities = Array.isArray(qualities) ? qualities : [];
+                            container.replaceChildren();
+                            const heading = document.createElement('strong');
+                            heading.textContent = 'Chất lượng audio từ API';
+                            container.append(heading);
+
+                            if (mode === 'upload') {
+                                const note = document.createElement('p');
+                                note.textContent = 'File tải lên riêng không có metadata chất lượng API (để trống / null).';
+                                container.append(note);
+                                return;
+                            }
+
+                            if (!Array.isArray(qualities) || qualities.length === 0) {
+                                const note = document.createElement('p');
+                                note.textContent = 'Chưa có dữ liệu chất lượng từ NhacCuaTui cho bài hát này.';
+                                container.append(note);
+                                return;
+                            }
+
+                            const list = document.createElement('ul');
+                            list.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0;padding:0;list-style:none;';
+                            qualities.forEach((quality) => {
+                                const item = document.createElement('li');
+                                const available = quality.available !== false;
+                                item.style.cssText = `padding:6px 10px;border-radius:999px;background:#e8eef2;color:#243238;${available ? '' : 'opacity:.65;border:1px dashed #9aa8ae;'}`;
+                                item.textContent = `${quality.label || 'Chất lượng nhạc'}${quality.bitrate ? ` · ${quality.bitrate} kbps` : ''}${quality.premium_only ? ' · VIP' : ' · Thường'}${available ? '' : ' · NCT chưa trả URL phát/tải'}`;
+                                list.append(item);
+                            });
+                            container.append(list);
+                        };
+
+                        window.melodifyRenderSongAudioQualities = render;
+                        render(currentApiQualities);
+                        fileInput?.addEventListener('change', () => {
+                            render(fileInput.files?.length ? [] : currentApiQualities, fileInput.files?.length ? 'upload' : 'api');
+                        });
+                    })();
+                </script>
                 @if(filled($currentAudioUrl))
                     <div class="admin-current-audio">
                         <strong>File âm thanh hiện tại</strong>
@@ -127,6 +175,7 @@
             if (!response.ok) throw new Error(payload.message || 'Không thể lấy dữ liệu bài hát.');
 
             const track = payload.data || {};
+            window.melodifyRenderSongAudioQualities?.(track.audio_qualities || []);
             setValue('#song-external-id', track.external_id);
             setValue('#song-title', track.title);
             setValue('#song-slug', track.slug);
@@ -229,6 +278,7 @@
             if (!response.ok) throw new Error(payload.message || 'Không thể lấy dữ liệu bài hát.');
 
             const track = payload.data || {};
+            window.melodifyRenderSongAudioQualities?.(track.audio_qualities || []);
             setValue('#song-title', track.title);
             setValue('#song-slug', track.slug);
             setValue('#song-cover-url', track.cover_url);

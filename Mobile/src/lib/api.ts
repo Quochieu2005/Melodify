@@ -56,6 +56,16 @@ export type SongArtistCredit = {
   avatar_url?: string | null;
 };
 
+export type SongAudioQuality = {
+  quality_id: string;
+  label: string;
+  bitrate: number | null;
+  premium_only: boolean;
+  available?: boolean;
+  audio_url: string | null;
+  download_url: string | null;
+};
+
 export type Song = {
   id: string;
   title: string;
@@ -67,6 +77,10 @@ export type Song = {
   album?: { id: string; title: string } | null;
   genre?: { id: string; name: string } | null;
   topics?: { id: string; name: string; type: string | null }[];
+  premium_only?: boolean;
+  audio_quality?: string | null;
+  audio_qualities?: SongAudioQuality[];
+  download_url?: string | null;
   audio_url?: string | null;
   stream_url?: string | null;
   preview_url: string | null;
@@ -588,9 +602,32 @@ export function loginWithPassword(identifier: string, password: string) {
   return apiFetch<AuthResponse>('/v1/auth/login', jsonRequest({ identifier, password, remember: true, device_name: 'melodify-mobile' }));
 }
 
-export async function getAudioSource(song: Song) {
+export async function getAudioSource(song: Song, qualityId?: string | null) {
   const identifier = song.slug || song.id;
-  let uri = song.audio_url || song.stream_url || song.source_url || song.preview_url;
+  const qualities = song.audio_qualities ?? [];
+  const authUser = await getSavedAuthUser();
+  const isPremium = Number(authUser?.is_premium ?? 0) === 1;
+  const selectedQuality = qualityId
+    ? qualities.find((quality) => quality.quality_id === qualityId)
+    : qualities.find((quality) => quality.available !== false && !quality.premium_only)
+      ?? (isPremium ? qualities.find((quality) => quality.available !== false) : undefined);
+  if (selectedQuality?.available === false || (qualityId && selectedQuality && !selectedQuality.audio_url)) {
+    throw new Error('NCT có thông tin chất lượng VIP nhưng chưa trả luồng phát/tải cho yêu cầu này.');
+  }
+  if (selectedQuality?.premium_only && !isPremium) {
+    throw new Error('Chất lượng này yêu cầu tài khoản VIP.');
+  }
+  if (song.premium_only && !isPremium && !song.preview_url) {
+    throw new Error('Bài hát này yêu cầu tài khoản VIP để nghe đầy đủ.');
+  }
+  if (qualities.some((quality) => quality.available !== false)
+    && !qualities.some((quality) => quality.available !== false && !quality.premium_only)
+    && !isPremium && !song.preview_url) {
+    throw new Error('Bài hát này chỉ có chất lượng VIP.');
+  }
+  let uri = song.premium_only && !isPremium
+    ? song.preview_url
+    : selectedQuality?.audio_url || song.audio_url || song.stream_url || song.source_url || song.preview_url;
   if (!uri) {
     uri = API_URL + '/v1/songs/' + encodeURIComponent(identifier) + '/audio';
   } else if (uri.startsWith('/v1/')) {
@@ -598,8 +635,20 @@ export async function getAudioSource(song: Song) {
   } else if (uri.startsWith('/')) {
     uri = API_URL.replace(/\/api$/, '') + uri;
   }
+  let isInternalApiUrl = false;
+  try {
+    const apiBase = new URL(API_URL);
+    const candidate = new URL(uri, API_URL);
+    const apiPath = apiBase.pathname.replace(/\/$/, '');
+    if (candidate.pathname.startsWith(apiPath + '/')) {
+      uri = apiBase.origin + candidate.pathname + candidate.search;
+      isInternalApiUrl = true;
+    }
+  } catch {
+    isInternalApiUrl = uri.startsWith(API_URL);
+  }
   const token = await getAuthToken();
-  const headers = token && uri.startsWith(API_URL) ? { Authorization: 'Bearer ' + token } : undefined;
+  const headers = token && isInternalApiUrl ? { Authorization: 'Bearer ' + token } : undefined;
   return { uri, headers };
 }
 
