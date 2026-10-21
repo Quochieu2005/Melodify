@@ -36,7 +36,7 @@ RUN apt-get update \
         opcache \
         xml \
         zip \
-    && pecl install mongodb \
+    && pecl install mongodb-1.21.12 \
     && docker-php-ext-enable mongodb \
     && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/* /tmp/pear
