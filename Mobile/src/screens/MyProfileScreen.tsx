@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -25,7 +25,6 @@ import {
   getSavedAuthUser,
   getVisitorId,
   type AuthUser,
-  type LibraryData,
 } from '@/lib/api';
 import { getRecentSongs } from '@/lib/recent-history';
 
@@ -40,38 +39,42 @@ export function MyProfileScreen() {
   const [activeTab, setActiveTab] = useState<ProfileTab>('created');
   const [recentCount, setRecentCount] = useState<number>(0);
 
-  // Modals state
+  // Create playlist modal
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [creatingBusy, setCreatingBusy] = useState(false);
 
-  const [copyModalOpen, setCopyModalOpen] = useState(false);
-  const [copyUrl, setCopyUrl] = useState('');
-  const [copyingBusy, setCopyingBusy] = useState(false);
-
+  // Settings & search
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortAsc, setSortAsc] = useState(false);
-
-  // Load auth user
-  const loadUser = useCallback(async () => {
-    try {
-      const u = await getSavedAuthUser();
-      setUser(u);
-    } catch {
-      setUser(null);
-    } finally {
-      setAuthChecking(false);
-    }
-  }, []);
 
   useEffect(() => {
-    void loadUser();
-    void getRecentSongs().then((items) => setRecentCount(items.length));
-  }, [loadUser]);
+    let active = true;
+    void getSavedAuthUser()
+      .then((u) => {
+        if (active) {
+          setUser(u);
+          setAuthChecking(false);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setUser(null);
+          setAuthChecking(false);
+        }
+      });
+    void getRecentSongs().then((items) => {
+      if (active) {
+        setRecentCount(items.length);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  // Fetch library data
+  // Fetch real library data from backend
   const { data, loading, reload } = useRemoteData(async () => {
     const visitorId = await getVisitorId();
     const res = await getLibrary(visitorId);
@@ -96,26 +99,6 @@ export function MyProfileScreen() {
     }
   };
 
-  // Handle Copy / Import Playlist
-  const handleCopyPlaylist = async () => {
-    const url = copyUrl.trim();
-    if (!url) return;
-    setCopyingBusy(true);
-    try {
-      // Simulate quick playlist import / parser
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      await createUserPlaylist('Playlist Sao Chép ' + new Date().toLocaleDateString('vi-VN'));
-      setCopyUrl('');
-      setCopyModalOpen(false);
-      await reload();
-      Alert.alert('Thành công', 'Đã sao chép danh sách phát thành công vào thư viện của bạn!');
-    } catch {
-      Alert.alert('Lỗi', 'Không thể sao chép playlist từ liên kết này. Vui lòng thử lại.');
-    } finally {
-      setCopyingBusy(false);
-    }
-  };
-
   // Handle Logout
   const handleLogout = async () => {
     setSettingsOpen(false);
@@ -124,51 +107,39 @@ export function MyProfileScreen() {
     await reload();
   };
 
-  // Filter & sort created playlists
+  // Filter created playlists
   const displayCreatedPlaylists = useMemo(() => {
     let list = [...(data?.created_playlists ?? [])];
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter((p) => p.name.toLowerCase().includes(q));
     }
-    if (sortAsc) {
-      list.sort((a, b) => a.name.localeCompare(b.name));
-    }
     return list;
-  }, [data?.created_playlists, searchQuery, sortAsc]);
+  }, [data?.created_playlists, searchQuery]);
 
-  // Custom top header for the "Của tui" page (Ảnh 1)
+  // Top header icons: Bell & Settings
   const customHeader = (
     <View style={styles.topHeaderRow}>
       <View style={styles.topHeaderLeft} />
 
       <View style={styles.topHeaderRight}>
-        {/* Scan Frame Icon */}
-        <Pressable
-          accessibilityLabel="Quét mã QR"
-          onPress={() => Alert.alert('Quét mã', 'Tính năng quét mã QR / kết nối thiết bị.')}
-          style={styles.topHeaderBtn}
-        >
-          <AppIcon name="scan" color="#1E293B" size={21} />
-        </Pressable>
-
-        {/* Bell Notifications Icon with Red Dot */}
+        {/* Bell Notifications */}
         <Pressable
           accessibilityLabel="Thông báo"
           onPress={() => Alert.alert('Thông báo', 'Bạn không có thông báo mới nào.')}
           style={styles.topHeaderBtn}
         >
-          <AppIcon name="bell" color="#1E293B" size={21} />
+          <AppIcon name="bell" color="#1E293B" size={20} />
           <View style={styles.notificationDot} />
         </Pressable>
 
-        {/* Settings Gear Icon */}
+        {/* Settings Gear */}
         <Pressable
           accessibilityLabel="Cài đặt tài khoản"
           onPress={() => setSettingsOpen(true)}
           style={styles.topHeaderBtn}
         >
-          <AppIcon name="settings" color="#1E293B" size={21} />
+          <AppIcon name="settings" color="#1E293B" size={20} />
         </Pressable>
       </View>
     </View>
@@ -185,7 +156,7 @@ export function MyProfileScreen() {
             <ActivityIndicator color="#00B5AD" size="small" />
           </View>
         ) : user ? (
-          /* USER LOGGED IN (ẢNH CỦA BẠN) */
+          /* USER LOGGED IN */
           <>
             {/* User Profile Card */}
             <View style={styles.profileSection}>
@@ -198,19 +169,26 @@ export function MyProfileScreen() {
                     style={styles.avatarFallback}
                   >
                     <Text style={styles.avatarFallbackText}>
-                      {(user.name || user.username || 'M').charAt(0).toUpperCase()}
+                      {(user.name || user.username || 'U').charAt(0).toUpperCase()}
                     </Text>
                   </LinearGradient>
                 )}
               </View>
 
               <View style={styles.profileInfo}>
-                <Text numberOfLines={1} style={styles.profileName}>
-                  {user.name || user.username || 'mduc'}
-                </Text>
+                <View style={styles.nameRow}>
+                  <Text numberOfLines={1} style={styles.profileName}>
+                    {user.name || user.username || 'Người dùng'}
+                  </Text>
+                  <View style={styles.vipTag}>
+                    <Text style={styles.vipTagText}>
+                      {user.is_premium ? 'VIP' : 'Miễn phí'}
+                    </Text>
+                  </View>
+                </View>
 
+                {/* Real stats: Đang theo dõi & Người theo dõi */}
                 <View style={styles.statsRow}>
-                  {/* Following */}
                   <Pressable
                     onPress={() => router.push('/following' as never)}
                     style={styles.statCol}
@@ -221,24 +199,15 @@ export function MyProfileScreen() {
                     </Text>
                   </Pressable>
 
-                  {/* Followers */}
                   <Pressable
                     onPress={() => router.push('/followers' as never)}
                     style={styles.statCol}
                   >
                     <Text style={styles.statNum}>{data?.followers_count ?? 0}</Text>
                     <Text numberOfLines={1} style={styles.statLabel}>
-                      Người theo d...
+                      Người theo dõi
                     </Text>
                   </Pressable>
-
-                  {/* Listens */}
-                  <View style={styles.statCol}>
-                    <Text style={styles.statNum}>598</Text>
-                    <Text numberOfLines={1} style={styles.statLabel}>
-                      Lượt nghe
-                    </Text>
-                  </View>
                 </View>
               </View>
 
@@ -253,7 +222,7 @@ export function MyProfileScreen() {
               </Pressable>
             </View>
 
-            {/* Quick Action Cards Grid (2x2) */}
+            {/* Quick Action Cards (Chỉ hiển thị các chức năng thực tế có trong hệ thống) */}
             <View style={styles.actionCardsGrid}>
               {/* Card 1: Tài khoản VIP */}
               <Pressable
@@ -268,58 +237,12 @@ export function MyProfileScreen() {
                     Tài khoản VIP
                   </Text>
                   <Text numberOfLines={1} style={styles.cardSubtitle}>
-                    {user.is_premium ? 'Gói VIP' : 'Gói miễn phí'}
+                    {user.is_premium ? 'Gói VIP đang dùng' : 'Gói miễn phí'}
                   </Text>
                 </View>
               </Pressable>
 
-              {/* Card 2: Trung tâm sự kiện */}
-              <Pressable
-                onPress={() =>
-                  Alert.alert(
-                    'Trung tâm sự kiện',
-                    'Đăng nhập hàng ngày để nhận ngày VIP và các huy hiệu đặc biệt của Melodify!'
-                  )
-                }
-                style={[styles.actionCard, styles.eventCard]}
-              >
-                <View style={styles.cardIconBox}>
-                  <AppIcon name="calendar" color="#E11D48" size={24} />
-                </View>
-                <View style={styles.cardTextBox}>
-                  <Text numberOfLines={1} style={styles.cardTitle}>
-                    Trung tâm sự kiện
-                  </Text>
-                  <Text numberOfLines={1} style={styles.cardSubtitle}>
-                    Khám phá ngay
-                  </Text>
-                </View>
-              </Pressable>
-
-              {/* Card 3: Nhạc Đã Tải */}
-              <Pressable
-                onPress={() =>
-                  Alert.alert(
-                    'Nhạc Đã Tải',
-                    'Tính năng lưu nhạc nghe offline trên thiết bị.'
-                  )
-                }
-                style={[styles.actionCard, styles.grayCard]}
-              >
-                <View style={styles.cardIconBox}>
-                  <AppIcon name="download" color="#00B5AD" size={24} />
-                </View>
-                <View style={styles.cardTextBox}>
-                  <Text numberOfLines={1} style={styles.cardTitle}>
-                    Nhạc Đã Tải
-                  </Text>
-                  <Text numberOfLines={1} style={styles.cardSubtitle}>
-                    3 track
-                  </Text>
-                </View>
-              </Pressable>
-
-              {/* Card 4: Gần đây */}
+              {/* Card 2: Nghe gần đây */}
               <Pressable
                 onPress={() => router.push('/recent' as never)}
                 style={[styles.actionCard, styles.grayCard]}
@@ -332,7 +255,7 @@ export function MyProfileScreen() {
                     Gần đây
                   </Text>
                   <Text numberOfLines={1} style={styles.cardSubtitle}>
-                    {recentCount > 0 ? `${recentCount} track` : '100 track'}
+                    {recentCount > 0 ? `${recentCount} bài hát` : 'Chưa có bài hát'}
                   </Text>
                 </View>
               </Pressable>
@@ -355,7 +278,7 @@ export function MyProfileScreen() {
               <View style={styles.favoriteCopy}>
                 <Text style={styles.favoriteTitle}>Yêu Thích</Text>
                 <Text style={styles.favoriteSubtitle}>
-                  {data ? `${data.favorite_song_count} bài hát` : '3 bài hát'}
+                  {data ? `${data.favorite_song_count} bài hát` : '0 bài hát'}
                 </Text>
               </View>
 
@@ -369,7 +292,6 @@ export function MyProfileScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.tabsRow}
               >
-                {/* Tab 1: Playlist đã tạo */}
                 <Pressable
                   onPress={() => setActiveTab('created')}
                   style={styles.tabItem}
@@ -385,7 +307,6 @@ export function MyProfileScreen() {
                   {activeTab === 'created' && <View style={styles.tabIndicator} />}
                 </Pressable>
 
-                {/* Tab 2: Playlist yêu thích */}
                 <Pressable
                   onPress={() => setActiveTab('favorite_playlists')}
                   style={styles.tabItem}
@@ -403,7 +324,6 @@ export function MyProfileScreen() {
                   )}
                 </Pressable>
 
-                {/* Tab 3: Album yêu thích */}
                 <Pressable
                   onPress={() => setActiveTab('favorite_albums')}
                   style={styles.tabItem}
@@ -426,14 +346,13 @@ export function MyProfileScreen() {
             {/* TAB CONTENT: Playlist đã tạo */}
             {activeTab === 'created' && (
               <View style={styles.tabContentSection}>
-                {/* Section Header with action buttons */}
                 <View style={styles.sectionHeaderRow}>
                   <Text style={styles.sectionTitle}>
                     Playlist đã tạo ({data?.created_playlists.length ?? 0})
                   </Text>
 
                   <View style={styles.sectionActionsRight}>
-                    {/* Add playlist button (+) */}
+                    {/* Nút Tạo Playlist mới (+) */}
                     <Pressable
                       accessibilityLabel="Tạo playlist mới"
                       onPress={() => setCreateModalOpen(true)}
@@ -442,7 +361,7 @@ export function MyProfileScreen() {
                       <AppIcon name="plus" color="#334155" size={18} />
                     </Pressable>
 
-                    {/* Search playlist button */}
+                    {/* Nút Tìm kiếm trong playlist */}
                     <Pressable
                       accessibilityLabel="Tìm playlist"
                       onPress={() => setSearchOpen((prev) => !prev)}
@@ -450,26 +369,17 @@ export function MyProfileScreen() {
                     >
                       <AppIcon name="search" color="#334155" size={17} />
                     </Pressable>
-
-                    {/* Sort button */}
-                    <Pressable
-                      accessibilityLabel="Sắp xếp"
-                      onPress={() => setSortAsc((prev) => !prev)}
-                      style={styles.actionCircleBtn}
-                    >
-                      <AppIcon name="sort" color="#334155" size={17} />
-                    </Pressable>
                   </View>
                 </View>
 
-                {/* Inline Search Bar when search is active */}
+                {/* Inline Search Bar */}
                 {searchOpen && (
                   <View style={styles.searchBarBox}>
                     <AppIcon name="search" color="#94A3B8" size={16} />
                     <TextInput
                       value={searchQuery}
                       onChangeText={setSearchQuery}
-                      placeholder="Tìm kiếm trong danh sách playlist..."
+                      placeholder="Tìm kiếm trong playlist đã tạo..."
                       placeholderTextColor="#94A3B8"
                       style={styles.searchBarInput}
                     />
@@ -481,48 +391,7 @@ export function MyProfileScreen() {
                   </View>
                 )}
 
-                {/* Special Action Row 1: Sao chép playlist */}
-                <Pressable
-                  onPress={() => setCopyModalOpen(true)}
-                  style={styles.playlistRowItem}
-                >
-                  <View style={[styles.squareIconBox, styles.blueBox]}>
-                    <AppIcon name="copy" color="#0284C7" size={22} />
-                  </View>
-                  <View style={styles.rowItemInfo}>
-                    <Text numberOfLines={1} style={styles.rowItemTitle}>
-                      Sao chép playlist
-                    </Text>
-                    <Text numberOfLines={1} style={styles.rowItemSubtitle}>
-                      Sao chép playlist từ nền tảng khác chỉ v...
-                    </Text>
-                  </View>
-                </Pressable>
-
-                {/* Special Action Row 2: Đăng tải bởi mduc */}
-                <Pressable
-                  onPress={() =>
-                    Alert.alert(
-                      'Tải lên',
-                      'Bạn có thể quản lý và tải bài hát của mình lên nền tảng Melodify.'
-                    )
-                  }
-                  style={styles.playlistRowItem}
-                >
-                  <View style={[styles.squareIconBox, styles.tealBox]}>
-                    <AppIcon name="upload" color="#0D9488" size={22} />
-                  </View>
-                  <View style={styles.rowItemInfo}>
-                    <Text numberOfLines={1} style={styles.rowItemTitle}>
-                      Đăng tải bởi {user.name || user.username || 'mduc'}
-                    </Text>
-                    <Text numberOfLines={1} style={styles.rowItemSubtitle}>
-                      0 track
-                    </Text>
-                  </View>
-                </Pressable>
-
-                {/* User's Created Playlists List */}
+                {/* Danh sách Playlist đã tạo thật */}
                 {loading && !data ? (
                   <ActivityIndicator color="#00B5AD" style={{ marginTop: 20 }} />
                 ) : displayCreatedPlaylists.length > 0 ? (
@@ -558,10 +427,16 @@ export function MyProfileScreen() {
                   ))
                 ) : (
                   <View style={styles.emptyBox}>
-                    <Text style={styles.emptyTitle}>Chưa có playlist nào</Text>
+                    <Text style={styles.emptyTitle}>Bạn chưa tạo playlist nào</Text>
                     <Text style={styles.emptyDesc}>
-                      Hãy nhấn nút (+) để tạo playlist đầu tiên của bạn.
+                      Hãy nhấn nút (+) ở góc trên để tạo playlist đầu tiên của bạn.
                     </Text>
+                    <Pressable
+                      onPress={() => setCreateModalOpen(true)}
+                      style={styles.emptyCreateBtn}
+                    >
+                      <Text style={styles.emptyCreateBtnText}>+ Tạo playlist mới</Text>
+                    </Pressable>
                   </View>
                 )}
               </View>
@@ -611,7 +486,7 @@ export function MyProfileScreen() {
                   <View style={styles.emptyBox}>
                     <Text style={styles.emptyTitle}>Chưa có playlist yêu thích</Text>
                     <Text style={styles.emptyDesc}>
-                      Khám phá các playlist và bấm trái tim để lưu lại tại đây.
+                      Khám phá các playlist và bấm biểu tượng trái tim để lưu lại.
                     </Text>
                   </View>
                 )}
@@ -677,8 +552,8 @@ export function MyProfileScreen() {
             </View>
             <Text style={styles.guestTitle}>Của Tui</Text>
             <Text style={styles.guestDesc}>
-              Đăng nhập Melodify để đồng bộ danh sách yêu thích, playlist đã tạo và
-              thưởng thức kho nhạc phong phú của riêng bạn.
+              Đăng nhập Melodify để đồng bộ danh sách bài hát yêu thích, quản lý
+              playlist cá nhân và gói VIP của bạn.
             </Text>
             <Pressable
               onPress={() => router.push('/login' as never)}
@@ -727,53 +602,6 @@ export function MyProfileScreen() {
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
                   <Text style={styles.modalSubmitText}>Tạo</Text>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* COPY PLAYLIST MODAL */}
-      <Modal
-        visible={copyModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCopyModalOpen(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Sao chép playlist</Text>
-            <Text style={styles.modalSubtitleText}>
-              Dán đường dẫn playlist từ Zing MP3, Spotify, YouTube hoặc NhacCuaTui để
-              nhập vào Melodify:
-            </Text>
-            <TextInput
-              value={copyUrl}
-              onChangeText={setCopyUrl}
-              placeholder="https://..."
-              placeholderTextColor="#94A3B8"
-              style={styles.modalInput}
-            />
-            <View style={styles.modalButtonsRow}>
-              <Pressable
-                onPress={() => setCopyModalOpen(false)}
-                style={styles.modalCancelBtn}
-              >
-                <Text style={styles.modalCancelText}>Hủy</Text>
-              </Pressable>
-              <Pressable
-                disabled={copyingBusy || !copyUrl.trim()}
-                onPress={() => void handleCopyPlaylist()}
-                style={[
-                  styles.modalSubmitBtn,
-                  (!copyUrl.trim() || copyingBusy) && styles.btnDisabled,
-                ]}
-              >
-                {copyingBusy ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.modalSubmitText}>Sao chép</Text>
                 )}
               </Pressable>
             </View>
@@ -965,25 +793,42 @@ const styles = StyleSheet.create({
   },
   profileInfo: {
     flex: 1,
-    gap: 4,
+    gap: 6,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   profileName: {
     color: '#0F172A',
-    fontSize: 21,
+    fontSize: 20,
     fontWeight: '900',
     letterSpacing: -0.3,
+    maxWidth: 160,
+  },
+  vipTag: {
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  vipTagText: {
+    color: '#334155',
+    fontSize: 10.5,
+    fontWeight: '700',
   },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 16,
   },
   statCol: {
     gap: 1,
   },
   statNum: {
     color: '#0F172A',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
   },
   statLabel: {
@@ -996,7 +841,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2,
     paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   profileLinkText: {
     color: '#0F172A',
@@ -1004,14 +849,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  /* 2x2 Action Cards */
+  /* Real Action Cards */
   actionCardsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 10,
   },
   actionCard: {
-    width: '48.4%',
+    flex: 1,
     minHeight: 64,
     borderRadius: 14,
     paddingHorizontal: 12,
@@ -1024,10 +868,6 @@ const styles = StyleSheet.create({
   vipCard: {
     backgroundColor: '#FFF7ED',
     borderColor: '#FDE68A',
-  },
-  eventCard: {
-    backgroundColor: '#FFF1F2',
-    borderColor: '#FECDD3',
   },
   grayCard: {
     backgroundColor: '#F1F5F9',
@@ -1180,19 +1020,6 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 6,
   },
-  squareIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  blueBox: {
-    backgroundColor: '#E0F2FE',
-  },
-  tealBox: {
-    backgroundColor: '#CCFBF1',
-  },
   playlistCoverBox: {
     width: 48,
     height: 48,
@@ -1228,7 +1055,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 32,
-    gap: 6,
+    gap: 8,
   },
   emptyTitle: {
     color: '#0F172A',
@@ -1239,6 +1066,19 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontSize: 12,
     textAlign: 'center',
+    maxWidth: 280,
+  },
+  emptyCreateBtn: {
+    marginTop: 8,
+    backgroundColor: '#E6FAF7',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  emptyCreateBtnText: {
+    color: '#00B5AD',
+    fontSize: 13,
+    fontWeight: '700',
   },
 
   /* Guest View */
@@ -1313,11 +1153,6 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 17,
     fontWeight: '800',
-  },
-  modalSubtitleText: {
-    color: '#64748B',
-    fontSize: 12.5,
-    lineHeight: 18,
   },
   modalInput: {
     height: 44,

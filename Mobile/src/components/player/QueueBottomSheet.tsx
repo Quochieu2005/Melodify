@@ -154,14 +154,6 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
               </Text>
             </Pressable>
 
-            {/* Ringtone */}
-            <Pressable style={styles.actionBtn}>
-              <View style={styles.circleIcon}>
-                <AppIcon name="bell" color="#475569" size={20} />
-              </View>
-              <Text style={styles.actionLabel}>Nhạc chuông</Text>
-            </Pressable>
-
             {/* Download */}
             <Pressable style={styles.actionBtn}>
               <View style={styles.circleIcon}>
