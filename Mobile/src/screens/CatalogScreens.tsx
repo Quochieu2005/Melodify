@@ -1,11 +1,13 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { AppShell } from '@/components/layout';
 import { Artwork, SongRow, useMusic } from '@/components/music';
 import { PageHeading, ScrollPage, SectionHeading, StateMessage, surfaceStyles } from '@/components/shared';
 import { AppIcon } from '@/components/shared/AppIcon';
+import { SyncedLyricsView } from '@/components/player';
+import { parseLrcLyrics } from '@/lib/lyrics';
 import { useRemoteData } from '@/hooks/useRemoteData';
 import { getAlbumRailCardWidth } from '@/lib/layout';
 import {
@@ -176,9 +178,96 @@ export function SongDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const identifier = identifierParam(slug);
   const { data, loading, error, reload } = useRemoteData(async () => (await getSong(identifier)).data, identifier);
-  const { playSong } = useMusic();
+  const { track, isPlaying, playSong, togglePlay, seekTo, parsedLyrics, activeLyricIndex } = useMusic();
   const song = data as Song | null;
-  return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{song ? <><EntityHero title={song.title} subtitle={song.artists?.map((artist) => artist.name).join(', ') || song.artist?.name || 'Nghệ sĩ'} image={song.cover_url} meta={song.album?.title || song.publisher || ''} /><Pressable onPress={() => void playSong(song)} style={styles.playLarge}><AppIcon name="play" color="#092326" size={17} /><Text style={styles.playLargeText}>Phát bài hát</Text></Pressable>{song.lyrics?.length ? <View style={styles.lyrics}><SectionHeading title="Lời bài hát" />{song.lyrics.map((lyric) => <Text key={lyric.id} style={styles.lyricText}>{lyric.plain_lyrics || lyric.content}</Text>)}</View> : null}</> : null}</ScrollPage></AppShell>;
+
+  const isThisSongLoaded = Boolean(song && (track?.id === song.id || track?.slug === song.slug));
+  const isThisTrackPlaying = Boolean(isThisSongLoaded && isPlaying);
+
+  const songParsedLyrics = useMemo(() => {
+    if (isThisSongLoaded && parsedLyrics.length > 0) return parsedLyrics;
+    const synced = song?.lyrics?.find((l) => l.is_synced && l.synced_lyrics);
+    if (synced?.synced_lyrics) return parseLrcLyrics(synced.synced_lyrics);
+    const content = song?.lyrics?.[0]?.content;
+    if (content && content.includes('[0')) return parseLrcLyrics(content);
+    return [];
+  }, [isThisSongLoaded, parsedLyrics, song?.lyrics]);
+
+  const handlePlayToggle = () => {
+    if (!song) return;
+    if (isThisSongLoaded) {
+      togglePlay();
+    } else {
+      void playSong(song);
+    }
+  };
+
+  const handleSeek = (seconds: number) => {
+    if (!song) return;
+    if (!isThisSongLoaded) {
+      void playSong(song).then(() => {
+        setTimeout(() => seekTo(seconds), 350);
+      });
+    } else {
+      seekTo(seconds);
+    }
+  };
+
+  return (
+    <AppShell>
+      <ScrollPage>
+        {loading || error ? (
+          <StateMessage loading={loading} error={error} onRetry={() => void reload()} />
+        ) : null}
+
+        {song ? (
+          <>
+            <EntityHero
+              title={song.title}
+              subtitle={
+                song.artists?.map((artist) => artist.name).join(', ') ||
+                song.artist?.name ||
+                'Nghệ sĩ'
+              }
+              image={song.cover_url}
+              meta={song.album?.title || song.publisher || ''}
+            />
+
+            <Pressable onPress={handlePlayToggle} style={styles.playLarge}>
+              <AppIcon
+                name={isThisTrackPlaying ? 'pause' : 'play'}
+                color="#092326"
+                size={18}
+              />
+              <Text style={styles.playLargeText}>
+                {isThisTrackPlaying ? 'Tạm dừng' : 'Phát bài hát'}
+              </Text>
+            </Pressable>
+
+            {song.lyrics?.length ? (
+              <View style={styles.lyrics}>
+                <SectionHeading
+                  title="Lời bài hát"
+                  action={
+                    songParsedLyrics.length > 0 ? (
+                      <Text style={styles.karaokeBadge}>✦ Chạy theo bài hát</Text>
+                    ) : undefined
+                  }
+                />
+                <SyncedLyricsView
+                  lyrics={songParsedLyrics}
+                  plainText={song.lyrics[0]?.plain_lyrics || song.lyrics[0]?.content}
+                  activeLyricIndex={isThisTrackPlaying ? activeLyricIndex : -1}
+                  onSeekToLine={handleSeek}
+                  containerHeight={320}
+                />
+              </View>
+            ) : null}
+          </>
+        ) : null}
+      </ScrollPage>
+    </AppShell>
+  );
 }
 
 function EntityHero({ title, subtitle, image, meta, action }: { title: string; subtitle: string; image?: string | null; meta: string; action?: ReactNode }) {
@@ -259,6 +348,8 @@ const styles = StyleSheet.create({
   entityActionText: { color: '#E9EEEC', fontSize: 10, fontWeight: '800' },
   playLarge: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 24, backgroundColor: '#00D3E5' },
   playLargeText: { color: '#092326', fontWeight: '900' },
-  lyrics: { gap: 14, padding: 14, borderRadius: 14, backgroundColor: '#202A28' },
-  lyricText: { color: '#D9E0DC', fontSize: 14, lineHeight: 24 },
+  karaokeBadge: { color: '#00D3E5', fontSize: 11, fontWeight: '800' },
+  lyrics: { gap: 14, padding: 14, borderRadius: 14, backgroundColor: '#F8FAFC' },
+  lyricText: { color: '#334155', fontSize: 14, lineHeight: 24 },
 });
+
