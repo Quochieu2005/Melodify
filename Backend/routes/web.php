@@ -22,11 +22,21 @@ use App\Http\Controllers\AdminController\SongViewController;
 use App\Http\Controllers\AdminController\SubscriptionController;
 use App\Http\Controllers\AdminController\TopicController;
 use App\Http\Controllers\AdminController\UserController;
+use App\Http\Controllers\Api\MobileSocialAuthController;
 use App\Http\Controllers\AudioController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return redirect('/admin/dashboard');
+});
+
+Route::prefix('auth')->name('social.')->middleware('throttle:10,1')->group(function () {
+    Route::get('/mobile/{provider}/redirect', [MobileSocialAuthController::class, 'redirectToProvider'])
+        ->whereIn('provider', ['google', 'facebook'])
+        ->name('mobile.redirect');
+    Route::get('/{provider}/callback', [MobileSocialAuthController::class, 'handleProviderCallback'])
+        ->whereIn('provider', ['google', 'facebook'])
+        ->name('provider.callback');
 });
 
 Route::prefix('admin')->name('admin.')->middleware('admin.timing')->group(function () {

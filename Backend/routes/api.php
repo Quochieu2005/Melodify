@@ -62,6 +62,12 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::post('/auth/social', [SocialAuthController::class, 'login'])
         ->middleware('throttle:20,1')
         ->name('auth.social');
+    Route::post('/auth/social/exchange', [SocialAuthController::class, 'exchange'])
+        ->middleware('throttle:10,1')
+        ->name('auth.social.exchange');
+    Route::post('/auth/social/exchange-ticket', [\App\Http\Controllers\Api\MobileSocialAuthController::class, 'exchangeTicket'])
+        ->middleware('throttle:10,1')
+        ->name('auth.social.exchange-ticket');
     Route::post('/auth/login', [PasswordAuthController::class, 'login'])
         ->middleware('throttle:10,1')
         ->name('auth.login');
