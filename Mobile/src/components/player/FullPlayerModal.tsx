@@ -381,7 +381,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                 </View>
               </View>
 
-              {/* Actions Row (Ảnh 2: Heart, Comment, Share, Download, 3-Gạch Menu) */}
+              {/* Actions Row (Ảnh 2: Heart, Share, Download, 3-Gạch Menu) */}
               <View style={styles.actionIconsRow}>
                 {/* Left group with counts */}
                 <View style={styles.actionGroupLeft}>
@@ -397,15 +397,11 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                       size={24}
                     />
                     <Text style={styles.actionCount}>
-                      {favorite ? '15,8K' : '15,7K'}
+                      {favorite ? 1 : 0}
                     </Text>
                   </Pressable>
 
-                  {/* Comment */}
-                  <View style={styles.actionCol}>
-                    <AppIcon name="comment" color="#FFFFFF" size={22} />
-                    <Text style={styles.actionCount}>4</Text>
-                  </View>
+
 
                   {/* Share / Facebook */}
                   <View style={styles.actionCol}>
