@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Services\ApiTokenService;
-use App\Services\SocialAccountService;
-use App\Services\SocialAuthException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Laravel\Socialite\Socialite;
 use Throwable;
 
@@ -16,10 +16,7 @@ class SocialAuthController extends Controller
 {
     private const PROVIDERS = ['google', 'facebook'];
 
-    public function __construct(
-        private readonly ApiTokenService $tokens,
-        private readonly SocialAccountService $accounts,
-    ) {}
+    public function __construct(private readonly ApiTokenService $tokens) {}
 
     public function login(Request $request, ?string $provider = null): JsonResponse
     {
@@ -41,96 +38,8 @@ class SocialAuthController extends Controller
             return response()->json(['message' => 'Nhà cung cấp đăng nhập không được hỗ trợ.'], 422);
         }
 
-        return $this->authenticateWithAccessToken(
-            $provider,
-            $data['access_token'],
-            $data['device_name'] ?? null,
-            array_key_exists('remember', $data) ? $request->boolean('remember') : null,
-        );
-    }
-
-    public function exchange(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'provider' => ['required', 'in:google,facebook'],
-            'code' => ['required', 'string', 'min:8', 'max:4096'],
-            'client_id' => ['required', 'string', 'max:512'],
-            'redirect_uri' => ['required', 'string', 'max:2048'],
-            'code_verifier' => ['nullable', 'string', 'min:43', 'max:128'],
-            'device_name' => ['nullable', 'string', 'max:100'],
-            'remember' => ['sometimes', 'boolean'],
-        ]);
-
-        $provider = $data['provider'];
-        $expectedRedirect = (string) config("services.{$provider}.mobile_redirect", '');
-        if ($expectedRedirect === '' || ! hash_equals($expectedRedirect, $data['redirect_uri'])) {
-            return response()->json(['message' => 'OAuth redirect URI chưa được cấu hình đúng trên Backend.'], 503);
-        }
-
-        $form = [
-            'client_id' => $data['client_id'],
-            'code' => $data['code'],
-            'redirect_uri' => $data['redirect_uri'],
-            'grant_type' => 'authorization_code',
-        ];
-
-        if ($provider === 'google') {
-            $allowedClientIds = array_filter(array_merge(
-                [(string) config('services.google.client_id', '')],
-                explode(',', (string) config('services.google.mobile_client_ids', '')),
-            ));
-            $allowedClientIds = array_map('trim', $allowedClientIds);
-            if (! in_array($data['client_id'], $allowedClientIds, true)) {
-                return response()->json(['message' => 'Google OAuth Client ID chưa được cho phép trên Backend.'], 503);
-            }
-            if (! empty($data['code_verifier'])) {
-                $form['code_verifier'] = $data['code_verifier'];
-            } else {
-                return response()->json(['message' => 'Thiếu PKCE code verifier của Google.'], 422);
-            }
-            // Native Google OAuth clients are public clients and do not use a
-            // client secret. A configured web client may still use its secret.
-            if ($data['client_id'] === (string) config('services.google.client_id', '')
-                && (string) config('services.google.client_secret', '') !== '') {
-                $form['client_secret'] = (string) config('services.google.client_secret');
-            }
-            $tokenEndpoint = 'https://oauth2.googleapis.com/token';
-        } else {
-            $facebookClientId = (string) config('services.facebook.client_id', '');
-            $facebookSecret = (string) config('services.facebook.client_secret', '');
-            if ($facebookClientId === '' || $facebookSecret === '' || ! hash_equals($facebookClientId, $data['client_id'])) {
-                return response()->json(['message' => 'Facebook App ID/Secret chưa được cấu hình đúng trên Backend.'], 503);
-            }
-            $form['client_secret'] = $facebookSecret;
-            $version = (string) config('services.facebook.graph_version', 'v23.0');
-            $tokenEndpoint = "https://graph.facebook.com/{$version}/oauth/access_token";
-        }
-
         try {
-            $tokenResponse = Http::asForm()->acceptJson()->timeout(12)->post($tokenEndpoint, $form);
-        } catch (Throwable $exception) {
-            report($exception);
-
-            return response()->json(['message' => "Không thể kết nối {$provider} lúc này."], 503);
-        }
-
-        $accessToken = $tokenResponse->json('access_token');
-        if (! $tokenResponse->successful() || ! is_string($accessToken) || $accessToken === '') {
-            return response()->json(['message' => "{$provider} không chấp nhận mã đăng nhập. Vui lòng thử lại."], 422);
-        }
-
-        return $this->authenticateWithAccessToken(
-            $provider,
-            $accessToken,
-            $data['device_name'] ?? 'melodify-mobile',
-            array_key_exists('remember', $data) ? $request->boolean('remember') : true,
-        );
-    }
-
-    private function authenticateWithAccessToken(string $provider, string $accessToken, ?string $deviceName, ?bool $remember): JsonResponse
-    {
-        try {
-            $socialUser = Socialite::driver($provider)->userFromToken($accessToken);
+            $socialUser = Socialite::driver($provider)->userFromToken($data['access_token']);
         } catch (Throwable $exception) {
             report($exception);
 
@@ -139,15 +48,53 @@ class SocialAuthController extends Controller
             ], 422);
         }
 
-        try {
-            $user = $this->accounts->resolveUser($provider, $socialUser);
-        } catch (SocialAuthException $exception) {
-            return response()->json(['message' => $exception->getMessage()], $exception->status);
+        $email = Str::lower(trim((string) $socialUser->getEmail()));
+
+        if ($email === '') {
+            return response()->json([
+                'message' => 'Tài khoản mạng xã hội không cung cấp email để tạo tài khoản Melodify.',
+            ], 422);
         }
+
+        $providerColumn = $provider.'_id';
+        $userByProvider = User::where($providerColumn, (string) $socialUser->getId())->first();
+        $userByEmail = User::where('email', $email)->first();
+
+        if ($userByProvider && $userByEmail && (string) $userByProvider->getKey() !== (string) $userByEmail->getKey()) {
+            return response()->json([
+                'message' => 'Tài khoản mạng xã hội đang liên kết với người dùng khác.',
+            ], 409);
+        }
+
+        $user = $userByProvider ?: $userByEmail;
+
+        if ($user && ($user->status ?? 'active') !== 'active') {
+            return response()->json(['message' => 'Tài khoản đã bị khóa hoặc ngừng hoạt động.'], 403);
+        }
+
+        if (! $user) {
+            $user = User::create([
+                'name' => $socialUser->getName() ?: Str::before($email, '@'),
+                'username' => $this->tokens->uniqueUsername($socialUser->getNickname(), Str::before($email, '@')),
+                'email' => $email,
+                'password' => Hash::make(Str::random(48)),
+                'is_premium' => 0,
+                'status' => 'active',
+            ]);
+        }
+
+        $user->forceFill([
+            $providerColumn => (string) $socialUser->getId(),
+            'avatar_url' => $socialUser->getAvatar() ?: ($user->avatar_url ?? null),
+            'last_login_at' => now(),
+            'last_login_method' => $provider,
+        ])->save();
+
+        $remember = array_key_exists('remember', $data) ? $request->boolean('remember') : null;
 
         return response()->json([
             'message' => 'Đăng nhập thành công.',
-        ] + $this->tokens->issue($user, $deviceName, $remember));
+        ] + $this->tokens->issue($user, $data['device_name'] ?? null, $remember));
     }
 
     public function me(Request $request): JsonResponse
