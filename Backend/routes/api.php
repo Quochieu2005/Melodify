@@ -59,8 +59,12 @@ Route::get('/health', function () {
 })->middleware('admin.timing');
 
 Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.optional'])->group(function () {
-    Route::post('/auth/social', [SocialAuthController::class, 'login'])->name('auth.social');
-    Route::post('/auth/login', [PasswordAuthController::class, 'login'])->name('auth.login');
+    Route::post('/auth/social', [SocialAuthController::class, 'login'])
+        ->middleware('throttle:20,1')
+        ->name('auth.social');
+    Route::post('/auth/login', [PasswordAuthController::class, 'login'])
+        ->middleware('throttle:10,1')
+        ->name('auth.login');
     Route::post('/auth/password/forgot', [PasswordAuthController::class, 'requestPasswordReset'])
         ->middleware('throttle:5,1,password-forgot:')
         ->name('auth.password.forgot');
@@ -72,6 +76,7 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
         ->name('auth.password.reset');
     Route::post('/auth/{provider}', [SocialAuthController::class, 'login'])
         ->whereIn('provider', ['google', 'facebook'])
+        ->middleware('throttle:20,1')
         ->name('auth.provider');
     Route::post('/auth/phone/request-otp', [PhoneAuthController::class, 'requestOtp'])
         ->middleware('throttle:5,1,phone-request:')

@@ -1171,7 +1171,8 @@ class CatalogController extends Controller
         $sort = (string) ($filters['sort'] ?? 'views');
         $from = $period === 'all' ? null : now()->subDays((int) $period)->startOfDay();
         $limit = (int) ($filters['limit'] ?? 20);
-        $songs = Song::query()->whereIn('status', ['published', 'draft']);
+        // This endpoint is public; never include unpublished catalog records.
+        $songs = Song::query()->where('status', 'published');
 
         if ($search !== '') {
             $songs->where(function ($query) use ($search): void {
@@ -1181,15 +1182,21 @@ class CatalogController extends Controller
             });
         }
 
-        $items = $songs
-            ->limit(500)
-            ->get()
-            ->map(function (Song $song) use ($from): array {
+        $songCollection = $songs->limit(500)->get();
+        $songIds = $songCollection->map(fn (Song $song): string => (string) $song->getKey())->values()->all();
+        $viewsBySong = $this->songEventCounts(SongPlayEvent::class, $songIds, 'started_at', $from);
+        $favoritesBySong = $this->songEventCounts(Favorite::class, $songIds, 'created_at', $from);
+        $sharesBySong = $this->songEventCounts(SongShare::class, $songIds, 'created_at', $from);
+
+        $ranked = $songCollection
+            ->map(function (Song $song) use ($viewsBySong, $favoritesBySong, $sharesBySong): array {
+                $songId = (string) $song->getKey();
+
                 return [
                     'song' => $song,
-                    'views' => $this->songViewCount($song, $from),
-                    'favorites' => $this->songFavoriteCount($song, $from),
-                    'shares' => $this->songShareCount($song, $from),
+                    'views' => $viewsBySong[$songId] ?? 0,
+                    'favorites' => $favoritesBySong[$songId] ?? 0,
+                    'shares' => $sharesBySong[$songId] ?? 0,
                 ];
             })
             ->sort(function (array $left, array $right) use ($sort): int {
@@ -1200,9 +1207,14 @@ class CatalogController extends Controller
                     : strcasecmp((string) $left['song']->title, (string) $right['song']->title);
             })
             ->take($limit)
-            ->values()
-            ->map(function (array $item): array {
-                return array_merge($this->localSongData($item['song']), [
+            ->values();
+
+        $selectedSongs = $ranked->pluck('song')->values();
+        $songDataById = collect($this->localSongsData($selectedSongs))->keyBy('id');
+        $items = $ranked->map(function (array $item) use ($songDataById): array {
+                $songId = (string) $item['song']->getKey();
+
+                return array_merge($songDataById->get($songId, []), [
                     'views' => $item['views'],
                     'favorites' => $item['favorites'],
                     'shares' => $item['shares'],
@@ -2829,6 +2841,28 @@ class CatalogController extends Controller
         }
 
         return $query->count();
+    }
+
+    /** Count engagement for a set of songs in one Mongo aggregation, not one query per song. */
+    private function songEventCounts(string $modelClass, array $songIds, string $dateField, ?\DateTimeInterface $from = null): array
+    {
+        if ($songIds === []) {
+            return [];
+        }
+
+        $match = ['song_id' => ['$in' => $songIds]];
+        if ($from !== null) {
+            $match[$dateField] = ['$gte' => new UTCDateTime($from)];
+        }
+
+        $rows = $modelClass::query()->raw(fn ($collection) => $collection->aggregate([
+            ['$match' => $match],
+            ['$group' => ['_id' => '$song_id', 'count' => ['$sum' => 1]]],
+        ], ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']])->toArray());
+
+        return collect($rows)->mapWithKeys(fn (array $row): array => [
+            (string) data_get($row, '_id', '') => (int) data_get($row, 'count', 0),
+        ])->all();
     }
 
     private function forgetSongDetailCache(Song $song, string $identifier): void
