@@ -11,6 +11,16 @@ export type Lyric = {
   synced_lyrics?: string | null;
 };
 
+export type SongAudioQuality = {
+  quality_id: string;
+  label: string;
+  bitrate: number | null;
+  premium_only: boolean;
+  available?: boolean;
+  audio_url: string | null;
+  download_url: string | null;
+};
+
 export type Song = {
   id: string;
   title: string;
@@ -22,6 +32,9 @@ export type Song = {
   release_date?: string | null;
   premium_only?: boolean;
   has_full_audio?: boolean;
+  audio_quality?: string | null;
+  audio_qualities?: SongAudioQuality[];
+  download_url?: string | null;
   album?: { id: string; title: string } | null;
   genre?: { id: string; name: string } | null;
   topics?: { id: string; name: string; type: string | null }[];
@@ -655,9 +668,21 @@ export function reportSong(
   );
 }
 
-export function getSongDownloadUrl(song: Song) {
-  return song.audio_url || song.stream_url || song.source_url || song.preview_url
-    || `${API_URL}/v1/songs/${encodeURIComponent(song.slug || song.id)}/audio`;
+export function getSongDownloadUrl(song: Song, qualityId?: string | null) {
+  const qualities = song.audio_qualities ?? [];
+  const requestedQuality = qualityId
+    ? qualities.find((quality) => quality.quality_id === qualityId)
+    : undefined;
+  const selectedQuality = requestedQuality?.available !== false && requestedQuality?.download_url
+    ? requestedQuality
+    : qualities.find((quality) => quality.available !== false && !quality.premium_only && quality.download_url)
+      ?? qualities.find((quality) => quality.available !== false && quality.download_url);
+
+  if (selectedQuality?.download_url) return selectedQuality.download_url;
+  if (song.download_url) return song.download_url;
+
+  // Keep downloads behind Melodify so it can enforce VIP access and return an attachment.
+  return `${API_URL}/v1/songs/${encodeURIComponent(song.slug || song.id)}/audio?download=1`;
 }
 
 export async function getSong(songId: string, visitorId?: string) {

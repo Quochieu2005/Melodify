@@ -162,7 +162,9 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::post('/favorites/songs/reorder', [CatalogController::class, 'reorderFavoriteSongs'])
         ->middleware('throttle:30,1')
         ->name('favorites.songs.reorder');
-    Route::get('/songs/external/{externalId}/audio', [AudioController::class, 'streamExternal'])->name('songs.external-audio');
+    Route::get('/songs/external/{externalId}/audio', [AudioController::class, 'streamExternal'])
+        ->middleware('api.user.optional')
+        ->name('songs.external-audio');
     Route::get('/songs/{slug}/audio', [AudioController::class, 'stream'])
         ->middleware('api.user.optional')
         ->name('songs.audio');

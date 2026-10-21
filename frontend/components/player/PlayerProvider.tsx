@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { AUTH_TOKEN_STORAGE_KEY, recordSongView, type Song, type SongArtistCredit } from '@/lib/api';
+import { AUTH_TOKEN_STORAGE_KEY, getSong, getVisitorId, recordSongView, type Song, type SongArtistCredit, type SongAudioQuality } from '@/lib/api';
 import { recordRecentItem, songPath } from '@/lib/recent-history';
 import { useLoginModal } from '@/components/auth/LoginModalProvider';
 
@@ -14,10 +14,17 @@ export type PlayerTrack = {
   slug?: string | null;
   title: string;
   artist: string;
+  favoriteCount?: number;
+  shareCount?: number;
+  isFavorite?: boolean;
   artists?: SongArtistCredit[];
   coverUrl: string;
   durationSeconds: number | null;
   audioUrl: string | null;
+  downloadUrl?: string | null;
+  audioQualities?: SongAudioQuality[];
+  selectedQualityId?: string | null;
+  qualityLabel?: string | null;
   isHot: boolean;
   premiumOnly: boolean;
   previewLimitSeconds: number | null;
@@ -25,9 +32,11 @@ export type PlayerTrack = {
 
 type PlayerContextValue = {
   track: PlayerTrack | null;
+  isPremium: boolean;
   isPlaying: boolean;
   isLoading: boolean;
   queue: PlayerTrack[];
+  currentIndex: number;
   shuffle: boolean;
   repeatMode: 'off' | 'all' | 'one';
   volume: number;
@@ -35,6 +44,7 @@ type PlayerContextValue = {
   duration: number;
   notice: string | null;
   playSong: (song: Song, queue?: Song[]) => void;
+  refreshTrackMetadata: (song?: Song) => Promise<void>;
   togglePlay: () => void;
   playPrevious: () => void;
   playNext: () => void;
@@ -43,6 +53,7 @@ type PlayerContextValue = {
   toggleShuffle: () => void;
   cycleRepeat: () => void;
   setVolume: (volume: number) => void;
+  setQuality: (qualityId: string) => void;
 };
 
 type PersistedPlayerState = {
@@ -87,27 +98,42 @@ function audioUrlWithAccessToken(audioUrl: string | null, premiumOnly: boolean, 
 function toPlayerTrack(song: Song, isPremium: boolean): PlayerTrack {
   const isHot = Number(song.is_hot ?? 0) === 1;
   const premiumOnly = Boolean(song.premium_only);
-  const previewLimitSeconds = premiumOnly && isPremium
+  const audioQualities = song.audio_qualities ?? [];
+  const playableQualities = audioQualities.filter((quality) => quality.available !== false && Boolean(quality.audio_url));
+  const selectedQuality = playableQualities.find((quality) => !quality.premium_only)
+    ?? (isPremium ? playableQualities[0] : null)
+    ?? null;
+  const vipRequired = premiumOnly || (playableQualities.length > 0 && !playableQualities.some((quality) => !quality.premium_only));
+  const previewLimitSeconds = vipRequired && isPremium
     ? null
-    : isHot || premiumOnly ? (song.preview_limit_seconds ?? 30) : null;
-  const rawAudioUrl = premiumOnly && !isPremium
+    : isHot || vipRequired ? (song.preview_limit_seconds ?? 30) : null;
+  const rawAudioUrl = vipRequired && !isPremium
     ? song.preview_url || null
-    : song.audio_url || song.stream_url || song.preview_url || null;
-  const audioUrl = audioUrlWithAccessToken(rawAudioUrl, premiumOnly, isPremium);
+    : selectedQuality?.audio_url || song.audio_url || song.stream_url || song.preview_url || null;
+  const rawDownloadUrl = selectedQuality?.download_url || song.download_url || null;
+  const audioUrl = audioUrlWithAccessToken(rawAudioUrl, selectedQuality?.premium_only ?? premiumOnly, isPremium);
+  const downloadUrl = audioUrlWithAccessToken(rawDownloadUrl, selectedQuality?.premium_only ?? premiumOnly, isPremium);
 
   return {
     id: song.id,
     slug: song.slug,
     title: song.title,
     artist: song.artists?.map((artist) => artist.name).filter(Boolean).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật',
+    favoriteCount: song.favorite_count ?? song.favorites ?? 0,
+    shareCount: song.share_count ?? song.shares ?? 0,
+    isFavorite: song.is_favorite ?? false,
     artists: song.artists?.length ? song.artists : song.artist ? [song.artist] : [],
     coverUrl: song.cover_url || '/images/cover-placeholder.svg',
     durationSeconds: song.duration_seconds === null || song.duration_seconds === undefined
       ? previewLimitSeconds
       : previewLimitSeconds === null ? song.duration_seconds : Math.min(song.duration_seconds, previewLimitSeconds),
     audioUrl,
+    downloadUrl,
+    audioQualities,
+    selectedQualityId: selectedQuality?.quality_id ?? null,
+    qualityLabel: selectedQuality?.label ?? song.audio_quality ?? null,
     isHot,
-    premiumOnly,
+    premiumOnly: vipRequired,
     previewLimitSeconds,
   };
 }
@@ -131,6 +157,7 @@ function isPlayerTrack(value: unknown): value is PlayerTrack {
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const { user, openLogin } = useLoginModal();
+  const isPremium = Number(user?.is_premium ?? 0) === 1;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const trackRef = useRef<PlayerTrack | null>(null);
   const queueRef = useRef<PlayerTrack[]>([]);
@@ -150,6 +177,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [queue, setQueue] = useState<PlayerTrack[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [shuffle, setShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
   const [volume, updateVolume] = useState(1);
@@ -269,6 +297,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (!nextTrack) return;
 
     currentIndexRef.current = index;
+    setCurrentIndex(index);
     startTrack(nextTrack);
   }, [startTrack]);
 
@@ -318,7 +347,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
     };
     const handleTimeUpdate = () => {
-      setElapsed(Math.floor(audio.currentTime));
+      setElapsed(audio.currentTime);
       persistCurrentPosition();
     };
     const handlePlay = () => {
@@ -357,7 +386,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (restoredElapsedRef.current > 0) {
           const resumeAt = Math.min(restoredElapsedRef.current, nextDuration);
           audio.currentTime = resumeAt;
-          setElapsed(Math.floor(resumeAt));
+          setElapsed(resumeAt);
           restoredElapsedRef.current = 0;
           persistCurrentPosition();
         }
@@ -431,11 +460,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         queueRef.current = restoredQueue;
         setQueue(restoredQueue);
         currentIndexRef.current = restoredIndex;
+        setCurrentIndex(restoredIndex);
         trackRef.current = restoredTrack;
         setTrack(restoredTrack);
         setDuration(restoredTrack.durationSeconds ?? 0);
         // Passive position updates must not interrupt playback in this tab.
-        if (audio.paused) setElapsed(Math.floor(restoredElapsed));
+        if (audio.paused) setElapsed(restoredElapsed);
         setIsPlaying(!audio.paused);
         return;
       }
@@ -444,10 +474,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       queueRef.current = restoredQueue;
       setQueue(restoredQueue);
       currentIndexRef.current = restoredIndex;
+      setCurrentIndex(restoredIndex);
       trackRef.current = restoredTrack;
       restoredElapsedRef.current = restoredElapsed;
       setTrack(restoredTrack);
-      setElapsed(Math.floor(restoredElapsed));
+      setElapsed(restoredElapsed);
       setDuration(restoredTrack.durationSeconds ?? 0);
       setIsPlaying(false);
 
@@ -509,10 +540,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           queueRef.current = restoredQueue;
           setQueue(restoredQueue);
           currentIndexRef.current = restoredIndex;
+          setCurrentIndex(restoredIndex);
           trackRef.current = restoredTrack;
           restoredElapsedRef.current = restoredElapsed;
           setTrack(restoredTrack);
-          setElapsed(Math.floor(restoredElapsed));
+          setElapsed(restoredElapsed);
           setDuration(restoredTrack.durationSeconds ?? 0);
 
           if (restoredTrack.audioUrl) {
@@ -562,6 +594,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     queueRef.current = nextQueue;
     setQueue(nextQueue);
     currentIndexRef.current = index;
+    setCurrentIndex(index);
     startTrack(nextQueue[index]);
   }, [startTrack]);
 
@@ -607,7 +640,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const seek = useCallback((seconds: number) => {
     if (!audioRef.current || !track || !Number.isFinite(seconds)) return;
 
-    const limit = track.previewLimitSeconds ?? duration;
+    const limit = track.previewLimitSeconds ?? (duration || track.durationSeconds || Number.POSITIVE_INFINITY);
     const nextTime = Math.min(Math.max(0, seconds), limit);
     if (audioRef.current.readyState === 0) restoredElapsedRef.current = nextTime;
     else audioRef.current.currentTime = nextTime;
@@ -632,11 +665,141 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (audioRef.current) audioRef.current.volume = value;
   }, []);
 
+  const setQuality = useCallback((qualityId: string) => {
+    const currentTrack = trackRef.current;
+    const option = currentTrack?.audioQualities?.find((quality) => quality.quality_id === qualityId);
+    if (!currentTrack || !option || currentTrack.selectedQualityId === qualityId) return;
+
+    if (option.available === false || !option.audio_url) {
+      showNotice('NCT có thông tin chất lượng VIP nhưng chưa trả luồng phát/tải cho yêu cầu này.');
+      return;
+    }
+
+    if ((currentTrack.premiumOnly || option.premium_only) && !isPremiumRef.current) {
+      showNotice(userRef.current
+        ? 'Chất lượng này yêu cầu tài khoản VIP. Hãy nâng cấp VIP để mở khóa.'
+        : 'Đăng nhập và nâng cấp VIP để mở khóa chất lượng này.');
+      if (!userRef.current) openLoginRef.current();
+      return;
+    }
+
+    const isPremium = isPremiumRef.current;
+    const nextTrack: PlayerTrack = {
+      ...currentTrack,
+      audioUrl: audioUrlWithAccessToken(option.audio_url, option.premium_only, isPremium),
+      downloadUrl: audioUrlWithAccessToken(option.download_url, option.premium_only, isPremium),
+      selectedQualityId: option.quality_id,
+      qualityLabel: option.label,
+    };
+    trackRef.current = nextTrack;
+    queueRef.current = queueRef.current.map((item) => item.id === nextTrack.id ? nextTrack : item);
+    setTrack(nextTrack);
+    setQueue(queueRef.current);
+
+    const audio = audioRef.current;
+    if (audio && nextTrack.audioUrl && nextTrack.audioUrl !== currentTrack.audioUrl) {
+      const wasPlaying = !audio.paused;
+      const resumeAt = audio.currentTime;
+      audio.pause();
+      restoredElapsedRef.current = resumeAt;
+      audio.src = nextTrack.audioUrl;
+      audio.load();
+      if (wasPlaying) {
+        setIsLoading(true);
+        void audio.play().catch(() => {
+          if (trackRef.current?.id === nextTrack.id) {
+            setIsLoading(false);
+            showNotice('Không thể chuyển chất lượng lúc này. Hãy thử lại.');
+          }
+        });
+      }
+    }
+
+    broadcastState(persistPlayerState(nextTrack, queueRef.current, currentIndexRef.current, audio?.currentTime ?? elapsed, Boolean(audio && !audio.paused)));
+  }, [broadcastState, elapsed, showNotice]);
+
+  const refreshTrackMetadata = useCallback(async (song?: Song) => {
+    const currentTrack = trackRef.current;
+    if (!currentTrack) return;
+
+    try {
+      const freshSong = song ?? (await getSong(currentTrack.slug || currentTrack.id, getVisitorId())).data;
+      const activeTrack = trackRef.current;
+      if (!activeTrack || activeTrack.id !== freshSong.id) return;
+
+      const refreshed = toPlayerTrack(freshSong, isPremiumRef.current);
+      const selected = refreshed.audioQualities?.find((quality) =>
+        quality.quality_id === activeTrack.selectedQualityId
+        && quality.available !== false
+        && Boolean(quality.audio_url),
+      );
+      const defaultQuality = refreshed.audioQualities?.find((quality) =>
+        quality.quality_id === refreshed.selectedQualityId,
+      );
+      const quality = selected ?? defaultQuality;
+      const keepVipPreview = refreshed.premiumOnly && !isPremiumRef.current;
+      const nextTrack: PlayerTrack = {
+        ...activeTrack,
+        slug: refreshed.slug ?? activeTrack.slug,
+        favoriteCount: refreshed.favoriteCount,
+        shareCount: refreshed.shareCount,
+        isFavorite: refreshed.isFavorite,
+        audioQualities: refreshed.audioQualities,
+        audioUrl: !keepVipPreview && quality?.audio_url
+          ? audioUrlWithAccessToken(quality.audio_url, quality.premium_only, isPremiumRef.current)
+          : activeTrack.audioUrl,
+        downloadUrl: !keepVipPreview && quality?.download_url
+          ? audioUrlWithAccessToken(quality.download_url, quality.premium_only, isPremiumRef.current)
+          : refreshed.downloadUrl ?? activeTrack.downloadUrl,
+        selectedQualityId: quality?.quality_id ?? activeTrack.selectedQualityId ?? null,
+        qualityLabel: quality?.label ?? refreshed.qualityLabel ?? activeTrack.qualityLabel,
+        premiumOnly: refreshed.premiumOnly,
+        previewLimitSeconds: refreshed.previewLimitSeconds,
+      };
+      const audio = audioRef.current;
+      const sourceChanged = Boolean(audio && nextTrack.audioUrl && nextTrack.audioUrl !== activeTrack.audioUrl);
+      const wasPlaying = sourceChanged && audio ? !audio.paused : false;
+      const resumeAt = sourceChanged && audio ? audio.currentTime : 0;
+
+      trackRef.current = nextTrack;
+      queueRef.current = queueRef.current.map((item) => item.id === nextTrack.id ? nextTrack : item);
+      setTrack(nextTrack);
+      setQueue(queueRef.current);
+      broadcastState(persistPlayerState(
+        nextTrack,
+        queueRef.current,
+        currentIndexRef.current,
+        audioRef.current?.currentTime ?? 0,
+        Boolean(audioRef.current && !audioRef.current.paused),
+      ));
+
+      if (sourceChanged && audio && nextTrack.audioUrl) {
+        audio.pause();
+        restoredElapsedRef.current = resumeAt;
+        audio.src = nextTrack.audioUrl;
+        audio.load();
+        if (wasPlaying) {
+          setIsLoading(true);
+          void audio.play().catch(() => {
+            if (trackRef.current?.id === nextTrack.id) {
+              setIsLoading(false);
+              showNotice('Chất lượng cũ không còn khả dụng. Không thể chuyển luồng phát.');
+            }
+          });
+        }
+      }
+    } catch {
+      // Keep existing playback usable when the metadata refresh endpoint is unavailable.
+    }
+  }, [broadcastState, showNotice]);
+
   const value = useMemo(() => ({
     track,
+    isPremium,
     isPlaying,
     isLoading,
     queue,
+    currentIndex,
     shuffle,
     repeatMode,
     volume,
@@ -644,6 +807,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     duration,
     notice,
     playSong,
+    refreshTrackMetadata,
     togglePlay,
     playPrevious,
     playNext,
@@ -652,7 +816,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     toggleShuffle,
     cycleRepeat,
     setVolume,
-  }), [duration, elapsed, isPlaying, isLoading, queue, shuffle, repeatMode, volume, notice, playNext, playPrevious, playSong, seek, togglePlay, track, playAt, toggleShuffle, cycleRepeat, setVolume]);
+    setQuality,
+  }), [currentIndex, duration, elapsed, isPlaying, isLoading, queue, shuffle, repeatMode, volume, notice, isPremium, playNext, playPrevious, playSong, refreshTrackMetadata, seek, togglePlay, track, playAt, toggleShuffle, cycleRepeat, setVolume, setQuality]);
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }

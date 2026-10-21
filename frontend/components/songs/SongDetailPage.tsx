@@ -7,8 +7,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArtistLink, ArtistNames } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { usePlayer } from '@/components/player';
-import { ApiError, getArtist, getSong, getVisitorId, recordSongShare, toggleSongFavorite, type AlbumRecord, type Lyric, type Song, type SongArtistCredit } from '@/lib/api';
+import { ApiError, getArtist, getSong, getSongDownloadUrl, getVisitorId, recordSongShare, toggleSongFavorite, type AlbumRecord, type Lyric, type Song, type SongArtistCredit } from '@/lib/api';
 import { recentAlbumItem, recentSongItem, recordRecentItem } from '@/lib/recent-history';
+import { parseSyncedLyrics } from '@/lib/lyrics';
 
 const fallbackCover = '/images/cover-placeholder.svg';
 const sidebarSurfaceStyle = {
@@ -41,31 +42,6 @@ function songArtists(song: Song): SongArtistCredit[] {
 
 function formatCount(count: number | undefined) {
   return new Intl.NumberFormat('vi-VN').format(count ?? 0);
-}
-
-type SyncedLyricLine = {
-  time: number;
-  text: string;
-};
-
-function parseSyncedLyrics(lyrics: Lyric[]): SyncedLyricLine[] {
-  const timestampPattern = /\[(\d{1,3}):(\d{2}(?:\.\d{1,3})?)\]/g;
-
-  return lyrics.flatMap((lyric) => {
-    const syncedLyrics = lyric.synced_lyrics?.trim();
-    if (!syncedLyrics) return [];
-
-    return syncedLyrics.split(/\r?\n/).flatMap((line) => {
-      const matches = Array.from(line.matchAll(timestampPattern));
-      const text = line.replace(timestampPattern, '').trim();
-      if (!text || matches.length === 0) return [];
-
-      return matches.map((match) => ({
-        time: Number(match[1]) * 60 + Number(match[2]),
-        text,
-      }));
-    });
-  }).sort((first, second) => first.time - second.time);
 }
 
 function LyricBlock({ lyrics, elapsed, isActiveTrack, onSeek }: { lyrics: Lyric[]; elapsed: number; isActiveTrack: boolean; onSeek: (seconds: number) => void }) {
@@ -158,7 +134,7 @@ function ArtistPanel({ artists }: { artists: SongArtistCredit[] }) {
 }
 
 export default function SongDetailPage({ slug }: { slug: string }) {
-  const { track, isPlaying, elapsed, playSong, togglePlay, seek } = usePlayer();
+  const { track, isPlaying, elapsed, playSong, togglePlay, seek, refreshTrackMetadata } = usePlayer();
   const [song, setSong] = useState<(Song & { lyrics: Lyric[] }) | null>(null);
   const [featuredAlbumState, setFeaturedAlbumState] = useState<{ artistKey: string; albums: AlbumRecord[] }>({ artistKey: '', albums: [] });
   const [error, setError] = useState('');
@@ -202,6 +178,10 @@ export default function SongDetailPage({ slug }: { slug: string }) {
   const currentTrack = Boolean(song && track?.id === song.id);
   const artistIdentifier = artists[0]?.slug || artists[0]?.id || artists[0]?.name || '';
   const featuredAlbums = featuredAlbumState.artistKey === artistIdentifier ? featuredAlbumState.albums : [];
+
+  useEffect(() => {
+    if (song && currentTrack) void refreshTrackMetadata(song);
+  }, [currentTrack, refreshTrackMetadata, song]);
 
   useEffect(() => {
     let cancelled = false;
@@ -340,7 +320,7 @@ export default function SongDetailPage({ slug }: { slug: string }) {
               <p role="status" aria-live="polite" className="sr-only">{engagementStatus}</p>
               <div className="mt-6 flex flex-wrap gap-4">
                 <button type="button" onClick={handlePlay} className="inline-flex h-11 items-center gap-3 rounded-full bg-[#00cfe3] px-8 text-sm font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">{currentTrack && isPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}{currentTrack && isPlaying ? 'Tạm dừng' : 'Phát'}</button>
-                <a href={song.audio_url || song.stream_url || song.source_url || '#'} download className="inline-flex h-11 items-center gap-3 rounded-full bg-white/15 px-8 text-sm font-bold transition-colors hover:bg-white/25"><DownloadIcon />Tải về</a>
+                <a href={currentTrack && track?.downloadUrl ? track.downloadUrl : getSongDownloadUrl(song, currentTrack ? track?.selectedQualityId : null)} download className="inline-flex h-11 items-center gap-3 rounded-full bg-white/15 px-8 text-sm font-bold transition-colors hover:bg-white/25"><DownloadIcon />Tải về</a>
               </div>
             </div>
         </div>

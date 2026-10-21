@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { AddSongsToPlaylistDialog } from '@/components/playlists/AddSongsToPlaylistDialog';
+import { copyTextToClipboard } from '@/lib/clipboard';
 import {
   getSongDownloadUrl,
   getVisitorId,
@@ -22,8 +23,8 @@ const reportReasons: Array<{ value: SongReportReason; label: string }> = [
   { value: 'other', label: 'Lý do khác' },
 ];
 
-function MoreIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 fill-current"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>;
+function MoreIcon({ className = 'size-4' }: { className?: string }) {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className={`${className} fill-current`}><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>;
 }
 
 function ActionIcon({ kind }: { kind: 'download' | 'playlist' | 'share' | 'report' }) {
@@ -41,11 +42,17 @@ export function SongRowActionMenu({
   buttonClassName = '',
   onStatus,
   placement = 'down',
+  downloadUrl,
+  iconClassName,
+  onShareRecorded,
 }: {
   song: Song;
   buttonClassName?: string;
   onStatus?: (message: string) => void;
   placement?: 'up' | 'down';
+  downloadUrl?: string | null;
+  iconClassName?: string;
+  onShareRecorded?: (shares: number) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -83,30 +90,42 @@ export function SongRowActionMenu({
 
   const handleDownload = () => {
     const anchor = document.createElement('a');
-    anchor.href = getSongDownloadUrl(song);
-    anchor.download = `${song.title.replace(/[\\/:*?"<>|]/g, '_')}.mp3`;
+    anchor.href = downloadUrl || getSongDownloadUrl(song);
     anchor.rel = 'noopener noreferrer';
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     setMenuOpen(false);
-    notify(`Đang tải ${song.title}.`);
+    notify(`Đang tải ${song.title}${downloadUrl ? ' theo chất lượng đang chọn' : ''}.`);
   };
 
   const handleShare = async (target: 'facebook' | 'copy_link') => {
     const url = new URL(songPath(song), window.location.origin).toString();
+    let copied = false;
     try {
       if (target === 'facebook') {
         window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank', 'noopener,noreferrer');
-        await recordSongShare(song.id, 'web', getVisitorId());
-        notify(`Đã mở chia sẻ ${song.title} trên Facebook.`);
       } else {
-        await navigator.clipboard.writeText(url);
-        await recordSongShare(song.id, 'copy_link', getVisitorId());
-        notify(`Đã sao chép liên kết ${song.title}.`);
+        await copyTextToClipboard(url);
+        copied = true;
       }
     } catch {
-      notify('Không thể chia sẻ lúc này.');
+      notify(target === 'copy_link'
+        ? 'Không thể sao chép liên kết. Hãy thử lại hoặc kiểm tra quyền clipboard của trình duyệt.'
+        : 'Không thể mở cửa sổ chia sẻ Facebook.');
+      setMenuOpen(false);
+      setShareOpen(false);
+      return;
+    }
+
+    try {
+      const response = await recordSongShare(song.id, target === 'facebook' ? 'facebook' : 'copy_link', getVisitorId());
+      onShareRecorded?.(response.shares);
+      notify(target === 'facebook' ? `Đã mở chia sẻ ${song.title} trên Facebook.` : `Đã sao chép liên kết ${song.title}.`);
+    } catch {
+      notify(copied
+        ? 'Đã sao chép liên kết nhưng máy chủ chưa ghi nhận lượt chia sẻ.'
+        : 'Đã mở Facebook nhưng máy chủ chưa ghi nhận lượt chia sẻ.');
     } finally {
       setMenuOpen(false);
       setShareOpen(false);
@@ -140,7 +159,7 @@ export function SongRowActionMenu({
         onClick={() => { setMenuOpen((value) => !value); setShareOpen(false); }}
         className={`grid size-8 place-items-center rounded-full text-white/75 outline-none transition-[opacity,background-color,color] hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5] ${buttonClassName}`}
       >
-        <MoreIcon />
+        <MoreIcon className={iconClassName} />
       </button>
       {menuOpen ? (
         <div role="menu" aria-label={`Thao tác bài ${song.title}`} className={`absolute right-0 z-40 w-[218px] overflow-hidden rounded-xl border border-white/[0.06] bg-[#292c2b] p-1.5 text-[13px] font-bold text-white shadow-2xl ${placement === 'up' ? 'bottom-full mb-2' : 'top-full mt-1'}`}>

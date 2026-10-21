@@ -333,6 +333,10 @@ class NhacCuaTuiClient
             ]),
             'streamUrl' => $this->streamUrl($item['streamURL'] ?? $item['streamUrl'] ?? $item[7] ?? null),
             'downloadUrl' => $this->downloadUrl($item['streamURL'] ?? $item['streamUrl'] ?? null),
+            'streamOptions' => $this->streamOptions(
+                $item['streamURL'] ?? $item['streamUrl'] ?? $item[7] ?? null,
+                $item['qualityDownload'] ?? $item['quality_download'] ?? [],
+            ),
             'previewUrl' => null,
             'source' => 'nhaccuatui',
         ];
@@ -428,6 +432,135 @@ class NhacCuaTuiClient
             ->sortByDesc(fn (array $stream): int => (int) ($stream['value'] ?? $stream['type'] ?? 0));
 
         return $this->firstUrl([$available->first()['stream'] ?? null]);
+    }
+
+    /**
+     * Keep provider URLs server-side while retaining every available tier,
+     * including VIP tiers, for the Melodify player and stream proxy.
+     *
+     * @return array<int, array{qualityId: string, label: string, bitrate: ?int, premiumOnly: bool, available: bool, streamUrl: ?string, downloadUrl: ?string}>
+     */
+    private function streamOptions(mixed $streams, mixed $qualityDownload = []): array
+    {
+        $streams = is_array($streams) ? $streams : [];
+        $qualityDownload = is_array($qualityDownload) ? $qualityDownload : [];
+        $identity = static fn (array $item): array => collect([
+            $item['key'] ?? null,
+            $item['type'] ?? null,
+            $item['value'] ?? null,
+            $item['bitrate'] ?? null,
+            $item['typeUI'] ?? null,
+            $item['name'] ?? null,
+        ])->filter(fn ($value): bool => filled($value))
+            ->map(fn ($value): string => strtolower(preg_replace('/[^a-z0-9]+/i', '', (string) $value)))
+            ->all();
+
+        $tiers = collect($streams)
+            ->filter(fn ($stream): bool => is_array($stream))
+            ->map(function (array $stream) use ($identity, $qualityDownload): ?array {
+                $streamIdentities = $identity($stream);
+                $metadata = collect($qualityDownload)->first(function ($entry) use ($identity, $streamIdentities): bool {
+                    return is_array($entry) && array_intersect($streamIdentities, $identity($entry)) !== [];
+                });
+                $metadata = is_array($metadata) ? $metadata : [];
+                $tier = array_merge($metadata, $stream);
+                $premiumOnly = filter_var($stream['onlyVIP'] ?? $stream['only_vip'] ?? false, FILTER_VALIDATE_BOOLEAN)
+                    || filter_var($metadata['onlyVIP'] ?? $metadata['only_vip'] ?? false, FILTER_VALIDATE_BOOLEAN);
+                // NCT can return a valid FLAC URL on a VIP tier with status=0.
+                // Retain that supplied URL; the authenticated audio proxy checks
+                // Melodify VIP/admin access and handles upstream authorization errors.
+                $available = filled($stream['stream'] ?? null)
+                    && ($premiumOnly || (int) ($stream['status'] ?? 1) === 1);
+
+                if (! $available && ! $premiumOnly) {
+                    return null;
+                }
+
+                $tier['onlyVIP'] = $premiumOnly;
+                $tier['available'] = $available;
+                $tier['stream'] = $available ? (string) $stream['stream'] : null;
+                $tier['download'] = $available ? ($stream['download'] ?? null) : null;
+
+                return $tier;
+            })
+            ->filter()
+            ->values();
+
+        // NCT may advertise a VIP quality in qualityDownload without a
+        // corresponding streamURL entry. Preserve it as metadata-only.
+        foreach ($qualityDownload as $metadata) {
+            if (! is_array($metadata)
+                || ! filter_var($metadata['onlyVIP'] ?? $metadata['only_vip'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                continue;
+            }
+
+            $metadataIdentities = $identity($metadata);
+            $alreadyIncluded = $tiers->contains(function (array $tier) use ($identity, $metadataIdentities): bool {
+                return array_intersect($metadataIdentities, $identity($tier)) !== [];
+            });
+
+            if (! $alreadyIncluded) {
+                $tiers->push(array_merge($metadata, [
+                    'stream' => null,
+                    'download' => null,
+                    'onlyVIP' => true,
+                    'available' => false,
+                ]));
+            }
+        }
+
+        $tiers = $tiers
+            ->sortByDesc(fn (array $stream): int => (int) ($stream['value'] ?? $stream['bitrate'] ?? $stream['type'] ?? 0))
+            ->values();
+
+        $seen = [];
+
+        return $tiers->map(function (array $stream, int $index) use (&$seen): array {
+            $value = $stream['value'] ?? $stream['bitrate'] ?? null;
+            $type = $stream['type'] ?? null;
+            $qualityHint = implode(' ', array_filter([
+                (string) ($stream['format'] ?? ''),
+                (string) ($stream['quality'] ?? ''),
+                (string) ($stream['label'] ?? ''),
+                (string) ($stream['name'] ?? ''),
+                (string) ($stream['key'] ?? ''),
+                (string) ($stream['typeUI'] ?? ''),
+                (string) ($type ?? ''),
+            ]));
+            $isLossless = preg_match('/lossless|flac|alac/i', $qualityHint) === 1;
+            $bitrate = is_numeric($stream['bitrate'] ?? null)
+                ? (int) $stream['bitrate']
+                : (! $isLossless && is_numeric($value) && (int) $value >= 64 && (int) $value <= 1000 ? (int) $value : null);
+            if ($bitrate === null && ! $isLossless && preg_match('/\b(\d{2,4})\s*k(?:bps)?\b/i', $qualityHint, $match)) {
+                $bitrate = (int) $match[1];
+            }
+            $label = trim((string) ($stream['label'] ?? $stream['quality'] ?? $stream['name'] ?? $stream['typeUI'] ?? ''));
+
+            if ($label === '' && $isLossless) {
+                $label = 'Lossless';
+            }
+            if ($label === '' && $bitrate !== null) {
+                $label = $bitrate.' kbps';
+            }
+            if ($label === '') {
+                $label = 'Chất lượng '.(filled($value) ? (string) $value : (filled($type) ? (string) $type : (string) ($index + 1)));
+            }
+
+            $identity = strtolower(trim((string) ($stream['qualityId'] ?? $stream['quality_id'] ?? $value ?? $type ?? $label)));
+            $duplicate = $seen[$identity] ?? 0;
+            $seen[$identity] = $duplicate + 1;
+            $qualityId = 'nct-'.substr(hash('sha256', $identity.'|'.$duplicate), 0, 16);
+
+            return [
+                'qualityId' => $qualityId,
+                'label' => $label,
+                'bitrate' => $bitrate,
+                'premiumOnly' => filter_var($stream['onlyVIP'] ?? $stream['only_vip'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                'available' => (bool) ($stream['available'] ?? filled($stream['stream'] ?? null)),
+                'streamUrl' => filled($stream['stream'] ?? null) ? (string) $stream['stream'] : null,
+                'downloadUrl' => $this->firstUrl([$stream['download'] ?? null]),
+            ];
+        })->all();
     }
 
     private function downloadUrl(mixed $streams): ?string

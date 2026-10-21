@@ -35,33 +35,165 @@ class AudioController extends Controller
             'Bài hát này dành cho tài khoản VIP đã nạp.',
         );
 
-        $audio = $this->refreshAudio($song, $nhaccuatui, $audio);
-        abort_if(blank($audio?->file_url), 404, 'Bài hát chưa có audio.');
+        $qualityId = trim((string) $request->query('quality_id', ''));
+        abort_if(strlen($qualityId) > 100, 404);
+        $needsQualityRefresh = $qualityId !== '' && empty($audio?->stream_options);
+        $audio = $this->refreshAudio($song, $nhaccuatui, $audio, force: $needsQualityRefresh);
 
-        if ($audio->source !== 'nhaccuatui') {
-            return redirect()->away($audio->file_url);
+        $download = $request->boolean('download');
+        $option = null;
+        if ($qualityId !== '') {
+            $option = collect($audio?->stream_options ?? [])->first(fn (array $item): bool => (string) ($item['qualityId'] ?? $item['quality_id'] ?? '') === $qualityId
+            );
+            abort_unless($option, 404, 'Chất lượng này hiện không khả dụng.');
+            abort_unless((bool) ($option['available'] ?? filled($option['streamUrl'] ?? $option['stream_url'] ?? null)), 404, 'NhacCuaTui có thông tin chất lượng nhưng chưa trả luồng phát/tải cho yêu cầu này.');
+            $this->authorizeQuality($option, $request);
         }
 
-        return $this->proxy($audio->file_url, $request, $nhaccuatui, function () use ($song, $nhaccuatui, $audio): ?string {
-            return $this->refreshAudio($song, $nhaccuatui, $audio, force: true)?->file_url;
-        });
+        $url = $option
+            ? $this->qualityUrl($option, $download)
+            : ($download ? $this->defaultDownloadUrl($audio) : $audio?->file_url);
+        abort_if(blank($url), 404, 'Bài hát chưa có audio ở chất lượng này.');
+
+        if (($audio?->source ?? null) !== 'nhaccuatui') {
+            if ($download) {
+                $url = $this->cloudinaryAttachmentUrl($url);
+            }
+
+            return redirect()->away($url);
+        }
+
+        return $this->proxy(
+            $url,
+            $request,
+            $nhaccuatui,
+            function () use ($song, $nhaccuatui, $audio, $option, $download, $request): ?string {
+                $fresh = $this->refreshAudio($song, $nhaccuatui, $audio, force: true);
+
+                return $option
+                    ? $this->findQualityUrl($fresh?->stream_options ?? [], (string) ($option['qualityId'] ?? $option['quality_id'] ?? ''), $download, $request)
+                    : ($download ? $this->defaultDownloadUrl($fresh) : $fresh?->file_url);
+            },
+            $download,
+        );
     }
 
     public function streamExternal(string $externalId, Request $request, NhacCuaTuiClient $nhaccuatui)
     {
         $key = 'external-audio:'.hash('sha256', $externalId);
         $track = Cache::remember($key, now()->addMinutes(5), fn () => $nhaccuatui->getSong($externalId, includeCountry: false));
-        abort_if(blank($track['streamUrl'] ?? null), 404, 'NhacCuaTui không cung cấp bản audio đầy đủ cho bài hát này.');
+        $qualityId = trim((string) $request->query('quality_id', ''));
+        abort_if(strlen($qualityId) > 100, 404);
+        $download = $request->boolean('download');
+        $option = $qualityId === '' ? null : collect($track['streamOptions'] ?? [])->first(fn (array $item): bool => (string) ($item['qualityId'] ?? $item['quality_id'] ?? '') === $qualityId
+        );
+        if ($qualityId !== '') {
+            abort_unless($option, 404, 'Chất lượng này hiện không khả dụng.');
+            abort_unless((bool) ($option['available'] ?? filled($option['streamUrl'] ?? $option['stream_url'] ?? null)), 404, 'NhacCuaTui có thông tin chất lượng nhưng chưa trả luồng phát/tải cho yêu cầu này.');
+            $this->authorizeQuality($option, $request);
+        }
+        $url = $option
+            ? $this->qualityUrl($option, $download)
+            : ($download ? $this->trackDownloadUrl($track) : ($track['streamUrl'] ?? null));
+        abort_if(blank($url), 404, 'NhacCuaTui không cung cấp bản audio đầy đủ cho bài hát này.');
 
-        return $this->proxy($track['streamUrl'], $request, $nhaccuatui, function () use ($key, $externalId, $nhaccuatui): ?string {
+        return $this->proxy($url, $request, $nhaccuatui, function () use ($key, $externalId, $nhaccuatui, $qualityId, $download, $request): ?string {
             Cache::forget($key);
             $track = $nhaccuatui->getSong($externalId, includeCountry: false);
-            if (filled($track['streamUrl'] ?? null)) {
+            if (filled($track['streamUrl'] ?? null) || ! empty($track['streamOptions'])) {
                 Cache::put($key, $track, now()->addMinutes(5));
             }
 
-            return $track['streamUrl'] ?? null;
-        });
+            return $qualityId !== ''
+                ? $this->findQualityUrl($track['streamOptions'] ?? [], $qualityId, $download, $request)
+                : ($download ? $this->trackDownloadUrl($track) : ($track['streamUrl'] ?? null));
+        }, $download);
+    }
+
+    private function authorizeQuality(array $option, Request $request): void
+    {
+        abort_if(
+            (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false)
+                && ! (bool) ($request->user()?->is_premium ?? false)
+                && ! $request->user('admin'),
+            403,
+            'Chất lượng này dành cho tài khoản VIP.',
+        );
+    }
+
+    private function qualityUrl(array $option, bool $download): ?string
+    {
+        return $download
+            ? ($option['downloadUrl'] ?? $option['download_url'] ?? $option['streamUrl'] ?? $option['stream_url'] ?? null)
+            : ($option['streamUrl'] ?? $option['stream_url'] ?? null);
+    }
+
+    private function findQualityUrl(array $options, string $qualityId, bool $download, Request $request): ?string
+    {
+        $option = collect($options)->first(fn (array $item): bool => (string) ($item['qualityId'] ?? $item['quality_id'] ?? '') === $qualityId
+        );
+
+        if (! $option) {
+            return null;
+        }
+
+        abort_unless((bool) ($option['available'] ?? filled($option['streamUrl'] ?? $option['stream_url'] ?? null)), 404, 'Chất lượng này hiện không khả dụng.');
+        $this->authorizeQuality($option, $request);
+
+        return $this->qualityUrl($option, $download);
+    }
+
+    private function defaultDownloadUrl(?SongAudioFile $audio): ?string
+    {
+        foreach ($audio?->stream_options ?? [] as $option) {
+            if (is_array($option) && ! (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false)) {
+                return $this->qualityUrl($option, true) ?? $audio?->file_url;
+            }
+        }
+
+        return $audio?->file_url;
+    }
+
+    private function trackDownloadUrl(array $track): ?string
+    {
+        foreach ($track['streamOptions'] ?? [] as $option) {
+            if (is_array($option) && ! (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false)) {
+                return $this->qualityUrl($option, true) ?? ($track['streamUrl'] ?? null);
+            }
+        }
+
+        return $track['downloadUrl'] ?? $track['streamUrl'] ?? null;
+    }
+
+    private function cloudinaryAttachmentUrl(string $url): string
+    {
+        $parts = parse_url($url);
+        if (($parts['host'] ?? '') !== 'res.cloudinary.com' || ! isset($parts['path'])) {
+            return $url;
+        }
+
+        $path = preg_replace(
+            '#/(?:image|video|raw)/upload/(?!fl_attachment(?:,|/))#i',
+            '$0fl_attachment/',
+            $parts['path'],
+            1,
+        );
+        if (! is_string($path) || $path === $parts['path']) {
+            return $url;
+        }
+
+        $downloadUrl = ($parts['scheme'] ?? 'https').'://'.$parts['host'].$path;
+        if (isset($parts['port'])) {
+            $downloadUrl = ($parts['scheme'] ?? 'https').'://'.$parts['host'].':'.$parts['port'].$path;
+        }
+        if (isset($parts['query'])) {
+            $downloadUrl .= '?'.$parts['query'];
+        }
+        if (isset($parts['fragment'])) {
+            $downloadUrl .= '#'.$parts['fragment'];
+        }
+
+        return $downloadUrl;
     }
 
     private function findAudio(Song $song): ?SongAudioFile
@@ -93,20 +225,23 @@ class AudioController extends Controller
         }
 
         // Seeking/range requests must not repeat catalog and artist lookups.
-        if (! $force && filled($audio?->file_url) && $audio?->refreshed_at?->gt(now()->subMinutes(5))) {
+        if (! $force
+            && (filled($audio?->file_url) || ! empty($audio?->stream_options))
+            && $audio?->refreshed_at?->gt(now()->subMinutes(5))) {
             return $audio;
         }
 
         try {
             $track = $nhaccuatui->getSong((string) $externalId, includeCountry: false);
-            if (blank($track['streamUrl'] ?? null)) {
+            if (blank($track['streamUrl'] ?? null) && empty($track['streamOptions'])) {
                 return $audio;
             }
 
             $audio ??= new SongAudioFile;
             $audio->song_id = (string) $song->getKey();
             $audio->file_type = 'full';
-            $audio->file_url = $track['streamUrl'];
+            $audio->file_url = $track['streamUrl'] ?? null;
+            $audio->stream_options = $track['streamOptions'] ?? [];
             $audio->external_id = (string) ($track['trackId'] ?? $externalId);
             $audio->source = 'nhaccuatui';
             $audio->duration_seconds = isset($track['trackTimeMillis'])
@@ -123,7 +258,7 @@ class AudioController extends Controller
         return $audio;
     }
 
-    private function proxy(string $url, Request $request, NhacCuaTuiClient $nhaccuatui, ?callable $refresh = null)
+    private function proxy(string $url, Request $request, NhacCuaTuiClient $nhaccuatui, ?callable $refresh = null, bool $download = false)
     {
         try {
             $remote = $nhaccuatui->stream($url, $request->header('Range'));
@@ -161,6 +296,9 @@ class AudioController extends Controller
         }
         $headers['Cache-Control'] = 'no-store, no-cache, must-revalidate';
         $headers['X-Accel-Buffering'] = 'no';
+        if ($download) {
+            $headers['Content-Disposition'] = 'attachment; filename="melodify-audio"';
+        }
 
         return response()->stream(function () use ($remote): void {
             $body = $remote->toPsrResponse()->getBody();

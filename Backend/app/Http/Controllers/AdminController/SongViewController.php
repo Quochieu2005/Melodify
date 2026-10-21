@@ -103,20 +103,26 @@ class SongViewController extends Controller
             ? $song->external_id
             : $audioFile?->external_id;
 
-        if (filled($audioExternalId)) {
+        $hasLocalAudioOverride = $audioFile
+            && $audioFile->source !== 'nhaccuatui'
+            && blank($audioFile->external_id);
+
+        if (filled($audioExternalId) && ! $hasLocalAudioOverride) {
             try {
                 $externalTrack = $nhaccuatui->getSong((string) $audioExternalId);
-                if (filled($externalTrack['streamUrl'] ?? null)) {
+                if (filled($externalTrack['streamUrl'] ?? null) || ! empty($externalTrack['streamOptions'])) {
                     $audioFile ??= new SongAudioFile;
                     $audioFile->song_id = (string) $song->getKey();
                     $audioFile->file_type = 'full';
-                    $audioFile->file_url = $externalTrack['streamUrl'];
+                    $audioFile->file_url = $externalTrack['streamUrl'] ?? null;
+                    $audioFile->stream_options = $externalTrack['streamOptions'] ?? [];
                     $audioFile->external_id = (string) ($externalTrack['trackId'] ?? $audioExternalId);
                     $audioFile->source = 'nhaccuatui';
                     $audioFile->duration_seconds = isset($externalTrack['trackTimeMillis'])
                         ? (int) round(((int) $externalTrack['trackTimeMillis']) / 1000)
                         : $audioFile->duration_seconds;
-                    $audioFile->premium_only = false;
+                    $audioFile->premium_only = (bool) ($audioFile->premium_only ?? false);
+                    $audioFile->refreshed_at = now();
                     $audioFile->status = 'active';
                     $audioFile->save();
                 }
@@ -124,6 +130,33 @@ class SongViewController extends Controller
                 // Keep the last signed URL when NhacCuaTui is temporarily unavailable.
             }
         }
+
+        $audioQualities = ($audioFile?->source === 'nhaccuatui')
+            ? collect($audioFile->stream_options ?? [])
+                ->filter(fn ($option): bool => is_array($option))
+                ->map(function (array $option) use ($song): ?array {
+                    $qualityId = trim((string) ($option['qualityId'] ?? $option['quality_id'] ?? ''));
+                    if ($qualityId === '') {
+                        return null;
+                    }
+
+                    $available = (bool) ($option['available'] ?? filled($option['streamUrl'] ?? $option['stream_url'] ?? null));
+
+                    return [
+                        'quality_id' => $qualityId,
+                        'label' => (string) ($option['label'] ?? 'Chất lượng audio'),
+                        'bitrate' => $option['bitrate'] ?? null,
+                        'premium_only' => (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false),
+                        'available' => $available,
+                        'url' => $available
+                            ? route('admin.songs.audio', ['song' => $song->getKey(), 'quality_id' => $qualityId])
+                            : null,
+                    ];
+                })
+                ->filter()
+                ->values()
+                ->all()
+            : [];
 
         if (filled($lyricsExternalId) && (! $lyric || blank($lyric->plain_lyrics) || blank($lyric->synced_lyrics))) {
             try {
@@ -154,6 +187,7 @@ class SongViewController extends Controller
                 ? route('admin.songs.audio', $song->getKey())
                 : ($audioFile?->file_url ?: $song->preview_url),
             'audioLabel' => filled($audioFile?->file_url) ? 'Bản đầy đủ' : 'Bản nghe thử',
+            'audioQualities' => $audioQualities,
         ]);
     }
 
@@ -328,6 +362,9 @@ class SongViewController extends Controller
             ? ($data['external_id'] ?? null)
             : null;
         $audio->premium_only = false;
+        $audio->stream_options = ($data['source'] ?? 'admin') === 'nhaccuatui'
+            ? ($data['stream_options'] ?? null)
+            : null;
         $audio->status = 'active';
         $audio->source = $data['source'] ?? 'admin';
         $audio->save();

@@ -6,7 +6,11 @@ class SongAudioFile extends BaseModel
 {
     protected $collection = 'song_audio_files';
 
-    protected $casts = ['premium_only' => 'boolean', 'refreshed_at' => 'datetime'];
+    protected $casts = [
+        'premium_only' => 'boolean',
+        'stream_options' => 'json',
+        'refreshed_at' => 'datetime',
+    ];
 
     public function song()
     {

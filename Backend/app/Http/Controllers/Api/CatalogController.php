@@ -1212,14 +1212,14 @@ class CatalogController extends Controller
         $selectedSongs = $ranked->pluck('song')->values();
         $songDataById = collect($this->localSongsData($selectedSongs))->keyBy('id');
         $items = $ranked->map(function (array $item) use ($songDataById): array {
-                $songId = (string) $item['song']->getKey();
+            $songId = (string) $item['song']->getKey();
 
-                return array_merge($songDataById->get($songId, []), [
-                    'views' => $item['views'],
-                    'favorites' => $item['favorites'],
-                    'shares' => $item['shares'],
-                ]);
-            });
+            return array_merge($songDataById->get($songId, []), [
+                'views' => $item['views'],
+                'favorites' => $item['favorites'],
+                'shares' => $item['shares'],
+            ]);
+        });
 
         return response()->json([
             'data' => $items->all(),
@@ -2020,11 +2020,18 @@ class CatalogController extends Controller
             $primaryArtist = $artists[0] ?? null;
             $audio = $audioBySong->get($songId);
             $audioUrl = $audio?->file_url;
-            if ((bool) ($audio?->premium_only ?? false)
+            $usesAudioProxy = (bool) ($audio?->premium_only ?? false)
                 || $audio?->source === 'nhaccuatui'
-                || ($song->external_source === 'nhaccuatui' && ($audio === null || blank($audio->source)))) {
-                $audioUrl = route('api.v1.songs.audio', ['slug' => $song->slug ?: $song->getKey()]);
+                || ($song->external_source === 'nhaccuatui' && ($audio === null || blank($audio->source)));
+            $audioEndpoint = route('api.v1.songs.audio', ['slug' => $song->slug ?: $song->getKey()]);
+            if ($usesAudioProxy) {
+                $audioUrl = $audioEndpoint;
             }
+            $downloadUrl = $usesAudioProxy ? $audioEndpoint.'?download=1' : null;
+            $audioQualities = $audio?->source === 'nhaccuatui' ? $this->publicAudioQualities(
+                $audio->stream_options,
+                route('api.v1.songs.audio', ['slug' => $song->slug ?: $song->getKey()]),
+            ) : [];
             $album = filled($song->album_id) ? $albums->get((string) $song->album_id) : null;
             $publisher = $admins->get((string) $song->created_by_admin_id)?->name
                 ?: $creatorArtists->get((string) $song->created_by_artist_id)?->name
@@ -2044,6 +2051,8 @@ class CatalogController extends Controller
                 'release_date' => $song->release_date?->toDateString(),
                 'premium_only' => (bool) ($audio?->premium_only ?? false),
                 'has_full_audio' => $audio !== null,
+                'audio_quality' => $this->defaultAudioQualityLabel($audioQualities),
+                'audio_qualities' => $audioQualities,
                 'album' => $album ? ['id' => (string) $album->getKey(), 'title' => $album->title] : null,
                 'duration_seconds' => $song->duration_seconds !== null ? (int) $song->duration_seconds : null,
                 'is_featured' => (int) ($song->is_featured ?? 0),
@@ -2052,6 +2061,7 @@ class CatalogController extends Controller
                 'cover_url' => $song->cover_url,
                 'audio_url' => $audioUrl,
                 'stream_url' => $audioUrl,
+                'download_url' => $downloadUrl,
                 'preview_url' => $song->preview_url,
                 'video_url' => null,
                 'videos' => [],
@@ -2290,6 +2300,8 @@ class CatalogController extends Controller
             'name' => $track['artistName'] ?? 'Nghệ sĩ chưa xác định',
         ];
 
+        $audioEndpoint = filled($id) ? route('api.v1.songs.external-audio', ['externalId' => $id]) : null;
+
         return [
             'id' => $id,
             'title' => $title,
@@ -2298,8 +2310,17 @@ class CatalogController extends Controller
             'duration_seconds' => isset($track['trackTimeMillis']) ? (int) round(((int) $track['trackTimeMillis']) / 1000) : null,
             'is_hot' => 0,
             'preview_limit_seconds' => null,
-            'audio_url' => filled($id) ? route('api.v1.songs.external-audio', ['externalId' => $id]) : null,
-            'stream_url' => filled($id) ? route('api.v1.songs.external-audio', ['externalId' => $id]) : null,
+            'audio_url' => $audioEndpoint,
+            'stream_url' => $audioEndpoint,
+            'download_url' => $audioEndpoint ? $audioEndpoint.'?download=1' : null,
+            'audio_quality' => $this->defaultAudioQualityLabel($this->publicAudioQualities(
+                $track['streamOptions'] ?? [],
+                $audioEndpoint ?? '',
+            )),
+            'audio_qualities' => $this->publicAudioQualities(
+                $track['streamOptions'] ?? [],
+                $audioEndpoint ?? '',
+            ),
             'preview_url' => null,
             'cover_url' => $track['artworkUrl100'] ?? null,
             'country_code' => $track['countryCode'] ?? null,
@@ -2307,6 +2328,45 @@ class CatalogController extends Controller
             'source_url' => $track['trackViewUrl'] ?? null,
             'external_source' => 'nhaccuatui',
         ];
+    }
+
+    /**
+     * Public quality metadata intentionally contains Melodify proxy URLs only;
+     * expiring provider stream/download URLs must never leave the server.
+     */
+    private function publicAudioQualities(?array $options, string $endpoint): array
+    {
+        return collect($options ?? [])
+            ->filter(fn ($option): bool => is_array($option)
+                && filled($option['qualityId'] ?? $option['quality_id'] ?? null))
+            ->map(function (array $option) use ($endpoint): array {
+                $qualityId = (string) ($option['qualityId'] ?? $option['quality_id']);
+                $available = (bool) ($option['available'] ?? filled($option['streamUrl'] ?? $option['stream_url'] ?? null));
+                $audioUrl = null;
+                if ($available) {
+                    $query = http_build_query(['quality_id' => $qualityId], '', '&', PHP_QUERY_RFC3986);
+                    $audioUrl = $endpoint.'?'.$query;
+                }
+
+                return [
+                    'quality_id' => $qualityId,
+                    'label' => (string) ($option['label'] ?? 'Chất lượng nhạc'),
+                    'bitrate' => isset($option['bitrate']) ? (int) $option['bitrate'] : null,
+                    'premium_only' => (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false),
+                    'available' => $available,
+                    'audio_url' => $audioUrl,
+                    'download_url' => $audioUrl ? $audioUrl.'&download=1' : null,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function defaultAudioQualityLabel(array $qualities): ?string
+    {
+        $default = collect($qualities)->first(fn (array $quality): bool => ! $quality['premium_only']);
+
+        return $default['label'] ?? null;
     }
 
     private function videoData(SongVideo $video): array
@@ -2363,11 +2423,18 @@ class CatalogController extends Controller
 
         $primaryArtist = $artists[0] ?? null;
         $audioUrl = $audio?->file_url;
-        if ((bool) ($audio?->premium_only ?? false)
+        $usesAudioProxy = (bool) ($audio?->premium_only ?? false)
             || $audio?->source === 'nhaccuatui'
-            || ($song->external_source === 'nhaccuatui' && ($audio === null || blank($audio->source)))) {
-            $audioUrl = route('api.v1.songs.audio', ['slug' => $song->slug ?: $song->getKey()]);
+            || ($song->external_source === 'nhaccuatui' && ($audio === null || blank($audio->source)));
+        $audioEndpoint = route('api.v1.songs.audio', ['slug' => $song->slug ?: $song->getKey()]);
+        if ($usesAudioProxy) {
+            $audioUrl = $audioEndpoint;
         }
+        $downloadUrl = $usesAudioProxy ? $audioEndpoint.'?download=1' : null;
+        $audioQualities = $audio?->source === 'nhaccuatui' ? $this->publicAudioQualities(
+            $audio->stream_options,
+            route('api.v1.songs.audio', ['slug' => $song->slug ?: $song->getKey()]),
+        ) : [];
 
         return [
             'id' => (string) $song->getKey(),
@@ -2383,6 +2450,8 @@ class CatalogController extends Controller
             'release_date' => $song->release_date?->toDateString(),
             'premium_only' => (bool) ($audio?->premium_only ?? false),
             'has_full_audio' => $audio !== null,
+            'audio_quality' => $this->defaultAudioQualityLabel($audioQualities),
+            'audio_qualities' => $audioQualities,
             'duration_seconds' => $song->duration_seconds !== null
                 ? (int) $song->duration_seconds
                 : ($audio?->duration_seconds !== null ? (int) $audio->duration_seconds : null),
@@ -2392,6 +2461,7 @@ class CatalogController extends Controller
             'cover_url' => $song->cover_url,
             'audio_url' => $audioUrl,
             'stream_url' => $audioUrl,
+            'download_url' => $downloadUrl,
             'preview_url' => $song->preview_url,
             'source_url' => $song->external_url ?: $song->itunes_url,
             'external_source' => $song->external_source,
@@ -2739,11 +2809,18 @@ class CatalogController extends Controller
             ->keyBy(fn (Playlist $playlist): string => (string) $playlist->getKey());
 
         $audioUrl = $audio?->file_url;
-        if ((bool) ($audio?->premium_only ?? false)
+        $usesAudioProxy = (bool) ($audio?->premium_only ?? false)
             || $audio?->source === 'nhaccuatui'
-            || ($song->external_source === 'nhaccuatui' && ($audio === null || blank($audio->source)))) {
-            $audioUrl = route('api.v1.songs.audio', ['slug' => $song->slug ?: $song->getKey()]);
+            || ($song->external_source === 'nhaccuatui' && ($audio === null || blank($audio->source)));
+        $audioEndpoint = route('api.v1.songs.audio', ['slug' => $song->slug ?: $song->getKey()]);
+        if ($usesAudioProxy) {
+            $audioUrl = $audioEndpoint;
         }
+        $downloadUrl = $usesAudioProxy ? $audioEndpoint.'?download=1' : null;
+        $audioQualities = $audio?->source === 'nhaccuatui' ? $this->publicAudioQualities(
+            $audio->stream_options,
+            route('api.v1.songs.audio', ['slug' => $song->slug ?: $song->getKey()]),
+        ) : [];
 
         $data = [
             'id' => (string) $song->getKey(),
@@ -2759,6 +2836,8 @@ class CatalogController extends Controller
             'release_date' => $song->release_date?->toDateString(),
             'premium_only' => (bool) ($audio?->premium_only ?? false),
             'has_full_audio' => $audio !== null,
+            'audio_quality' => $this->defaultAudioQualityLabel($audioQualities),
+            'audio_qualities' => $audioQualities,
             'album' => $album ? [
                 'id' => (string) $album->getKey(),
                 'title' => $album->title,
@@ -2791,6 +2870,7 @@ class CatalogController extends Controller
             'cover_url' => $song->cover_url,
             'audio_url' => $audioUrl,
             'stream_url' => $audioUrl,
+            'download_url' => $downloadUrl,
             'preview_url' => $song->preview_url,
             'video_url' => $videos->first() ? $this->videoData($videos->first())['video_url'] : null,
             'videos' => $videos->map(fn (SongVideo $video): array => $this->videoData($video))->values()->all(),
