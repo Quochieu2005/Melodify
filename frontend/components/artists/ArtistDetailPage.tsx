@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
-import { usePlayer } from '@/components/player';
+import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import FollowButton from '@/components/follow/FollowButton';
@@ -176,7 +176,7 @@ function ArtistBioModal({ artist, onClose }: { artist: ArtistDetail; onClose: ()
 
 export default function ArtistDetailPage({ slug }: { slug: string }) {
   const router = useRouter();
-  const { track, isPlaying, playSong, togglePlay } = usePlayer();
+  const { track, isPlaying, playSong, togglePlay } = usePlayerControls();
   const artistHeroRef = useRef<HTMLElement | null>(null);
   const [request, setRequest] = useState({ slug: '', artist: null as ArtistDetail | null, isLoading: true, error: '' });
   const [updatedFollowers, setUpdatedFollowers] = useState<number | null>(null);

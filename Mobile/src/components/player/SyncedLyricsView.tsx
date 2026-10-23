@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 
 import type { ParsedLyricLine } from '@/lib/lyrics';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
 
 type SyncedLyricsViewProps = {
   lyrics: ParsedLyricLine[];
@@ -26,6 +27,7 @@ export function SyncedLyricsView({
   onSeekToLine,
   containerHeight = 440,
 }: SyncedLyricsViewProps) {
+  const styles = useAdaptiveStyles(baseStyles);
   const scrollViewRef = useRef<ScrollView | null>(null);
   const lineOffsets = useRef<{ [index: number]: number }>({});
 
@@ -112,7 +114,7 @@ export function SyncedLyricsView({
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: {
     width: '100%',
   },

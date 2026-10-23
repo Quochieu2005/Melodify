@@ -369,6 +369,20 @@ export const AUTH_TOKEN_STORAGE_KEY = "melodify_access_token";
 export const AUTH_USER_STORAGE_KEY = "melodify_auth_user";
 const LIBRARY_IMPORT_SESSION_KEY = "melodify_library_imported";
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
+const catalogResponseCache = new Map<string, { expiresAt: number; value: unknown }>();
+let catalogCacheGeneration = 0;
+
+function clearCatalogResponseCache() {
+  catalogCacheGeneration += 1;
+  catalogResponseCache.clear();
+  inFlightGetRequests.clear();
+}
+
+function catalogCacheTtl(path: string): number {
+  const pathname = path.split('?')[0];
+  if (pathname === '/v1/search') return 8_000;
+  return /^\/v1\/(home\/bootstrap|topics|genres|albums|playlists|artists|artists\/trending|charts(?:\/[^/]+)?|subscription-plans)$/.test(pathname) ? 30_000 : 0;
+}
 const songFavoriteStates = new Map<string, boolean>();
 const importedLibraries = new Map<string, Promise<void>>();
 
@@ -412,6 +426,7 @@ export function getCachedSongFavorite(songId: string) {
 export function saveAuthSession(auth: AuthResponse): void {
   if (typeof window === "undefined") return;
 
+  clearCatalogResponseCache();
   songFavoriteStates.clear();
   importedLibraries.clear();
   window.sessionStorage.removeItem(LIBRARY_IMPORT_SESSION_KEY);
@@ -423,6 +438,7 @@ export function saveAuthSession(auth: AuthResponse): void {
 export function clearAuthSession(): void {
   if (typeof window === "undefined") return;
 
+  clearCatalogResponseCache();
   songFavoriteStates.clear();
   importedLibraries.clear();
   window.sessionStorage.removeItem(LIBRARY_IMPORT_SESSION_KEY);
@@ -515,9 +531,18 @@ export async function apiFetch<T>(
       ? window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
       : null;
   const method = (init?.method ?? "GET").toUpperCase();
-  const requestKey = `${storedToken ?? ""}:${path}`;
+  const requestKey = `${API_URL}:${storedToken ?? ""}:${path}`;
+  // Custom headers/signals have their own cancellation and authorization semantics.
+  const shareRequest = method === "GET" && !Object.keys(init ?? {}).some((key) => key !== 'method');
+  const ttl = shareRequest && typeof window !== "undefined" ? catalogCacheTtl(path) : 0;
+  const generation = catalogCacheGeneration;
 
-  if (method === "GET") {
+  if (ttl > 0) {
+    const cached = catalogResponseCache.get(requestKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.value as T;
+    catalogResponseCache.delete(requestKey);
+  }
+  if (shareRequest) {
     const pending = inFlightGetRequests.get(requestKey);
     if (pending) return pending as Promise<T>;
   }
@@ -542,11 +567,16 @@ export async function apiFetch<T>(
     }
 
     const payload = await response.json() as T;
+    if (method !== "GET" && !/\/view(?:\?|$)/.test(path)) clearCatalogResponseCache();
+    if (ttl > 0 && generation === catalogCacheGeneration) {
+      catalogResponseCache.set(requestKey, { expiresAt: Date.now() + ttl, value: payload });
+      if (catalogResponseCache.size > 80) catalogResponseCache.delete(catalogResponseCache.keys().next().value!);
+    }
     if (method !== "GET" && (/\/(favorite|follow)(\?|$)/.test(path) || path.startsWith("/v1/me/playlists"))) notifyLibraryChanged();
     return payload;
   })();
 
-  if (method !== "GET") return request;
+  if (!shareRequest) return request;
 
   inFlightGetRequests.set(requestKey, request);
   try {
@@ -574,7 +604,7 @@ export function getVipTransactionHistory(page = 1) {
 }
 
 export function getHomeBootstrap() {
-  // apiFetch shares only concurrent requests; a new visit gets fresh API data.
+  // Reuse the public catalog briefly when navigating between home sections.
   return apiFetch<{
     data: HomeBootstrap;
     meta: { date: string; refresh_minutes: number };

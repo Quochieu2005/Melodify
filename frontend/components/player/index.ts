@@ -1,2 +1,2 @@
 export { default as MusicPlayer } from './MusicPlayer';
-export { PlayerProvider, usePlayer } from './PlayerProvider';
+export { PlayerProvider, usePlayer, usePlayerControls } from './PlayerProvider';

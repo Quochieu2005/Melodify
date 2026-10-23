@@ -5,10 +5,12 @@ namespace Tests\Feature\Api;
 use App\Models\Album;
 use App\Models\AlbumFavorite;
 use App\Models\Artist;
+use App\Models\ArtistFollower;
 use App\Models\ArtistViewEvent;
 use App\Models\Favorite;
 use App\Models\Playlist;
 use App\Models\PlaylistFavorite;
+use App\Models\PlaylistSong;
 use App\Models\Song;
 use App\Models\SongArtist;
 use App\Models\SongPlayEvent;
@@ -28,7 +30,12 @@ class LibraryAndFollowTest extends TestCase
     {
         parent::setUp();
         $this->testPrefix = 'test_library_'.bin2hex(random_bytes(8)).'_';
-        config(['database.connections.mongodb.prefix' => $this->testPrefix]);
+        config([
+            'database.connections.mongodb.prefix' => $this->testPrefix,
+            'cache.stores.file.path' => storage_path('framework/cache/testing/'.$this->testPrefix),
+            'cache.stores.file.lock_path' => storage_path('framework/cache/testing/'.$this->testPrefix),
+        ]);
+        Cache::forgetDriver('file');
         DB::purge('mongodb');
         Cache::store('file')->put('api:catalog-content-revision:v1', (string) Str::uuid());
     }
@@ -44,6 +51,7 @@ class LibraryAndFollowTest extends TestCase
             }
             DB::purge('mongodb');
         } finally {
+            Cache::store('file')->flush();
             parent::tearDown();
         }
     }
@@ -133,6 +141,78 @@ class LibraryAndFollowTest extends TestCase
         $this->getJson('/api/v1/search?q=hello&page=0')->assertStatus(422);
         $this->getJson('/api/v1/search?q=')->assertStatus(422);
 
+    }
+
+    public function test_search_cache_expires_and_follows_catalog_revision(): void
+    {
+        $this->freezeTime();
+        $artist = Artist::query()->create(['name' => 'Cache Artist', 'slug' => 'cache-artist', 'status' => 'active']);
+        $url = '/api/v1/search?q=Cache&type=artist&suggest=1';
+        $this->getJson($url)->assertOk()->assertJsonPath('data.artist.0.name', 'Cache Artist');
+        $artist->update(['name' => 'Cache Artist Updated']);
+        $this->getJson($url)->assertOk()->assertJsonPath('data.artist.0.name', 'Cache Artist');
+        $this->travel(31)->seconds();
+        $this->getJson($url)->assertOk()->assertJsonPath('data.artist.0.name', 'Cache Artist Updated');
+        $artist->update(['status' => 'inactive']);
+        Cache::store('file')->put('api:catalog-content-revision:v1', (string) Str::uuid());
+        $this->getJson($url)->assertOk()->assertJsonCount(0, 'data.artist');
+    }
+
+    public function test_search_batches_album_playlist_and_follower_metadata_without_changing_results(): void
+    {
+        $artist = Artist::query()->create(['name' => 'Batch Artist', 'slug' => 'batch-artist', 'status' => 'active']);
+        $album = Album::query()->create(['title' => 'Batch Album', 'slug' => 'batch-album', 'artist_id' => (string) $artist->getKey(), 'status' => 'published']);
+        $song = Song::query()->create(['title' => 'Batch Song', 'slug' => 'batch-song', 'artist_name' => $artist->name, 'album_id' => (string) $album->getKey(), 'status' => 'published']);
+        SongArtist::query()->create(['song_id' => (string) $song->getKey(), 'artist_id' => (string) $artist->getKey(), 'artist_role' => 'primary']);
+        $playlist = Playlist::query()->create(['name' => 'Batch Playlist', 'slug' => 'batch-playlist', 'status' => 'active', 'visibility' => 'public']);
+        PlaylistSong::query()->create(['playlist_id' => (string) $playlist->getKey(), 'song_id' => (string) $song->getKey(), 'position' => 1]);
+        ArtistFollower::query()->create(['artist_id' => (string) $artist->getKey(), 'user_id' => 'batch-test-follower']);
+
+        $this->getJson('/api/v1/search?q=Batch&type=all')->assertOk()
+            ->assertJsonPath('data.album.0.song_count', 1)
+            ->assertJsonPath('data.album.0.artist.name', 'Batch Artist')
+            ->assertJsonPath('data.playlist.0.song_count', 1)
+            ->assertJsonPath('data.playlist.0.artists.0.name', 'Batch Artist')
+            ->assertJsonPath('data.artist.0.followers_count', 1)
+            ->assertJsonPath('meta.totals.song', 1);
+    }
+
+    public function test_song_play_records_immediately_without_evicting_short_lived_catalog_rollups(): void
+    {
+        $this->freezeTime();
+        $song = Song::query()->create(['title' => 'Cached Play', 'slug' => 'cached-play', 'status' => 'published']);
+        $suffix = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.Cache::store('file')->get('api:catalog-content-revision:v1');
+        $keys = ['api:home-discovery:v2:', 'api:home-bootstrap:v14:', 'api:trending-artists:v8:', 'api:charts:v2:full:'];
+        foreach ($keys as $key) {
+            Cache::store('file')->put($key.$suffix, ['cached' => true], now()->addMinute());
+        }
+
+        $this->postJson('/api/v1/songs/cached-play/view', ['visitor_id' => 'cache-play-test', 'source' => 'mobile_player'])
+            ->assertOk()->assertJsonPath('recorded', true)->assertJsonPath('views', 1);
+        $this->assertSame(1, SongPlayEvent::query()->where('song_id', (string) $song->getKey())->count());
+        foreach ($keys as $key) {
+            $this->assertSame(['cached' => true], Cache::store('file')->get($key.$suffix));
+        }
+        $this->travel(61)->seconds();
+        foreach ($keys as $key) {
+            $this->assertNull(Cache::store('file')->get($key.$suffix));
+        }
+    }
+
+    public function test_home_serves_recent_rollup_while_refreshing_rankings_after_response(): void
+    {
+        $this->freezeTime();
+        $artist = Artist::query()->create(['name' => 'Refresh Artist', 'slug' => 'refresh-artist', 'status' => 'active']);
+        $song = Song::query()->create(['title' => 'Refresh Song', 'slug' => 'refresh-song', 'artist_name' => $artist->name, 'status' => 'published']);
+        SongArtist::query()->create(['song_id' => (string) $song->getKey(), 'artist_id' => (string) $artist->getKey()]);
+        $url = '/api/v1/home/bootstrap';
+        $this->getJson($url)->assertOk()->assertJsonPath('data.trending_artists.0.ranking_source', 'catalog');
+        ArtistViewEvent::query()->create(['artist_id' => (string) $artist->getKey(), 'viewed_at' => now()]);
+        SongPlayEvent::query()->create(['song_id' => (string) $song->getKey(), 'started_at' => now()]);
+
+        $this->travel(61)->seconds();
+        $this->getJson($url)->assertOk()->assertJsonPath('data.trending_artists.0.ranking_source', 'catalog');
+        $this->getJson($url)->assertOk()->assertJsonPath('data.trending_artists.0.ranking_source', 'weekly');
     }
 
     public function test_home_trending_artists_and_featured_songs_use_the_last_seven_days_of_plays(): void

@@ -10,13 +10,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname, useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 
-import { useMusic } from '@/components/music';
+import { useMusic, useMusicControls } from '@/components/music';
 import { FullPlayerModal, QueueBottomSheet } from '@/components/player';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { getVisitorId, toggleSongFavorite } from '@/lib/api';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
+import { useTheme, useThemeMode } from '@/hooks/use-theme';
 
 const tabs = [
   { label: 'Dành cho bạn', icon: 'for-you', route: '/for-you' },
@@ -24,28 +25,40 @@ const tabs = [
   { label: 'Của tui', icon: 'user', route: '/me' },
 ] as const;
 
+function MiniPlayerProgress() {
+  const { currentTime, duration } = useMusic();
+  const styles = useAdaptiveStyles(baseStyles);
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+  return <View style={styles.miniProgressTrack}><View style={[styles.miniProgressFill, { width: `${progressPercent}%` }]} /></View>;
+}
+
 export default function AppShell({
   children,
   hideHeader = false,
+  hidePlayer = false,
+  hideTabs = false,
   customHeader,
 }: PropsWithChildren<{
   hideHeader?: boolean;
+  hidePlayer?: boolean;
+  hideTabs?: boolean;
   customHeader?: React.ReactNode;
 }>) {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
+  const mode = useThemeMode();
+  const styles = useAdaptiveStyles(baseStyles);
   const {
     track,
     isPlaying,
     isBuffering,
-    currentTime,
-    duration,
     togglePlay,
     qualityOptions,
     selectedQualityId,
     setQuality,
-  } = useMusic();
+  } = useMusicControls();
 
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   const [queueSheetOpen, setQueueSheetOpen] = useState(false);
@@ -53,9 +66,6 @@ export default function AppShell({
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [qualityModalVisible, setQualityModalVisible] = useState(false);
   const selectedQuality = qualityOptions.find((quality) => quality.quality_id === selectedQualityId);
-
-  const progressPercent =
-    duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
 
   const handlePlayerPress = () => {
     if (track) {
@@ -80,15 +90,8 @@ export default function AppShell({
   };
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-
-      {/* Seamless pastel green-to-white gradient starting from screen y=0 */}
-      <LinearGradient
-        colors={['#86EED2', '#BCF7E5', '#EDFCF7', '#FFFFFF']}
-        locations={[0, 0.16, 0.36, 0.65]}
-        style={styles.gradientTop}
-      />
+    <View style={[styles.root, { backgroundColor: theme.background }]}>
+      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
 
       {/* Top Header Bar (Padded safely below iOS Status Bar) */}
       {!hideHeader && (
@@ -118,7 +121,7 @@ export default function AppShell({
                 onPress={() => router.push('/search' as never)}
                 style={styles.headerCircleBtn}
               >
-                <AppIcon name="search" color="#334155" size={17} />
+                  <AppIcon name="search" color={theme.textSecondary} size={17} />
               </Pressable>
 
               <Pressable
@@ -127,7 +130,7 @@ export default function AppShell({
                 onPress={() => router.push('/explore' as never)}
                 style={styles.headerCircleBtn}
               >
-                <AppIcon name="waveform" color="#334155" size={17} />
+                  <AppIcon name="waveform" color={theme.textSecondary} size={17} />
               </Pressable>
             </View>
           </View>
@@ -138,17 +141,10 @@ export default function AppShell({
       <View style={styles.content}>{children}</View>
 
       {/* Floating Mini Player (Ảnh 1) */}
-      <View style={styles.playerContainer}>
+      <View style={[styles.playerContainer, hidePlayer && styles.hidden]}>
         <View style={styles.playerCard}>
           {/* Subtle progress indicator */}
-          <View style={styles.miniProgressTrack}>
-            <View
-              style={[
-                styles.miniProgressFill,
-                { width: `${progressPercent}%` },
-              ]}
-            />
-          </View>
+          <MiniPlayerProgress />
 
           <View style={styles.playerRow}>
             {/* Tapping main area opens Full Lyrics Player */}
@@ -165,7 +161,7 @@ export default function AppShell({
                     style={styles.miniArtImg}
                   />
                 ) : (
-                  <AppIcon name="music" color="#00B5AD" size={20} />
+                  <AppIcon name="music" color={theme.primary} size={20} />
                 )}
               </View>
               <View style={styles.trackText}>
@@ -201,7 +197,7 @@ export default function AppShell({
               onPress={() => setQueueSheetOpen(true)}
               style={styles.miniControlButton}
             >
-              <AppIcon name="menu" color="#475569" size={19} />
+              <AppIcon name="menu" color={theme.textSecondary} size={19} />
             </Pressable>
 
             {/* Heart Button */}
@@ -214,7 +210,7 @@ export default function AppShell({
               >
                 <AppIcon
                   name="heart"
-                  color={favorite ? '#EF4444' : '#475569'}
+                  color={favorite ? '#EF4444' : theme.textSecondary}
                   size={19}
                 />
               </Pressable>
@@ -227,11 +223,11 @@ export default function AppShell({
               style={styles.miniPlayBtn}
             >
               {isBuffering ? (
-                <ActivityIndicator color="#0F172A" size="small" />
+                <ActivityIndicator color={theme.text} size="small" />
               ) : (
                 <AppIcon
                   name={isPlaying ? 'pause' : 'play'}
-                  color="#0F172A"
+                  color={theme.text}
                   size={18}
                 />
               )}
@@ -241,7 +237,7 @@ export default function AppShell({
       </View>
 
       {/* Clean White Tab Bar (Ảnh 1) - Extends into bottom safe area seamlessly */}
-      <View style={[styles.tabs, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View style={[styles.tabs, { paddingBottom: Math.max(insets.bottom, 10) }, hideTabs && styles.hidden]}>
         {tabs.map((tab) => {
           const active =
             pathname === tab.route ||
@@ -256,7 +252,7 @@ export default function AppShell({
             >
               <AppIcon
                 name={tab.icon}
-                color={active ? '#0F172A' : '#94A3B8'}
+              color={active ? theme.text : theme.textMuted}
                 size={22}
               />
               <Text
@@ -271,16 +267,16 @@ export default function AppShell({
       </View>
 
       {/* Full Lyrics Player (Ảnh 2 / Ảnh 3) */}
-      <FullPlayerModal
+      {showFullPlayer ? <FullPlayerModal
         visible={showFullPlayer}
         onClose={() => setShowFullPlayer(false)}
-      />
+      /> : null}
 
       {/* Bottom Sheet 3-Gạch (Ảnh 3) */}
-      <QueueBottomSheet
+      {queueSheetOpen ? <QueueBottomSheet
         visible={queueSheetOpen}
         onClose={() => setQueueSheetOpen(false)}
-      />
+      /> : null}
 
       <Modal
         transparent
@@ -334,7 +330,8 @@ export default function AppShell({
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
+  hidden: { display: 'none' },
   root: {
     flex: 1,
     backgroundColor: '#FFFFFF',

@@ -8,7 +8,7 @@ import { ArtistNames } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { getSong, type Song } from '@/lib/api';
-import { usePlayer } from '@/components/player';
+import { usePlayerControls } from '@/components/player';
 import {
   readRecentItems,
   recordRecentItem,
@@ -170,7 +170,7 @@ function RecentSongRow({ item, index, checked, onToggle, onPlay, currentTrackId,
 }
 
 export default function RecentlyPlayedPage() {
-  const { playSong, track, isPlaying, togglePlay } = usePlayer();
+  const { playSong, track, isPlaying, togglePlay } = usePlayerControls();
   const [activeTab, setActiveTab] = useState<RecentCategory>('song');
   const [items, setItems] = useState<RecentItem[]>([]);
   const [isLoadingSong, setIsLoadingSong] = useState(false);

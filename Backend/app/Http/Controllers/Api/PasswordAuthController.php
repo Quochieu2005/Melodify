@@ -7,6 +7,7 @@ use App\Mail\UserPasswordOtpMail;
 use App\Models\User;
 use App\Models\UserApiToken;
 use App\Services\ApiTokenService;
+use App\Services\PhoneOtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -20,7 +21,49 @@ use Throwable;
 
 class PasswordAuthController extends Controller
 {
-    public function __construct(private readonly ApiTokenService $tokens) {}
+    public function __construct(
+        private readonly ApiTokenService $tokens,
+        private readonly PhoneOtpService $phones,
+    ) {}
+
+    public function register(Request $request): JsonResponse
+    {
+        $request->merge([
+            'email' => Str::lower(trim((string) $request->input('email', ''))),
+            'name' => trim((string) $request->input('name', '')),
+        ]);
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'email' => ['required', 'email', 'max:160'],
+            'password' => ['required', 'string', 'confirmed', 'max:72', PasswordRule::min(8)],
+            'device_name' => ['nullable', 'string', 'max:100'],
+        ], [
+            'name.required' => 'Vui lòng nhập tên của bạn.',
+            'email.email' => 'Email không hợp lệ.',
+            'password.confirmed' => 'Mật khẩu nhập lại không khớp.',
+            'password.min' => 'Mật khẩu cần ít nhất 8 ký tự.',
+        ]);
+
+        return Cache::lock('password-register:'.hash('sha256', $data['email']), 30)->block(3, function () use ($data): JsonResponse {
+            if (User::where('email', $data['email'])->exists()) {
+                return response()->json(['message' => 'Email đã được đăng ký. Vui lòng đăng nhập.'], 422);
+            }
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'username' => $this->tokens->uniqueUsername(null, Str::before($data['email'], '@')),
+                'slug' => $this->tokens->uniqueSlug($data['name']),
+                'password' => Hash::make($data['password']),
+                'status' => 'active',
+                'is_premium' => 0,
+                'last_login_at' => now(),
+                'last_login_method' => 'password',
+            ]);
+
+            return response()->json(['message' => 'Đăng ký thành công.']
+                + $this->tokens->issue($user, $data['device_name'] ?? 'melodify-mobile', true), 201);
+        });
+    }
 
     public function login(Request $request): JsonResponse
     {
@@ -40,6 +83,17 @@ class PasswordAuthController extends Controller
                 $query->where('email', $lookup)->orWhere('username', $lookup);
             })
             ->first();
+
+        // Password login accepts Vietnamese/international phone numbers too. Keep
+        // usernames intact by only treating phone-shaped identifiers as phones.
+        if (! $user && preg_match('/^[+0-9().\s-]+$/', $identifier)) {
+            try {
+                $user = User::query()->where('phone', $this->phones->normalize($identifier))->first();
+            } catch (\InvalidArgumentException) {
+                // An invalid phone-shaped identifier falls through to the same
+                // generic credential error as an unknown email/username.
+            }
+        }
 
         if (! $user || ! Hash::check((string) $data['password'], (string) $user->password)) {
             return response()->json(['message' => 'Thông tin đăng nhập không chính xác.'], 401);

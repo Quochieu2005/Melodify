@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 
 import { ArtistNames } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
-import { usePlayer } from '@/components/player';
+import { usePlayerControls } from '@/components/player';
 import { AddSongsToPlaylistDialog } from '@/components/playlists/AddSongsToPlaylistDialog';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { downloadSongFiles } from '@/lib/song-actions';
@@ -154,7 +154,7 @@ function FavoriteSongRow({
 }
 
 export default function FavoriteSongsPage() {
-  const { track, isPlaying, playSong, togglePlay } = usePlayer();
+  const { track, isPlaying, playSong, togglePlay } = usePlayerControls();
   const [songs, setSongs] = useState<Song[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');

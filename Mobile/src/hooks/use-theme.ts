@@ -3,12 +3,17 @@
  * https://docs.expo.dev/guides/color-schemes/
  */
 
+import { createContext, useContext } from 'react';
 import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+
+export type ThemeMode = keyof typeof Colors;
+export const ThemeModeContext = createContext<ThemeMode>('light');
 
 export function useTheme() {
-  const scheme = useColorScheme();
-  const theme = scheme === 'unspecified' ? 'light' : scheme;
+  const scheme = useContext(ThemeModeContext);
+  return Colors[scheme];
+}
 
-  return Colors[theme];
+export function useThemeMode() {
+  return useContext(ThemeModeContext);
 }

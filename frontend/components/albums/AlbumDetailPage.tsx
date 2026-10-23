@@ -4,7 +4,7 @@ import FollowButton from '@/components/follow/FollowButton';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
-import { usePlayer } from '@/components/player';
+import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { getAlbum, getVisitorId, recordAlbumShare, toggleAlbumFavorite, type AlbumDetail, type Song, type SongArtistCredit } from '@/lib/api';
 
@@ -125,7 +125,7 @@ function AlbumSongRow({ song, index, coverUrl, checked, onToggle, onPlay, isCurr
 }
 
 export default function AlbumDetailPage({ slug }: { slug: string }) {
-  const { track, isPlaying, playSong, togglePlay } = usePlayer();
+  const { track, isPlaying, playSong, togglePlay } = usePlayerControls();
   const [request, setRequest] = useState({
     slug: '',
     album: null as AlbumDetail | null,

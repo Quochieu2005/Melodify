@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,10 +9,11 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type LayoutChangeEvent,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { AppShell } from '@/components/layout';
@@ -27,10 +28,14 @@ import {
   type AuthUser,
 } from '@/lib/api';
 import { getRecentSongs } from '@/lib/recent-history';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
+import { useTheme } from '@/hooks/use-theme';
 
 type ProfileTab = 'created' | 'favorite_playlists' | 'favorite_albums';
 
 export function MyProfileScreen() {
+  const styles = useAdaptiveStyles(baseStyles);
+  const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -38,6 +43,20 @@ export function MyProfileScreen() {
   const [authChecking, setAuthChecking] = useState(true);
   const [activeTab, setActiveTab] = useState<ProfileTab>('created');
   const [recentCount, setRecentCount] = useState<number>(0);
+  const profileScrollRef = useRef<ScrollView | null>(null);
+  const profileSectionOffsets = useRef<Record<ProfileTab, number>>({
+    created: 0,
+    favorite_playlists: 0,
+    favorite_albums: 0,
+  });
+
+  const scrollToProfileSection = (tab: ProfileTab) => {
+    setActiveTab(tab);
+    profileScrollRef.current?.scrollTo({
+      y: Math.max(0, profileSectionOffsets.current[tab] - 8),
+      animated: false,
+    });
+  };
 
   // Create playlist modal
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -49,8 +68,9 @@ export function MyProfileScreen() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let active = true;
+    setAuthChecking(true);
     void getSavedAuthUser()
       .then((u) => {
         if (active) {
@@ -72,7 +92,7 @@ export function MyProfileScreen() {
     return () => {
       active = false;
     };
-  }, []);
+  }, []));
 
   // Fetch real library data from backend
   const { data, loading, reload } = useRemoteData(async () => {
@@ -107,6 +127,14 @@ export function MyProfileScreen() {
     await reload();
   };
 
+  const openCreatePlaylist = () => {
+    if (!user) {
+      router.push('/login' as never);
+      return;
+    }
+    setCreateModalOpen(true);
+  };
+
   // Filter created playlists
   const displayCreatedPlaylists = useMemo(() => {
     let list = [...(data?.created_playlists ?? [])];
@@ -117,29 +145,20 @@ export function MyProfileScreen() {
     return list;
   }, [data?.created_playlists, searchQuery]);
 
-  // Top header icons: Bell & Settings
+  // Keep the account title centered like the native reference screen.
   const customHeader = (
     <View style={styles.topHeaderRow}>
       <View style={styles.topHeaderLeft} />
 
-      <View style={styles.topHeaderRight}>
-        {/* Bell Notifications */}
-        <Pressable
-          accessibilityLabel="Thông báo"
-          onPress={() => Alert.alert('Thông báo', 'Bạn không có thông báo mới nào.')}
-          style={styles.topHeaderBtn}
-        >
-          <AppIcon name="bell" color="#1E293B" size={20} />
-          <View style={styles.notificationDot} />
-        </Pressable>
+      <Text style={styles.topHeaderTitle}>Tài Khoản</Text>
 
-        {/* Settings Gear */}
+      <View style={styles.topHeaderRight}>
         <Pressable
           accessibilityLabel="Cài đặt tài khoản"
           onPress={() => setSettingsOpen(true)}
           style={styles.topHeaderBtn}
         >
-          <AppIcon name="settings" color="#1E293B" size={20} />
+          <AppIcon name="settings" color={theme.text} size={20} />
         </Pressable>
       </View>
     </View>
@@ -148,6 +167,7 @@ export function MyProfileScreen() {
   return (
     <AppShell customHeader={customHeader}>
       <ScrollView
+        ref={profileScrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
@@ -242,6 +262,32 @@ export function MyProfileScreen() {
                 </View>
               </Pressable>
 
+              <Pressable
+                onPress={() => Alert.alert('Trung tâm sự kiện', 'Hiện chưa có sự kiện nào.')}
+                style={[styles.actionCard, styles.eventCard]}
+              >
+                <View style={styles.cardIconBox}>
+                  <AppIcon name="calendar" color="#E11D48" size={24} />
+                </View>
+                <View style={styles.cardTextBox}>
+                  <Text numberOfLines={1} style={styles.cardTitle}>Trung tâm sự kiện</Text>
+                  <Text numberOfLines={1} style={styles.cardSubtitle}>Khám phá sự kiện</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                onPress={() => Alert.alert('Nhạc Đã Tải', 'Bạn chưa có track nào đã tải.')}
+                style={[styles.actionCard, styles.grayCard]}
+              >
+                <View style={styles.cardIconBox}>
+                  <AppIcon name="download" color="#00A8B5" size={24} />
+                </View>
+                <View style={styles.cardTextBox}>
+                  <Text numberOfLines={1} style={styles.cardTitle}>Nhạc Đã Tải</Text>
+                  <Text numberOfLines={1} style={styles.cardSubtitle}>0 track</Text>
+                </View>
+              </Pressable>
+
               {/* Card 2: Nghe gần đây */}
               <Pressable
                 onPress={() => router.push('/recent' as never)}
@@ -293,7 +339,7 @@ export function MyProfileScreen() {
                 contentContainerStyle={styles.tabsRow}
               >
                 <Pressable
-                  onPress={() => setActiveTab('created')}
+                  onPress={() => scrollToProfileSection('created')}
                   style={styles.tabItem}
                 >
                   <Text
@@ -308,7 +354,7 @@ export function MyProfileScreen() {
                 </Pressable>
 
                 <Pressable
-                  onPress={() => setActiveTab('favorite_playlists')}
+                  onPress={() => scrollToProfileSection('favorite_playlists')}
                   style={styles.tabItem}
                 >
                   <Text
@@ -325,7 +371,7 @@ export function MyProfileScreen() {
                 </Pressable>
 
                 <Pressable
-                  onPress={() => setActiveTab('favorite_albums')}
+                  onPress={() => scrollToProfileSection('favorite_albums')}
                   style={styles.tabItem}
                 >
                   <Text
@@ -344,8 +390,12 @@ export function MyProfileScreen() {
             </View>
 
             {/* TAB CONTENT: Playlist đã tạo */}
-            {activeTab === 'created' && (
-              <View style={styles.tabContentSection}>
+            <View
+              onLayout={(event) => {
+                profileSectionOffsets.current.created = event.nativeEvent.layout.y;
+              }}
+              style={styles.tabContentSection}
+            >
                 <View style={styles.sectionHeaderRow}>
                   <Text style={styles.sectionTitle}>
                     Playlist đã tạo ({data?.created_playlists.length ?? 0})
@@ -355,7 +405,7 @@ export function MyProfileScreen() {
                     {/* Nút Tạo Playlist mới (+) */}
                     <Pressable
                       accessibilityLabel="Tạo playlist mới"
-                      onPress={() => setCreateModalOpen(true)}
+                      onPress={openCreatePlaylist}
                       style={styles.actionCircleBtn}
                     >
                       <AppIcon name="plus" color="#334155" size={18} />
@@ -367,7 +417,7 @@ export function MyProfileScreen() {
                       onPress={() => setSearchOpen((prev) => !prev)}
                       style={styles.actionCircleBtn}
                     >
-                      <AppIcon name="search" color="#334155" size={17} />
+                      <AppIcon name="search" color={theme.textSecondary} size={17} />
                     </Pressable>
                   </View>
                 </View>
@@ -375,7 +425,7 @@ export function MyProfileScreen() {
                 {/* Inline Search Bar */}
                 {searchOpen && (
                   <View style={styles.searchBarBox}>
-                    <AppIcon name="search" color="#94A3B8" size={16} />
+                      <AppIcon name="search" color={theme.textMuted} size={16} />
                     <TextInput
                       value={searchQuery}
                       onChangeText={setSearchQuery}
@@ -385,7 +435,7 @@ export function MyProfileScreen() {
                     />
                     {searchQuery ? (
                       <Pressable onPress={() => setSearchQuery('')}>
-                        <AppIcon name="close" color="#94A3B8" size={16} />
+                        <AppIcon name="close" color={theme.textMuted} size={16} />
                       </Pressable>
                     ) : null}
                   </View>
@@ -432,19 +482,22 @@ export function MyProfileScreen() {
                       Hãy nhấn nút (+) ở góc trên để tạo playlist đầu tiên của bạn.
                     </Text>
                     <Pressable
-                      onPress={() => setCreateModalOpen(true)}
+                      onPress={openCreatePlaylist}
                       style={styles.emptyCreateBtn}
                     >
                       <Text style={styles.emptyCreateBtnText}>+ Tạo playlist mới</Text>
                     </Pressable>
                   </View>
                 )}
-              </View>
-            )}
+            </View>
 
             {/* TAB CONTENT: Playlist yêu thích */}
-            {activeTab === 'favorite_playlists' && (
-              <View style={styles.tabContentSection}>
+            <View
+              onLayout={(event) => {
+                profileSectionOffsets.current.favorite_playlists = event.nativeEvent.layout.y;
+              }}
+              style={styles.tabContentSection}
+            >
                 <View style={styles.sectionHeaderRow}>
                   <Text style={styles.sectionTitle}>
                     Playlist yêu thích ({data?.favorite_playlists.length ?? 0})
@@ -490,12 +543,15 @@ export function MyProfileScreen() {
                     </Text>
                   </View>
                 )}
-              </View>
-            )}
+            </View>
 
             {/* TAB CONTENT: Album yêu thích */}
-            {activeTab === 'favorite_albums' && (
-              <View style={styles.tabContentSection}>
+            <View
+              onLayout={(event) => {
+                profileSectionOffsets.current.favorite_albums = event.nativeEvent.layout.y;
+              }}
+              style={styles.tabContentSection}
+            >
                 <View style={styles.sectionHeaderRow}>
                   <Text style={styles.sectionTitle}>
                     Album yêu thích ({data?.favorite_albums.length ?? 0})
@@ -541,27 +597,127 @@ export function MyProfileScreen() {
                     </Text>
                   </View>
                 )}
-              </View>
-            )}
+            </View>
           </>
         ) : (
           /* GUEST (CHƯA ĐĂNG NHẬP) */
-          <View style={styles.guestContainer}>
-            <View style={styles.guestAvatarCircle}>
-              <AppIcon name="user" color="#00B5AD" size={42} />
+          <>
+            <View style={styles.guestProfileRow}>
+              <View style={styles.guestAvatarCircle}>
+                <AppIcon name="user" color={theme.textSecondary} size={38} />
+              </View>
+              <View style={styles.guestIdentity}>
+                <Text style={styles.guestTitle}>Bạn chưa đăng nhập</Text>
+                <Text style={styles.guestDesc}>Đăng nhập để đồng bộ thư viện của bạn</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push('/login' as never)}
+                style={styles.guestLoginPill}
+              >
+                <Text style={styles.guestLoginBtnText}>Đăng nhập</Text>
+              </Pressable>
             </View>
-            <Text style={styles.guestTitle}>Của Tui</Text>
-            <Text style={styles.guestDesc}>
-              Đăng nhập Melodify để đồng bộ danh sách bài hát yêu thích, quản lý
-              playlist cá nhân và gói VIP của bạn.
-            </Text>
-            <Pressable
-              onPress={() => router.push('/login' as never)}
-              style={styles.guestLoginBtn}
-            >
-              <Text style={styles.guestLoginBtnText}>Đăng nhập ngay</Text>
+
+            <View style={styles.actionCardsGrid}>
+              <Pressable onPress={() => router.push('/vip' as never)} style={[styles.actionCard, styles.vipCard]}>
+                <View style={styles.cardIconBox}><AppIcon name="crown" color="#D97706" size={24} /></View>
+                <View style={styles.cardTextBox}>
+                  <Text numberOfLines={1} style={styles.cardTitle}>Tài khoản VIP</Text>
+                  <Text numberOfLines={1} style={styles.cardSubtitle}>Gói miễn phí</Text>
+                </View>
+              </Pressable>
+              <Pressable onPress={() => Alert.alert('Trung tâm sự kiện', 'Hiện chưa có sự kiện nào.')} style={[styles.actionCard, styles.eventCard]}>
+                <View style={styles.cardIconBox}><AppIcon name="calendar" color="#E11D48" size={24} /></View>
+                <View style={styles.cardTextBox}>
+                  <Text numberOfLines={1} style={styles.cardTitle}>Trung tâm sự kiện</Text>
+                  <Text numberOfLines={1} style={styles.cardSubtitle}>Khám phá sự kiện</Text>
+                </View>
+              </Pressable>
+              <Pressable onPress={() => Alert.alert('Nhạc đã tải', 'Bạn chưa có track nào đã tải.')} style={[styles.actionCard, styles.grayCard]}>
+                <View style={styles.cardIconBox}><AppIcon name="download" color="#00A8B5" size={24} /></View>
+                <View style={styles.cardTextBox}>
+                  <Text numberOfLines={1} style={styles.cardTitle}>Nhạc Đã Tải</Text>
+                  <Text numberOfLines={1} style={styles.cardSubtitle}>0 track</Text>
+                </View>
+              </Pressable>
+              <Pressable onPress={() => router.push('/recent' as never)} style={[styles.actionCard, styles.grayCard]}>
+                <View style={styles.cardIconBox}><AppIcon name="history" color="#00B5AD" size={24} /></View>
+                <View style={styles.cardTextBox}>
+                  <Text numberOfLines={1} style={styles.cardTitle}>Gần đây</Text>
+                  <Text numberOfLines={1} style={styles.cardSubtitle}>{recentCount} bài hát</Text>
+                </View>
+              </Pressable>
+            </View>
+
+            <Pressable onPress={() => router.push('/favorite' as never)} style={styles.favoriteFullCard}>
+              <LinearGradient
+                colors={['#FF5E8E', '#FF3D81']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.favoriteHeartBox}
+              >
+                <AppIcon name="heart" color="#FFFFFF" size={26} />
+              </LinearGradient>
+              <View style={styles.favoriteCopy}>
+                <Text style={styles.favoriteTitle}>Yêu Thích</Text>
+                <Text style={styles.favoriteSubtitle}>Đăng nhập để xem bài hát đã lưu</Text>
+              </View>
+              <AppIcon name="chevron" color={theme.textMuted} size={16} />
             </Pressable>
-          </View>
+
+            <View style={styles.tabsContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
+                {([
+                  ['created', 'Playlist đã tạo'],
+                  ['favorite_playlists', 'Playlist yêu thích'],
+                  ['favorite_albums', 'Album yêu thích'],
+                ] as const).map(([tab, label]) => (
+                  <Pressable key={tab} onPress={() => scrollToProfileSection(tab)} style={styles.tabItem}>
+                    <Text style={[styles.tabItemText, activeTab === tab && styles.tabItemTextActive]}>{label}</Text>
+                    {activeTab === tab ? <View style={styles.tabIndicator} /> : null}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+
+            <View
+              onLayout={(event) => {
+                profileSectionOffsets.current.created = event.nativeEvent.layout.y;
+              }}
+              style={styles.tabContentSection}
+            >
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Playlist đã tạo (0)</Text>
+                <Pressable accessibilityLabel="Đăng nhập để tạo playlist" onPress={() => router.push('/login' as never)} style={styles.actionCircleBtn}>
+                  <AppIcon name="plus" color={theme.textSecondary} size={18} />
+                </Pressable>
+              </View>
+              <Pressable onPress={() => router.push('/login' as never)} style={styles.playlistCreateCard}>
+                <View style={styles.playlistCreateIcon}><AppIcon name="plus" color={theme.textSecondary} size={31} /></View>
+                <View style={styles.rowItemInfo}>
+                  <Text style={styles.rowItemTitle}>Tạo playlist</Text>
+                  <Text style={styles.rowItemSubtitle}>Tạo playlist của riêng bạn</Text>
+                </View>
+              </Pressable>
+            </View>
+            <GuestCollectionPanel
+              title="Playlist yêu thích"
+              description="Đăng nhập để tạo hoặc lưu lại playlist bạn thích."
+              onLogin={() => router.push('/login' as never)}
+              onLayout={(event) => {
+                profileSectionOffsets.current.favorite_playlists = event.nativeEvent.layout.y;
+              }}
+            />
+            <GuestCollectionPanel
+              title="Album yêu thích"
+              description="Đăng nhập để lưu lại album bạn thích."
+              onLogin={() => router.push('/login' as never)}
+              onLayout={(event) => {
+                profileSectionOffsets.current.favorite_albums = event.nativeEvent.layout.y;
+              }}
+            />
+          </>
         )}
       </ScrollView>
 
@@ -703,7 +859,35 @@ export function MyProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function GuestCollectionPanel({
+  title,
+  description,
+  onLogin,
+  onLayout,
+}: {
+  title: string;
+  description: string;
+  onLogin: () => void;
+  onLayout: (event: LayoutChangeEvent) => void;
+}) {
+  const styles = useAdaptiveStyles(baseStyles);
+  const theme = useTheme();
+  return (
+    <View onLayout={onLayout} style={styles.guestCollectionSection}>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>{title} (0)</Text>
+        <AppIcon name="sort" color={theme.textSecondary} size={21} />
+      </View>
+      <Pressable accessibilityRole="button" onPress={onLogin} style={styles.guestEmptyCard}>
+        <View style={styles.guestEmptyIcon}><AppIcon name="user" color={theme.textSecondary} size={27} /></View>
+        <Text style={styles.emptyTitle}>Chưa đăng nhập</Text>
+        <Text style={styles.emptyDesc}>{description}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const baseStyles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 8,
@@ -726,10 +910,19 @@ const styles = StyleSheet.create({
   topHeaderLeft: {
     flex: 1,
   },
+  topHeaderTitle: {
+    flex: 1,
+    color: '#0F172A',
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
   topHeaderRight: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    justifyContent: 'flex-end',
   },
   topHeaderBtn: {
     width: 36,
@@ -852,10 +1045,11 @@ const styles = StyleSheet.create({
   /* Real Action Cards */
   actionCardsGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
   actionCard: {
-    flex: 1,
+    width: '48%',
     minHeight: 64,
     borderRadius: 14,
     paddingHorizontal: 12,
@@ -868,6 +1062,10 @@ const styles = StyleSheet.create({
   vipCard: {
     backgroundColor: '#FFF7ED',
     borderColor: '#FDE68A',
+  },
+  eventCard: {
+    backgroundColor: '#FCE7EF',
+    borderColor: '#FBCFE8',
   },
   grayCard: {
     backgroundColor: '#F1F5F9',
@@ -1020,6 +1218,24 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 6,
   },
+  playlistCreateCard: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+  },
+  playlistCreateIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E2E8F0',
+  },
   playlistCoverBox: {
     width: 48,
     height: 48,
@@ -1090,25 +1306,34 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   guestAvatarCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#E6FAF7',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    overflow: 'hidden',
+  },
+  guestProfileRow: {
+    minHeight: 84,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 5,
+  },
+  guestIdentity: {
+    flex: 1,
+    gap: 4,
   },
   guestTitle: {
     color: '#0F172A',
-    fontSize: 22,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '800',
   },
   guestDesc: {
     color: '#64748B',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 20,
-    maxWidth: 320,
+    fontSize: 11,
+    lineHeight: 16,
   },
   guestLoginBtn: {
     marginTop: 12,
@@ -1124,8 +1349,48 @@ const styles = StyleSheet.create({
   },
   guestLoginBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
+  },
+  guestLoginPill: {
+    minHeight: 38,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00B5AD',
+  },
+  guestEmptyCard: {
+    minHeight: 210,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+  },
+  guestCollectionSection: {
+    gap: 8,
+    marginTop: 6,
+  },
+  guestEmptyIcon: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E2E8F0',
+    marginBottom: 3,
+  },
+  guestEmptyLogin: {
+    minHeight: 38,
+    paddingHorizontal: 22,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00B5AD',
+    marginTop: 4,
   },
 
   /* Modals */

@@ -3,13 +3,17 @@ import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } fr
 
 import { AppShell } from '@/components/layout';
 import { Artwork } from '@/components/music';
-import { ScrollPage, SectionHeading, StateMessage, surfaceStyles } from '@/components/shared';
+import { ScrollPage, SectionHeading, StateMessage, useSurfaceStyles } from '@/components/shared';
 import { useRemoteData } from '@/hooks/useRemoteData';
 import { getHomeBootstrap } from '@/lib/api';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { getAlbumRailCardWidth } from '@/lib/layout';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
+import { useTheme } from '@/hooks/use-theme';
 
 export function ExploreScreen() {
+  const styles = useAdaptiveStyles(baseStyles);
+  const theme = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const cardWidth = Math.min(184, Math.max(140, (width - 56) / 2.2));
@@ -23,7 +27,7 @@ export function ExploreScreen() {
           <Text style={styles.kicker}>KHÁM PHÁ</Text>
           <Text style={styles.title}>Tìm điều mới để nghe</Text>
           <Pressable onPress={() => router.push('/search' as never)} style={styles.searchLink}>
-            <AppIcon name="search" color="#00D3E5" size={19} /><Text style={styles.searchText}>Tìm bài hát, nghệ sĩ, album…</Text>
+            <AppIcon name="search" color={theme.primary} size={19} /><Text style={styles.searchText}>Tìm bài hát, nghệ sĩ, album…</Text>
           </Pressable>
         </View>
         {loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}
@@ -47,6 +51,7 @@ export function ExploreScreen() {
 }
 
 function CatalogSection({ title, items, cardWidth, onPress }: { title: string; items: { id: string; name: string; image: string | null; path: string }[]; cardWidth: number; onPress: (path: string) => void }) {
+  const styles = useAdaptiveStyles(baseStyles);
   if (!items.length) return null;
   return (
     <View style={styles.section}>
@@ -64,10 +69,13 @@ function CatalogSection({ title, items, cardWidth, onPress }: { title: string; i
 }
 
 function Shortcut({ title, detail, onPress }: { title: string; detail: string; onPress: () => void }) {
-  return <Pressable onPress={onPress} style={styles.shortcut}><View style={styles.shortcutCopy}><Text style={styles.shortcutTitle}>{title}</Text><Text style={styles.shortcutDetail}>{detail}</Text></View><AppIcon name="chevron" color="#00D3E5" size={19} /></Pressable>;
+  const styles = useAdaptiveStyles(baseStyles);
+  const surface = useSurfaceStyles();
+  const theme = useTheme();
+  return <Pressable onPress={onPress} style={[styles.shortcut, surface.card]}><View style={styles.shortcutCopy}><Text style={styles.shortcutTitle}>{title}</Text><Text style={styles.shortcutDetail}>{detail}</Text></View><AppIcon name="chevron" color={theme.primary} size={19} /></Pressable>;
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   heading: { gap: 8 },
   kicker: { color: '#00D3E5', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
   title: { color: '#F5F7F6', fontSize: 26, fontWeight: '900' },
@@ -78,7 +86,7 @@ const styles = StyleSheet.create({
   tile: { gap: 6 },
   tileTitle: { color: '#E7ECE9', fontSize: 11, lineHeight: 15, fontWeight: '700' },
   shortcuts: { gap: 8 },
-  shortcut: { ...surfaceStyles.card, flexDirection: 'row', alignItems: 'center', padding: 14 },
+  shortcut: { flexDirection: 'row', alignItems: 'center', padding: 14 },
   shortcutCopy: { flex: 1, gap: 4 },
   shortcutTitle: { color: '#F5F7F6', fontWeight: '800', fontSize: 14 },
   shortcutDetail: { color: '#9CA8A2', fontSize: 11 },

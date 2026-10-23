@@ -20,6 +20,8 @@ import { getVisitorId, toggleSongFavorite } from '@/lib/api';
 import { formatTime } from '@/lib/lyrics';
 import { QueueBottomSheet } from './QueueBottomSheet';
 import { SyncedLyricsView } from './SyncedLyricsView';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
+import { useTheme, useThemeMode } from '@/hooks/use-theme';
 
 type FullPlayerModalProps = {
   visible: boolean;
@@ -31,6 +33,9 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const ARTWORK_HEIGHT = Math.min(SCREEN_HEIGHT * 0.38, SCREEN_WIDTH - 56);
 
 export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
+  const styles = useAdaptiveStyles(baseStyles);
+  const theme = useTheme();
+  const mode = useThemeMode();
   const insets = useSafeAreaInsets();
   const {
     track,
@@ -113,8 +118,8 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
         onClose();
       }}
     >
-      <StatusBar style="light" />
-      <View style={styles.root}>
+      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+      <View style={[styles.root, { backgroundColor: theme.background }]}>
         {/* Blurred album artwork background with warm dark tint */}
         {track.cover_url ? (
           <ImageBackground
@@ -152,7 +157,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                     <Image source={{ uri: track.cover_url }} style={styles.topThumb} />
                   ) : (
                     <View style={[styles.topThumb, styles.topThumbFallback]}>
-                      <AppIcon name="music" color="#FFFFFF" size={18} />
+                      <AppIcon name="music" color={theme.text} size={18} />
                     </View>
                   )}
                   <View style={styles.topMeta}>
@@ -172,7 +177,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                     onPress={() => setQueueSheetOpen(true)}
                     style={styles.circleBtn}
                   >
-                    <AppIcon name="menu" color="#FFFFFF" size={19} />
+                    <AppIcon name="menu" color={theme.text} size={19} />
                   </Pressable>
 
                   <Pressable
@@ -183,7 +188,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                   >
                     <AppIcon
                       name="heart"
-                      color={favorite ? '#EF4444' : '#FFFFFF'}
+                      color={favorite ? '#EF4444' : theme.text}
                       size={18}
                     />
                   </Pressable>
@@ -194,7 +199,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                     onPress={() => setShowFullLyrics(false)}
                     style={styles.circleBtn}
                   >
-                    <AppIcon name="close" color="#FFFFFF" size={18} />
+                    <AppIcon name="close" color={theme.text} size={18} />
                   </Pressable>
                 </View>
               </View>
@@ -218,11 +223,11 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                   style={styles.playBtnLyrics}
                 >
                   {isBuffering ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <ActivityIndicator color={theme.primaryOn} size="small" />
                   ) : (
                     <AppIcon
                       name={isPlaying ? 'pause' : 'play'}
-                      color="#FFFFFF"
+                      color={theme.primaryOn}
                       size={26}
                     />
                   )}
@@ -236,13 +241,13 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                     <View
                       style={[
                         styles.progressBarFill,
-                        { width: `${progressPercent}%` },
+                        { width: `${progressPercent}%`, backgroundColor: theme.primary },
                       ]}
                     />
                     <View
                       style={[
                         styles.progressThumb,
-                        { left: `${Math.max(0, Math.min(97, progressPercent))}%` },
+                        { left: `${Math.max(0, Math.min(97, progressPercent))}%`, backgroundColor: theme.primary },
                       ]}
                     />
                   </View>
@@ -298,7 +303,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                     }}
                     style={styles.minimizeBtn}
                   >
-                    <AppIcon name="chevron-down" color="#FFFFFF" size={24} />
+                    <AppIcon name="chevron-down" color={theme.text} size={24} />
                   </Pressable>
                 </View>
               </View>
@@ -331,7 +336,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                   />
                 ) : (
                   <View style={styles.artworkFallback}>
-                    <AppIcon name="music" color="#00B5AD" size={64} />
+                    <AppIcon name="music" color={theme.primary} size={64} />
                   </View>
                 )}
               </Pressable>
@@ -393,7 +398,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                   >
                     <AppIcon
                       name="heart"
-                      color={favorite ? '#EF4444' : '#FFFFFF'}
+                      color={favorite ? '#EF4444' : theme.text}
                       size={24}
                     />
                     <Text style={styles.actionCount}>
@@ -405,7 +410,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
 
                   {/* Share / Facebook */}
                   <View style={styles.actionCol}>
-                    <AppIcon name="facebook" color="#FFFFFF" size={24} />
+                    <AppIcon name="facebook" color={theme.text} size={24} />
                     <Text style={styles.actionCount}>138</Text>
                   </View>
                 </View>
@@ -414,7 +419,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                 <View style={styles.actionGroupRight}>
                   {/* Download */}
                   <Pressable style={styles.actionIconBtn}>
-                    <AppIcon name="download" color="#FFFFFF" size={22} />
+                    <AppIcon name="download" color={theme.text} size={22} />
                   </Pressable>
 
                   {/* 3-Gạch Hamburger Menu Button (Mở Bottom Sheet Ảnh 3) */}
@@ -423,7 +428,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                     onPress={() => setQueueSheetOpen(true)}
                     style={styles.actionIconBtn}
                   >
-                    <AppIcon name="menu" color="#FFFFFF" size={22} />
+                    <AppIcon name="menu" color={theme.text} size={22} />
                   </Pressable>
                 </View>
               </View>
@@ -438,13 +443,13 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                     <View
                       style={[
                         styles.progressBarFill,
-                        { width: `${progressPercent}%` },
+                        { width: `${progressPercent}%`, backgroundColor: theme.primary },
                       ]}
                     />
                     <View
                       style={[
                         styles.progressThumb,
-                        { left: `${Math.max(0, Math.min(97, progressPercent))}%` },
+                        { left: `${Math.max(0, Math.min(97, progressPercent))}%`, backgroundColor: theme.primary },
                       ]}
                     />
                   </View>
@@ -464,11 +469,11 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                   style={styles.centerPlayCircle}
                 >
                   {isBuffering ? (
-                    <ActivityIndicator color="#0F172A" size="small" />
+                    <ActivityIndicator color={theme.primaryOn} size="small" />
                   ) : (
                     <AppIcon
                       name={isPlaying ? 'pause' : 'play'}
-                      color="#0F172A"
+                      color={theme.primaryOn}
                       size={26}
                     />
                   )}
@@ -479,16 +484,16 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
         </View>
 
         {/* Bottom Sheet 3-Gạch (Ảnh 3) */}
-        <QueueBottomSheet
+        {queueSheetOpen ? <QueueBottomSheet
           visible={queueSheetOpen}
           onClose={() => setQueueSheetOpen(false)}
-        />
+        /> : null}
       </View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#1E1210',

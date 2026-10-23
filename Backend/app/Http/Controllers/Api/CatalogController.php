@@ -453,6 +453,14 @@ class CatalogController extends Controller
         $limit = (int) ($filters['limit'] ?? ($type === 'all' ? 6 : 24));
         $page = (int) ($filters['page'] ?? 1);
         $includeTotals = ! ($filters['suggest'] ?? false);
+        $cacheKey = 'api:search:v1:'.$this->catalogContentRevision().':'.hash('sha256', serialize([$term, $type, $limit, $page, $includeTotals]));
+
+        return response()->json(Cache::store('file')->remember($cacheKey, now()->addSeconds(30),
+            fn (): array => $this->searchPayload($term, $type, $limit, $page, $includeTotals)));
+    }
+
+    private function searchPayload(string $term, string $type, int $limit, int $page, bool $includeTotals): array
+    {
         $literal = new Regex(preg_quote($term, '/'), 'i');
         $normalized = preg_replace('/[^a-z0-9]/', '', Str::slug($term));
         $slugPattern = new Regex($normalized !== '' ? implode('[^a-z0-9]*', str_split($normalized)) : '(?!)', 'i');
@@ -479,15 +487,46 @@ class CatalogController extends Controller
             $items = $query->orderBy($field)->skip(($page - 1) * $limit)->take($limit)->get();
             $results[$kind] = match ($kind) {
                 'song' => $this->localSongsData($items),
-                'playlist' => $items->map(fn (Playlist $item): array => $this->playlistData($item))->all(),
-                'album' => $items->map(fn (Album $item): array => $this->albumData($item))->all(),
-                'artist' => $items->map(fn (Artist $item): array => $this->artistData($item) + ['followers_count' => ArtistFollower::query()->where('artist_id', (string) $item->getKey())->count()])->all(),
+                'playlist', 'album', 'artist' => $this->searchCollectionData($kind, $items),
                 'video' => $items->map(fn (SongVideo $item): array => $this->videoData($item))->all(),
                 'user' => $items->map(fn (User $item): array => FollowController::userSummary($item))->all(),
             };
         }
 
-        return response()->json(['data' => $results, 'meta' => ['query' => $term, 'type' => $type, 'page' => $page, 'per_page' => $limit, 'totals' => $totals]]);
+        return ['data' => $results, 'meta' => ['query' => $term, 'type' => $type, 'page' => $page, 'per_page' => $limit, 'totals' => $totals]];
+    }
+
+    private function searchCollectionData(string $kind, Collection $items): array
+    {
+        if ($items->isEmpty()) {
+            return [];
+        }
+
+        $ids = $items->map(fn ($item): string => (string) $item->getKey())->all();
+        if ($kind === 'playlist') {
+            $artists = $this->playlistArtistsForCollection($items);
+            $counts = PlaylistSong::query()->whereIn('playlist_id', $ids)->get(['playlist_id'])
+                ->countBy(fn (PlaylistSong $link): string => (string) $link->playlist_id);
+
+            return $items->map(fn (Playlist $item): array => $this->playlistData($item, false,
+                $artists[(string) $item->getKey()] ?? [], $counts[(string) $item->getKey()] ?? 0))->all();
+        }
+
+        if ($kind === 'album') {
+            $artists = Artist::query()->whereIn((new Artist)->getKeyName(), $items->pluck('artist_id')->filter()->unique()->values()->all())
+                ->get()->keyBy(fn (Artist $artist): string => (string) $artist->getKey())->all();
+            $counts = Song::query()->whereIn('album_id', $ids)->get(['album_id'])
+                ->countBy(fn (Song $song): string => (string) $song->album_id)->all();
+
+            return $items->map(fn (Album $item): array => $this->albumData($item, false, $artists, $counts))->all();
+        }
+
+        $counts = ArtistFollower::query()->whereIn('artist_id', $ids)->get(['artist_id'])
+            ->countBy(fn (ArtistFollower $follower): string => (string) $follower->artist_id);
+
+        return $items->map(fn (Artist $item): array => $this->artistData($item) + [
+            'followers_count' => $counts[(string) $item->getKey()] ?? 0,
+        ])->all();
     }
 
     public function playlists(Request $request): JsonResponse
@@ -816,7 +855,7 @@ class CatalogController extends Controller
     {
         $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
         $revision = $this->catalogContentRevision();
-        $payload = Cache::store('file')->remember('api:home-bootstrap:v14:'.$dateKey.':'.$revision, now()->addMinute(), function () use ($dateKey): array {
+        $payload = Cache::store('file')->flexible('api:home-bootstrap:v14:'.$dateKey.':'.$revision, [60, 300], function () use ($dateKey): array {
             $banners = $this->responsePayload($this->banners(Request::create('/api/v1/banners', 'GET', [
                 'daily' => 1,
                 'limit' => 5,
@@ -835,6 +874,7 @@ class CatalogController extends Controller
                 'per_page' => 12,
             ])));
             $discovery = $this->responsePayload($this->homeDiscovery());
+            $trending = $this->responsePayload($this->trendingArtists());
 
             return [
                 'data' => [
@@ -848,7 +888,7 @@ class CatalogController extends Controller
                         'single_new_releases' => [],
                         'popular_songs' => [],
                     ]),
-                    'trending_artists' => $this->trendingArtistsForHome(),
+                    'trending_artists' => array_slice(data_get($trending, 'data', []), 0, 4),
                 ],
                 'meta' => [
                     'date' => $dateKey,
@@ -1254,12 +1294,8 @@ class CatalogController extends Controller
             'completed' => false,
         ]);
 
-        $viewDateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
-        $revision = $this->catalogContentRevision();
-        Cache::store('file')->forget('api:home-discovery:v2:'.$viewDateKey.':'.$revision);
-        Cache::store('file')->forget('api:home-bootstrap:v14:'.$viewDateKey.':'.$revision);
-        Cache::store('file')->forget('api:trending-artists:v8:'.$viewDateKey.':'.$revision);
-        Cache::store('file')->forget('api:charts:v2:full:'.$viewDateKey.':'.$revision);
+        // Rollups refresh after one minute. Invalidating on every play
+        // defeats caching for every visitor while music is being played.
 
         return response()->json([
             'recorded' => true,

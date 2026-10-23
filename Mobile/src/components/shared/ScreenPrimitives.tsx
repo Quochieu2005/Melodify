@@ -1,7 +1,9 @@
 import type { PropsWithChildren, ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
 
 export function ScrollPage({ children, padded = true }: PropsWithChildren<{ padded?: boolean }>) {
+  const styles = useAdaptiveStyles(baseStyles);
   return (
     <ScrollView
       contentContainerStyle={[styles.page, !padded && styles.noPadding]}
@@ -14,6 +16,7 @@ export function ScrollPage({ children, padded = true }: PropsWithChildren<{ padd
 }
 
 export function PageHeading({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
+  const styles = useAdaptiveStyles(baseStyles);
   return (
     <View style={styles.pageHeading}>
       <View style={styles.headingCopy}>
@@ -26,6 +29,7 @@ export function PageHeading({ title, subtitle, action }: { title: string; subtit
 }
 
 export function SectionHeading({ title, action }: { title: string; action?: ReactNode }) {
+  const styles = useAdaptiveStyles(baseStyles);
   return (
     <View style={styles.sectionHeading}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -35,10 +39,12 @@ export function SectionHeading({ title, action }: { title: string; action?: Reac
 }
 
 export function InlineAction({ label, onPress }: { label: string; onPress: () => void }) {
+  const styles = useAdaptiveStyles(baseStyles);
   return <Pressable onPress={onPress}><Text style={styles.action}>{label}</Text></Pressable>;
 }
 
 export function StateMessage({ loading, error, empty, onRetry }: { loading?: boolean; error?: string; empty?: string; onRetry?: () => void }) {
+  const styles = useAdaptiveStyles(baseStyles);
   if (loading) {
     return <View style={styles.state}><ActivityIndicator color="#00B5AD" /><Text style={styles.stateText}>Đang tải dữ liệu…</Text></View>;
   }
@@ -50,10 +56,11 @@ export function StateMessage({ loading, error, empty, onRetry }: { loading?: boo
 }
 
 export function PrimaryButton({ label, onPress, disabled = false }: { label: string; onPress: () => void; disabled?: boolean }) {
+  const styles = useAdaptiveStyles(baseStyles);
   return <Pressable disabled={disabled} onPress={onPress} style={[styles.primaryButton, disabled && styles.disabled]}><Text style={styles.primaryText}>{label}</Text></Pressable>;
 }
 
-export const surfaceStyles = StyleSheet.create({
+const baseSurfaceStyles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -71,7 +78,13 @@ export const surfaceStyles = StyleSheet.create({
   title: { color: '#0F172A', fontSize: 15, fontWeight: '800' },
 });
 
-const styles = StyleSheet.create({
+export const surfaceStyles = baseSurfaceStyles;
+
+export function useSurfaceStyles() {
+  return useAdaptiveStyles(baseSurfaceStyles);
+}
+
+const baseStyles = StyleSheet.create({
   page: { width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 22, gap: 20 },
   noPadding: { paddingHorizontal: 0 },
   pageHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },

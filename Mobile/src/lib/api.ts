@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 import { readAppValue, removeAppValue, writeAppValue } from './storage';
@@ -9,29 +10,29 @@ const isIpv4Address = (value: string | undefined): value is string => {
   return value.split('.').every((part) => Number(part) <= 255);
 };
 
-// On a physical device, localhost points to the phone. During Expo LAN
-// development, use the computer running Metro and the Laravel API (port 8000).
-const expoLanApiUrl = Platform.OS !== 'web' && isIpv4Address(expoDevHost)
-  && !expoDevHost.startsWith('127.')
-  ? `http://${expoDevHost}:8000/api`
-  : undefined;
+// Expo Go on the same LAN should reach the developer's API, not silently
+// switch to a remote production server. Explicit environment settings win.
+const expoLanApiUrl = typeof __DEV__ !== 'undefined' && __DEV__ && Platform.OS !== 'web'
+  && isIpv4Address(expoDevHost) && !expoDevHost.startsWith('127.')
+  ? `http://${expoDevHost}:8000/api` : undefined;
+const defaultApiUrl = expoLanApiUrl ?? (Platform.OS === 'web' || (typeof __DEV__ !== 'undefined' && __DEV__)
+    ? 'http://localhost:8000/api'
+    : 'https://melodify-6kc9.onrender.com/api');
 
-const defaultApiUrl = Platform.OS === 'android'
-  ? 'http://10.0.2.2:8000/api'
-  : 'http://192.168.1.211:8000/api';
-
-const envUrl = process.env.EXPO_PUBLIC_API_URL;
-const isLocalEnv = !envUrl || envUrl.includes('localhost') || envUrl.includes('127.0.0.1');
-
-const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL ?? Constants.expoConfig?.extra?.apiUrl;
-const deviceConfiguredApiUrl = Platform.OS !== 'web' && isIpv4Address(expoDevHost) && configuredApiUrl
-  ? configuredApiUrl.replace(/^(https?:\/\/)(localhost|127\.0\.0\.1)(?=[:/])/i, `$1${expoDevHost}`)
+const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim()
+  || (typeof Constants.expoConfig?.extra?.apiUrl === 'string'
+    ? Constants.expoConfig.extra.apiUrl.trim()
+    : undefined);
+const isLocalEnv = Boolean(configuredApiUrl && /localhost|127\.0\.0\.1/i.test(configuredApiUrl));
+const localApiHost = Platform.OS === 'web' && typeof window !== 'undefined'
+  ? window.location.hostname
+  : isIpv4Address(expoDevHost) ? expoDevHost : undefined;
+const deviceConfiguredApiUrl = isLocalEnv && localApiHost
+  ? configuredApiUrl?.replace(/^(https?:\/\/)(localhost|127\.0\.0\.1)(?=[:/])/i, `$1${localApiHost}`)
   : configuredApiUrl;
 
 export const API_URL = (
-  (Platform.OS !== 'web' && isLocalEnv && expoLanApiUrl ? expoLanApiUrl : envUrl) ??
-  expoLanApiUrl ??
-  (Platform.OS !== 'web' ? 'http://192.168.1.211:8000/api' : undefined) ??
+  deviceConfiguredApiUrl ??
   defaultApiUrl
 ).replace(/\/+$/, '');
 
@@ -39,6 +40,13 @@ const AUTH_TOKEN_STORAGE_KEY = 'melodify_access_token';
 const AUTH_USER_STORAGE_KEY = 'melodify_auth_user';
 const VISITOR_ID_STORAGE_KEY = 'melodify_visitor_id';
 const pendingGets = new Map<string, Promise<unknown>>();
+type CachedApiResponse = { apiUrl: string; path: string; savedAt: number; value: unknown };
+const apiResponseCache = new Map<string, CachedApiResponse>();
+const API_RESPONSE_CACHE_PREFIX = 'melodify_api_response_v1:';
+const API_RESPONSE_FRESH_MS = 45_000;
+const API_RESPONSE_CACHE_MAX_ENTRIES = 80;
+let apiResponseCacheGeneration = 0;
+let apiCacheStorageTask: Promise<unknown> = Promise.resolve();
 
 let tokenValue: string | null | undefined;
 let visitorIdValue: string | null = null;
@@ -206,6 +214,36 @@ export type HomeBootstrap = {
   trending_artists: TrendingArtist[];
 };
 
+type HomeBootstrapResponse = {
+  data: HomeBootstrap;
+  meta: { date: string; refresh_minutes: number };
+};
+
+type CachedHomeBootstrap = {
+  apiUrl: string;
+  savedAt: number;
+  value: HomeBootstrapResponse;
+};
+
+const HOME_BOOTSTRAP_CACHE_KEY = 'melodify_home_bootstrap_cache_v1';
+const HOME_BOOTSTRAP_FRESH_MS = 60_000;
+let homeBootstrapCache: CachedHomeBootstrap | null | undefined;
+let homeBootstrapCacheRead: Promise<CachedHomeBootstrap | null> | null = null;
+let homeBootstrapRequest: Promise<HomeBootstrapResponse> | null = null;
+
+function isCachedHomeBootstrap(value: unknown): value is CachedHomeBootstrap {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<CachedHomeBootstrap>;
+  const data = candidate.value?.data;
+  return candidate.apiUrl === API_URL
+    && typeof candidate.savedAt === 'number'
+    && !!data
+    && Array.isArray(data.topics)
+    && Array.isArray(data.genres)
+    && Array.isArray(data.albums)
+    && Array.isArray(data.playlists);
+}
+
 export type LibraryData = {
   favorite_song_count: number;
   created_playlists: { id: string; name: string; slug: string; cover_url: string | null; song_count: number }[];
@@ -340,12 +378,18 @@ export async function getVisitorId(): Promise<string> {
 }
 
 export async function saveAuthSession(auth: AuthResponse): Promise<void> {
+  apiResponseCacheGeneration += 1;
+  pendingGets.clear();
+  apiResponseCache.clear();
   tokenValue = auth.token;
   await writeAppValue(AUTH_TOKEN_STORAGE_KEY, auth.token);
   await writeAppValue(AUTH_USER_STORAGE_KEY, JSON.stringify(auth.user));
 }
 
 export async function clearAuthSession(): Promise<void> {
+  apiResponseCacheGeneration += 1;
+  pendingGets.clear();
+  apiResponseCache.clear();
   tokenValue = null;
   await Promise.all([
     removeAppValue(AUTH_TOKEN_STORAGE_KEY),
@@ -368,25 +412,64 @@ export async function getSavedAuthUser(): Promise<AuthUser | null> {
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const method = (init.method ?? 'GET').toUpperCase();
   const token = await getAuthToken();
-  const requestKey = (token ?? '') + ':' + path;
-  if (method === 'GET') {
-    const pending = pendingGets.get(requestKey);
-    if (pending) {
-      return pending as Promise<T>;
+  if (method !== 'GET') {
+    const value = await fetchApiResponse<T>(path, init, method, token);
+    if (!path.endsWith('/view')) {
+      clearApiResponseCache();
+    }
+    return value;
+  }
+
+  if (Object.keys(init).some((key) => key !== 'method')) {
+    return fetchApiResponse<T>(path, init, method, token);
+  }
+
+  const requestKey = API_URL + ':' + (token ?? '') + ':' + path;
+  const memoryTtl = getApiResponseMemoryTtl(path);
+  const now = Date.now();
+  const memoryCached = memoryTtl > 0 ? apiResponseCache.get(requestKey) : undefined;
+  if (memoryCached) {
+    const age = now - memoryCached.savedAt;
+    if (age < memoryTtl) return memoryCached.value as T;
+    apiResponseCache.delete(requestKey);
+  }
+
+  if (canPersistApiResponse(path)) {
+    const generation = apiResponseCacheGeneration;
+    const diskCached = await readApiResponseCache(path);
+    if (diskCached && generation === apiResponseCacheGeneration) {
+      const age = Date.now() - diskCached.savedAt;
+      apiResponseCache.set(requestKey, diskCached);
+      if (apiResponseCache.size > API_RESPONSE_CACHE_MAX_ENTRIES) {
+        const oldestKey = apiResponseCache.keys().next().value;
+        if (oldestKey) apiResponseCache.delete(oldestKey);
+      }
+      if (age < API_RESPONSE_FRESH_MS) return diskCached.value as T;
     }
   }
 
-  const request = (async () => {
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      ...(token ? { Authorization: 'Bearer ' + token } : {}),
-      ...(init.headers as Record<string, string> | undefined),
-    };
-    if (typeof init.body === 'string' && !headers['Content-Type']) {
-      headers['Content-Type'] = 'application/json';
-    }
+  return loadApiGet<T>(path, token, requestKey, memoryTtl);
+}
 
-    const response = await fetch(API_URL + path, { ...init, headers });
+async function fetchApiResponse<T>(path: string, init: RequestInit, method: string, token: string | null, baseUrl = API_URL): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json');
+  if (token && !headers.has('Authorization')) headers.set('Authorization', 'Bearer ' + token);
+  if (typeof init.body === 'string' && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const controller = new AbortController();
+  const abortFromCaller = () => controller?.abort();
+  if (init.signal?.aborted) abortFromCaller();
+  else init.signal?.addEventListener('abort', abortFromCaller, { once: true });
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 15_000) : null;
+  try {
+    const response = await fetch(baseUrl.replace(/\/+$/, '') + path, {
+      ...init,
+      headers,
+      ...(controller ? { signal: controller.signal } : {}),
+    });
     if (!response.ok) {
       let message = 'Không thể kết nối máy chủ. Vui lòng thử lại.';
       try {
@@ -397,23 +480,110 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       }
       throw new ApiError(response.status, message);
     }
-    if (response.status === 204) {
-      return undefined as T;
+    if (response.status === 204) return undefined as T;
+    return await response.json() as T;
+  } catch (reason) {
+    if (controller?.signal.aborted && !init.signal?.aborted) {
+      throw new Error('Máy chủ phản hồi quá lâu (15 giây). Vui lòng kiểm tra kết nối và thử lại.');
     }
-    return response.json() as Promise<T>;
-  })();
-
-  if (method !== 'GET') {
-    return request;
-  }
-  pendingGets.set(requestKey, request);
-  try {
-    return await request;
+    throw reason;
   } finally {
-    if (pendingGets.get(requestKey) === request) {
-      pendingGets.delete(requestKey);
-    }
+    if (timeoutId) clearTimeout(timeoutId);
+    init.signal?.removeEventListener('abort', abortFromCaller);
   }
+}
+
+function getApiResponseMemoryTtl(path: string): number {
+  const pathname = path.split('?')[0];
+  if (pathname === '/v1/search') return 8_000;
+  return /^\/v1\/(topics|genres|albums|playlists|artists|artists\/trending|charts(?:\/[^/]+)?|subscription-plans)$/.test(pathname)
+    ? API_RESPONSE_FRESH_MS : 0;
+}
+
+function canPersistApiResponse(path: string): boolean {
+  const [pathname, query = ''] = path.split('?');
+  if (!/^\/v1\/(topics|genres|albums|playlists|artists)$/.test(pathname)
+    && pathname !== '/v1/subscription-plans') {
+    return false;
+  }
+
+  if (!query) return true;
+  const params = new URLSearchParams(query);
+  for (const [key, value] of params.entries()) {
+    if (key !== 'page' && key !== 'per_page') return false;
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < 1) return false;
+    if (key === 'page' && number > 3) return false;
+    if (key === 'per_page' && number > 100) return false;
+  }
+  return true;
+}
+
+function isCachedApiResponse(value: unknown, path: string): value is CachedApiResponse {
+  if (!value || typeof value !== 'object') return false;
+  const cached = value as Partial<CachedApiResponse>;
+  return cached.apiUrl === API_URL
+    && cached.path === path
+    && typeof cached.savedAt === 'number'
+    && 'value' in cached;
+}
+
+async function readApiResponseCache(path: string): Promise<CachedApiResponse | null> {
+  try {
+    const raw = await queueApiCacheStorage(() => AsyncStorage.getItem(API_RESPONSE_CACHE_PREFIX + encodeURIComponent(API_URL + path)));
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return isCachedApiResponse(parsed, path) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// Keep reads, writes and invalidation ordered so a delayed storage operation
+// cannot restore an old snapshot after a successful mutation.
+function queueApiCacheStorage<T>(operation: () => Promise<T>): Promise<T> {
+  const task = apiCacheStorageTask.then(operation);
+  apiCacheStorageTask = task.catch(() => undefined);
+  return task;
+}
+
+function loadApiGet<T>(path: string, token: string | null, requestKey: string, memoryTtl: number): Promise<T> {
+  const pending = pendingGets.get(requestKey);
+  if (pending) return pending as Promise<T>;
+
+  const generation = apiResponseCacheGeneration;
+  const request = fetchApiResponse<T>(path, {}, 'GET', token).then((value) => {
+    if (memoryTtl > 0 && generation === apiResponseCacheGeneration) {
+      const cached: CachedApiResponse = { apiUrl: API_URL, path, savedAt: Date.now(), value };
+      apiResponseCache.set(requestKey, cached);
+      if (apiResponseCache.size > API_RESPONSE_CACHE_MAX_ENTRIES) {
+        const oldestKey = apiResponseCache.keys().next().value;
+        if (oldestKey) apiResponseCache.delete(oldestKey);
+      }
+      if (canPersistApiResponse(path)) {
+        void queueApiCacheStorage(() => AsyncStorage.setItem(
+          API_RESPONSE_CACHE_PREFIX + encodeURIComponent(API_URL + path),
+          JSON.stringify(cached),
+        )).catch(() => undefined);
+      }
+    }
+    return value;
+  });
+  const tracked = request.finally(() => {
+    if (pendingGets.get(requestKey) === tracked) pendingGets.delete(requestKey);
+  });
+  pendingGets.set(requestKey, tracked);
+  return tracked;
+}
+
+function clearApiResponseCache(): void {
+  apiResponseCacheGeneration += 1;
+  apiResponseCache.clear();
+  pendingGets.clear();
+  void queueApiCacheStorage(() => AsyncStorage.getAllKeys()
+    .then((keys) => keys.filter((key) => key.startsWith(API_RESPONSE_CACHE_PREFIX)))
+    .then((keys) => keys.length > 0 ? AsyncStorage.multiRemove(keys) : undefined))
+    .catch(() => undefined);
 }
 
 function jsonRequest(body: unknown): RequestInit {
@@ -421,7 +591,52 @@ function jsonRequest(body: unknown): RequestInit {
 }
 
 export function getHomeBootstrap() {
-  return apiFetch<{ data: HomeBootstrap; meta: { date: string; refresh_minutes: number } }>('/v1/home/bootstrap');
+  return (async (): Promise<HomeBootstrapResponse> => {
+    if (homeBootstrapCache === undefined && !homeBootstrapCacheRead) {
+      homeBootstrapCacheRead = (async () => {
+        try {
+          const raw = await AsyncStorage.getItem(HOME_BOOTSTRAP_CACHE_KEY);
+          if (raw) {
+            const parsed: unknown = JSON.parse(raw);
+            homeBootstrapCache = isCachedHomeBootstrap(parsed) ? parsed : null;
+          } else {
+            homeBootstrapCache = null;
+          }
+        } catch {
+          homeBootstrapCache = null;
+        }
+        return homeBootstrapCache ?? null;
+      })().finally(() => {
+        homeBootstrapCacheRead = null;
+      });
+    }
+
+    const cached = homeBootstrapCache !== undefined
+      ? homeBootstrapCache
+      : await homeBootstrapCacheRead;
+
+    const refresh = () => {
+      if (!homeBootstrapRequest) {
+        homeBootstrapRequest = apiFetch<HomeBootstrapResponse>('/v1/home/bootstrap')
+          .then((value) => {
+            const next: CachedHomeBootstrap = { apiUrl: API_URL, savedAt: Date.now(), value };
+            homeBootstrapCache = next;
+            void AsyncStorage.setItem(HOME_BOOTSTRAP_CACHE_KEY, JSON.stringify(next)).catch(() => undefined);
+            return value;
+          })
+          .finally(() => {
+            homeBootstrapRequest = null;
+          });
+      }
+      return homeBootstrapRequest;
+    };
+
+    if (cached && Date.now() - cached.savedAt < HOME_BOOTSTRAP_FRESH_MS) {
+      return cached.value;
+    }
+
+    return refresh();
+  })();
 }
 
 export function listSongs(options: { query?: string; perPage?: number } = {}) {
@@ -558,8 +773,9 @@ export function getForYouSong(genreIds: string[], artistIds: string[], excludedI
   return apiFetch<{ data: Song | null }>('/v1/for-you/song?' + params.toString());
 }
 
-export function searchCatalog(query: string, type: SearchKind = 'all', page = 1) {
+export function searchCatalog(query: string, type: SearchKind = 'all', page = 1, includeTotals = false) {
   const params = new URLSearchParams({ q: query.trim(), type, page: String(page) });
+  if (!includeTotals) params.set('suggest', '1');
   return apiFetch<SearchResults>('/v1/search?' + params);
 }
 
@@ -600,6 +816,62 @@ export function addSongsToPlaylist(playlistId: string, songIds: string[]) {
 
 export function loginWithPassword(identifier: string, password: string) {
   return apiFetch<AuthResponse>('/v1/auth/login', jsonRequest({ identifier, password, remember: true, device_name: 'melodify-mobile' }));
+}
+
+export function registerWithPassword(name: string, email: string, password: string, confirmation: string) {
+  return fetchApiResponse<AuthResponse>('/v1/auth/register', jsonRequest({
+    name: name.trim(), email: email.trim().toLowerCase(), password,
+    password_confirmation: confirmation, device_name: `melodify-${Platform.OS}`,
+  }), 'POST', null);
+}
+
+export function loginWithSocialAccessToken(provider: 'google' | 'facebook', accessToken: string) {
+  return fetchApiResponse<AuthResponse>('/v1/auth/social', jsonRequest({
+    provider,
+    access_token: accessToken,
+    remember: true,
+    device_name: `melodify-${Platform.OS}`,
+  }), 'POST', null);
+}
+
+export function exchangeSocialLoginTicket(ticket: string, apiBaseUrl = API_URL) {
+  return fetchApiResponse<AuthResponse>('/v1/auth/social/exchange-ticket', jsonRequest({
+    ticket,
+    remember: true,
+    device_name: 'melodify-mobile',
+  }), 'POST', null, apiBaseUrl);
+}
+
+export function exchangeSocialLoginCode(
+  provider: 'google' | 'facebook',
+  code: string,
+  clientId: string,
+  redirectUri: string,
+  codeVerifier?: string,
+) {
+  return apiFetch<AuthResponse>('/v1/auth/social/exchange', jsonRequest({
+    provider,
+    code,
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
+    remember: true,
+    device_name: 'melodify-mobile',
+  }));
+}
+
+export function requestPhoneLoginOtp(phone: string) {
+  return apiFetch<{
+    message: string;
+    data: { phone: string; expires_at: string; resend_after_seconds: number };
+  }>('/v1/auth/phone/request-otp', jsonRequest({ phone }));
+}
+
+export function verifyPhoneLoginOtp(phone: string, code: string) {
+  return apiFetch<AuthResponse>(
+    '/v1/auth/phone/verify',
+    jsonRequest({ phone, code, remember: true, device_name: 'melodify-mobile' }),
+  );
 }
 
 export async function getAudioSource(song: Song, qualityId?: string | null) {

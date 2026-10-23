@@ -53,6 +53,19 @@ class ApiTokenService
         return $username;
     }
 
+    public function uniqueSlug(string $seed): string
+    {
+        $base = Str::slug($seed) ?: 'user';
+        $slug = $base;
+        $suffix = 2;
+
+        while (User::where('slug', $slug)->exists()) {
+            $slug = $base.'-'.$suffix++;
+        }
+
+        return $slug;
+    }
+
     public function userPayload(User $user): array
     {
         return [

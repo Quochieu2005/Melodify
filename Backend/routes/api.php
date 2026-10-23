@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\Api\BrowserSocialAuthController;
 use App\Http\Controllers\Api\CatalogController;
 use App\Http\Controllers\Api\FollowController;
+use App\Http\Controllers\Api\MobileSocialAuthController;
 use App\Http\Controllers\Api\PasswordAuthController;
 use App\Http\Controllers\Api\PhoneAuthController;
 use App\Http\Controllers\Api\QrAuthController;
@@ -59,12 +61,24 @@ Route::get('/health', function () {
 })->middleware('admin.timing');
 
 Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.optional'])->group(function () {
+    Route::post('/auth/social/browser/start', [BrowserSocialAuthController::class, 'start'])
+        ->middleware('throttle:10,1');
+    Route::post('/auth/social/browser/poll', [BrowserSocialAuthController::class, 'poll'])
+        ->middleware('throttle:60,1');
     Route::post('/auth/social', [SocialAuthController::class, 'login'])
         ->middleware('throttle:20,1')
         ->name('auth.social');
+    Route::post('/auth/social/exchange', [SocialAuthController::class, 'exchange'])
+        ->middleware('throttle:10,1')
+        ->name('auth.social.exchange');
+    Route::post('/auth/social/exchange-ticket', [MobileSocialAuthController::class, 'exchangeTicket'])
+        ->middleware('throttle:10,1')
+        ->name('auth.social.exchange-ticket');
     Route::post('/auth/login', [PasswordAuthController::class, 'login'])
         ->middleware('throttle:10,1')
         ->name('auth.login');
+    Route::post('/auth/register', [PasswordAuthController::class, 'register'])
+        ->middleware('throttle:5,1,password-register:')->name('auth.register');
     Route::post('/auth/password/forgot', [PasswordAuthController::class, 'requestPasswordReset'])
         ->middleware('throttle:5,1,password-forgot:')
         ->name('auth.password.forgot');

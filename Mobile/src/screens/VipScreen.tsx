@@ -15,10 +15,11 @@ import {
   ScrollPage,
   SectionHeading,
   StateMessage,
-  surfaceStyles,
+  useSurfaceStyles,
 } from '@/components/shared';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { useRemoteData } from '@/hooks/useRemoteData';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
 import {
   createVipCheckout,
   getSavedAuthUser,
@@ -64,6 +65,8 @@ function formatPrice(amount: number) {
 }
 
 export function VipScreen() {
+  const styles = useAdaptiveStyles(baseStyles);
+  const surface = useSurfaceStyles();
   const router = useRouter();
   const [tab, setTab] = useState<'plans' | 'history'>('plans');
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -146,7 +149,7 @@ export function VipScreen() {
     <AppShell>
       <ScrollPage>
         {/* Banner Header */}
-        <View style={[styles.heroCard, surfaceStyles.card]}>
+        <View style={[styles.heroCard, surface.card]}>
           <View style={styles.crownCircle}>
             <AppIcon name="crown" color="#FFC40E" size={28} />
           </View>
@@ -197,7 +200,7 @@ export function VipScreen() {
               <SectionHeading title="Đặc quyền thành viên VIP" />
               <View style={styles.benefitsGrid}>
                 {VIP_BENEFITS.map((item) => (
-                  <View key={item.title} style={[styles.benefitCard, surfaceStyles.card]}>
+                  <View key={item.title} style={[styles.benefitCard, surface.card]}>
                     <Text style={styles.benefitIcon}>✦</Text>
                     <View style={styles.benefitCopy}>
                       <Text style={styles.benefitTitle}>{item.title}</Text>
@@ -228,7 +231,7 @@ export function VipScreen() {
                     style={[
                       styles.planCard,
                       isSelected && styles.planCardActive,
-                      surfaceStyles.card,
+                      surface.card,
                     ]}
                   >
                     <View style={styles.planHeader}>
@@ -275,7 +278,7 @@ export function VipScreen() {
                       style={[
                         styles.methodCard,
                         isSelected && styles.methodCardActive,
-                        surfaceStyles.card,
+                        surface.card,
                       ]}
                     >
                       <View
@@ -338,7 +341,7 @@ export function VipScreen() {
             ) : (
               <View style={styles.transactionsList}>
                 {transactions.map((tx) => (
-                  <View key={tx.id} style={[styles.txCard, surfaceStyles.card]}>
+                  <View key={tx.id} style={[styles.txCard, surface.card]}>
                     <View style={styles.txHeader}>
                       <Text style={styles.txCode}>{tx.payment_code}</Text>
                       <View
@@ -432,7 +435,7 @@ export function VipScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   heroCard: {
     alignItems: 'center',
     padding: 22,

@@ -2,9 +2,10 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 
 import { apiFetch, clearAuthSession, type AuthResponse, type AuthUser } from '@/lib/api';
-import LoginModal from './LoginModal';
+const LoginModal = dynamic(() => import('./LoginModal'));
 
 type LoginModalContextValue = {
   openLogin: (returnTo?: string) => void;
