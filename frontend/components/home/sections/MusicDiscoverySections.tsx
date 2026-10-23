@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 
-import { usePlayer } from '@/components/player';
+import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { artistPath, type ArtistReference } from '@/components/artists/ArtistLink';
 import { getHomeBootstrap, type HomeDiscovery, type HomeTrendingArtist, type Playlist, type Song } from '@/lib/api';
@@ -107,7 +107,7 @@ function SongCard({ song, onPlay, isActive, isPlaying }: { song: Song; onPlay: (
 }
 
 function SongSection({ id, title, songs }: SongSectionProps) {
-  const { playSong, track, isPlaying } = usePlayer();
+  const { playSong, track, isPlaying } = usePlayerControls();
 
   if (songs.length === 0) return null;
 

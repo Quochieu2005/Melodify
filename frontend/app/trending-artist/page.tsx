@@ -7,7 +7,7 @@ import styles from './trending-artist.module.css';
 import rowStyles from '@/components/albums/AlbumDetailPage.module.css';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import FollowButton from '@/components/follow/FollowButton';
-import { usePlayer } from '@/components/player';
+import { usePlayerControls } from '@/components/player';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import type { HomeTrendingArtist, Song } from '@/lib/api';
 import { getSong, getTrendingArtists } from '@/lib/api';
@@ -24,7 +24,7 @@ function imageStyle(image: string | null | undefined) {
 }
 
 function TrendingSong({ artist }: { artist: HomeTrendingArtist }) {
-  const { track, isPlaying, playSong, togglePlay } = usePlayer();
+  const { track, isPlaying, playSong, togglePlay } = usePlayerControls();
   const [isLoadingSong, setIsLoadingSong] = useState(false);
   const [playError, setPlayError] = useState('');
   const song = artist.featured_song;

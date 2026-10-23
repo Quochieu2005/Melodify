@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 
-import { usePlayer } from '@/components/player';
+import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { type ChartRecord, type ChartSong } from '@/lib/api';
@@ -33,7 +33,7 @@ function toneClass(tone: ChartRecord['tone']) {
 }
 
 export default function ChartCard({ chart, className = '' }: { chart: ChartRecord; className?: string }) {
-  const { track, isPlaying, playSong, togglePlay } = usePlayer();
+  const { track, isPlaying, playSong, togglePlay } = usePlayerControls();
   const songs = chart.songs ?? [];
   const visibleSongs = songs.slice(0, 5);
   const chartHasCurrentTrack = Boolean(track && songs.some((song) => song.id === track.id));

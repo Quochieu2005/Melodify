@@ -69,6 +69,7 @@ type PlayerSyncMessage =
   | { type: 'state'; source: string; state: PersistedPlayerState; playbackIntent?: 'play' | 'pause' };
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
+const PlayerControlsContext = createContext<Omit<PlayerContextValue, 'elapsed'> | null>(null);
 
 function persistPlayerState(track: PlayerTrack, queue: PlayerTrack[], currentIndex: number, elapsed: number, isPlaying: boolean): PersistedPlayerState | null {
   if (typeof window === 'undefined') return null;
@@ -338,10 +339,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const persistCurrentPosition = () => {
       const currentTrack = trackRef.current;
       if (currentTrack) {
-        const state = persistPlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime, !audio.paused);
         const now = Date.now();
         if (now - lastBroadcastAt >= 1000) {
           lastBroadcastAt = now;
+          const state = persistPlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime, !audio.paused);
           broadcastState(state);
         }
       }
@@ -715,8 +716,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    broadcastState(persistPlayerState(nextTrack, queueRef.current, currentIndexRef.current, audio?.currentTime ?? elapsed, Boolean(audio && !audio.paused)));
-  }, [broadcastState, elapsed, showNotice]);
+    broadcastState(persistPlayerState(nextTrack, queueRef.current, currentIndexRef.current, audio?.currentTime ?? 0, Boolean(audio && !audio.paused)));
+  }, [broadcastState, showNotice]);
 
   const refreshTrackMetadata = useCallback(async (song?: Song) => {
     const currentTrack = trackRef.current;
@@ -793,7 +794,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [broadcastState, showNotice]);
 
-  const value = useMemo(() => ({
+  const controls = useMemo(() => ({
     track,
     isPremium,
     isPlaying,
@@ -803,7 +804,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     shuffle,
     repeatMode,
     volume,
-    elapsed,
     duration,
     notice,
     playSong,
@@ -817,9 +817,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     cycleRepeat,
     setVolume,
     setQuality,
-  }), [currentIndex, duration, elapsed, isPlaying, isLoading, queue, shuffle, repeatMode, volume, notice, isPremium, playNext, playPrevious, playSong, refreshTrackMetadata, seek, togglePlay, track, playAt, toggleShuffle, cycleRepeat, setVolume, setQuality]);
+  }), [currentIndex, duration, isPlaying, isLoading, queue, shuffle, repeatMode, volume, notice, isPremium, playNext, playPrevious, playSong, refreshTrackMetadata, seek, togglePlay, track, playAt, toggleShuffle, cycleRepeat, setVolume, setQuality]);
+  const value = useMemo(() => ({ ...controls, elapsed }), [controls, elapsed]);
 
-  return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
+  return <PlayerControlsContext.Provider value={controls}><PlayerContext.Provider value={value}>{children}</PlayerContext.Provider></PlayerControlsContext.Provider>;
+}
+
+export function usePlayerControls() {
+  const context = useContext(PlayerControlsContext);
+  if (!context) throw new Error('usePlayerControls phải được dùng bên trong PlayerProvider.');
+  return context;
 }
 
 export function usePlayer() {

@@ -1,15 +1,19 @@
 import { useRouter } from 'expo-router';
-import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image } from 'expo-image';
 
 import { AppShell } from '@/components/layout';
 import { Artwork, SongRow } from '@/components/music';
-import { ScrollPage, SectionHeading, StateMessage, surfaceStyles } from '@/components/shared';
+import { ScrollPage, SectionHeading, StateMessage, useSurfaceStyles } from '@/components/shared';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { useRemoteData } from '@/hooks/useRemoteData';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
+import { useTheme } from '@/hooks/use-theme';
 import { getHomeBootstrap, type Song } from '@/lib/api';
 import { getAlbumRailCardWidth } from '@/lib/layout';
 
 function SongSection({ title, songs }: { title: string; songs: Song[] }) {
+  const styles = useAdaptiveStyles(baseStyles);
   if (!songs.length) return null;
   return (
     <View style={styles.section}>
@@ -24,12 +28,16 @@ function SongSection({ title, songs }: { title: string; songs: Song[] }) {
 }
 
 export default function HomeScreen() {
+  const styles = useAdaptiveStyles(baseStyles);
+  const surface = useSurfaceStyles();
+  const theme = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const bannerWidth = Math.min(460, Math.max(280, width - 32));
   const artistCardWidth = Math.min(340, Math.max(240, width * 0.75));
   const catalogCardWidth = Math.min(184, Math.max(140, (width - 48) / 2.2));
   const albumCardWidth = getAlbumRailCardWidth(width);
+  const chartWidth = Math.max(280, width - 32);
   const { data, loading, error, reload } = useRemoteData(async () => (await getHomeBootstrap()).data);
 
   const openBanner = (target: string | null) => {
@@ -53,7 +61,7 @@ export default function HomeScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
                 {data.banners.slice(0, 4).map((banner) => (
                   <Pressable key={banner.id} onPress={() => openBanner(banner.link_url)} style={[styles.banner, { width: bannerWidth }]}>
-                    {banner.image_url ? <Image source={{ uri: banner.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+                    {banner.image_url ? <Image source={{ uri: banner.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null}
                     <View style={styles.bannerShade} />
                     <Text numberOfLines={2} style={styles.bannerTitle}>{banner.title}</Text>
                   </Pressable>
@@ -87,12 +95,19 @@ export default function HomeScreen() {
                     </Text>
                   }
                 />
-                <View style={styles.chartList}>
-                  {data.charts.slice(0, 4).map((chart) => (
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  snapToInterval={chartWidth}
+                  decelerationRate="fast"
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.chartCarousel}
+                >
+                  {data.charts.map((chart) => (
                     <Pressable
                       key={chart.id}
                       onPress={() => router.push(('/charts/' + chart.slug) as never)}
-                      style={styles.chartCard}
+                      style={[styles.chartCard, surface.card, { width: chartWidth }]}
                     >
                       <View style={styles.chartHeader}>
                         <View style={styles.chartTitleRow}>
@@ -102,10 +117,10 @@ export default function HomeScreen() {
                           <Text style={styles.chartMeta}>{chart.song_count} bài hát</Text>
                         </View>
                         <View style={styles.chartPlayCircle}>
-                          <AppIcon name="play" color="#00B5AD" size={14} />
+                          <AppIcon name="play" color={theme.primary} size={14} />
                         </View>
                       </View>
-                      {chart.songs?.slice(0, 3).map((song, sIdx) => (
+                      {chart.songs?.slice(0, 5).map((song, sIdx) => (
                         <View key={song.id} style={styles.miniSong}>
                           <Text style={[styles.rank, sIdx === 0 && styles.rankTop]}>
                             {song.rank || sIdx + 1}
@@ -128,7 +143,7 @@ export default function HomeScreen() {
                       ))}
                     </Pressable>
                   ))}
-                </View>
+                </ScrollView>
               </View>
             ) : null}
 
@@ -155,11 +170,11 @@ export default function HomeScreen() {
                       <Pressable
                         key={artist.id}
                         onPress={() => router.push(('/artist/' + (artist.slug || artist.id)) as never)}
-                        style={[styles.artistCard, { width: artistCardWidth }]}
+                        style={[styles.artistCard, surface.card, { width: artistCardWidth }]}
                       >
                         <View style={[styles.artistHero, { height: artistCardWidth * 0.65 }]}>
                           {artist.avatar_url ? (
-                            <Image source={{ uri: artist.avatar_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                            <Image source={{ uri: artist.avatar_url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
                           ) : null}
                           <View style={styles.artistShade} />
                           <Text numberOfLines={1} style={styles.artistName}>
@@ -206,6 +221,7 @@ function CatalogSection({
   cardWidth: number;
   onPress: (route: string) => void;
 }) {
+  const styles = useAdaptiveStyles(baseStyles);
   if (!items.length) return null;
   return (
     <View style={styles.section}>
@@ -222,7 +238,7 @@ function CatalogSection({
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   section: { gap: 10 },
   cardSection: {
     backgroundColor: '#FFFFFF',
@@ -248,9 +264,8 @@ const styles = StyleSheet.create({
   },
   bannerShade: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(15, 23, 42, 0.35)' },
   bannerTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900', zIndex: 1 },
-  chartList: { gap: 12 },
+  chartCarousel: { gap: 0 },
   chartCard: {
-    ...surfaceStyles.card,
     padding: 14,
     gap: 10,
   },
@@ -283,7 +298,7 @@ const styles = StyleSheet.create({
   publisherTag: { color: '#94A3B8', fontSize: 10 },
   rank: { color: '#64748B', fontSize: 16, fontWeight: '900', width: 22, textAlign: 'center' },
   rankTop: { color: '#00B5AD' },
-  artistCard: { ...surfaceStyles.card },
+  artistCard: {},
   artistHero: { overflow: 'hidden', justifyContent: 'flex-end', padding: 14, backgroundColor: '#CBD5E1' },
   artistShade: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(15, 23, 42, 0.35)' },
   artistName: { zIndex: 1, color: '#FFFFFF', fontSize: 17, fontWeight: '900' },

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArtistLink, ArtistNames } from "@/components/artists";
 import { PlayGlyph } from "@/components/icons/PlayGlyph";
-import { usePlayer } from "@/components/player";
+import { usePlayerControls } from "@/components/player";
 import { SongRowActionMenu } from "@/components/songs/SongRowActionMenu";
 import { getChart, getVisitorId, recordChartShare, type ChartRecord, type ChartSong } from "@/lib/api";
 import {
@@ -127,7 +127,7 @@ function ChartSongRow({
   );
 }
 export default function ChartDetailPage({ slug }: { slug: string }) {
-  const { track, isPlaying, playSong, togglePlay } = usePlayer();
+  const { track, isPlaying, playSong, togglePlay } = usePlayerControls();
   const [request, setRequest] = useState<{
     slug: string;
     chart: ChartRecord | null;

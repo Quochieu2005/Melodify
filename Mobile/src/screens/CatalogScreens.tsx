@@ -4,12 +4,15 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensio
 
 import { AppShell } from '@/components/layout';
 import { Artwork, SongRow, useMusic } from '@/components/music';
-import { PageHeading, ScrollPage, SectionHeading, StateMessage, surfaceStyles } from '@/components/shared';
+import { PageHeading, ScrollPage, SectionHeading, StateMessage, useSurfaceStyles } from '@/components/shared';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { SyncedLyricsView } from '@/components/player';
 import { parseLrcLyrics } from '@/lib/lyrics';
 import { useRemoteData } from '@/hooks/useRemoteData';
 import { getAlbumRailCardWidth } from '@/lib/layout';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
+import { useTheme } from '@/hooks/use-theme';
+import { recordRecentEntity } from '@/lib/recent-history';
 import {
   getAlbum, getArtist, getChart, getGenre, getPlaylist, getSavedAuthUser, getSong, getTopic,
   getTrendingArtists, getVisitorId, listAlbums, listCharts, listPlaylists, setFollowing,
@@ -22,6 +25,7 @@ function identifierParam(value: string | string[] | undefined) {
 }
 
 function CatalogRows({ title, items, routeBase }: { title: string; items: { id: string; name: string; image: string | null; slug: string | null }[]; routeBase: string }) {
+  const styles = useAdaptiveStyles(baseStyles);
   const router = useRouter();
   const { width } = useWindowDimensions();
   const cardWidth = title === 'Album'
@@ -44,6 +48,7 @@ function CatalogRows({ title, items, routeBase }: { title: string; items: { id: 
 }
 
 function SongCollection({ title, songs }: { title: string; songs: Song[] }) {
+  const styles = useAdaptiveStyles(baseStyles);
   return <View style={styles.section}><SectionHeading title={title} />{songs.length ? songs.map((song) => <SongRow key={song.id} song={song} songs={songs} showFavorite />) : <StateMessage empty="Chưa có bài hát trong danh sách này." />}</View>;
 }
 
@@ -72,10 +77,13 @@ export function ChartDetailScreen() {
 }
 
 function ChartCard({ chart, onPress }: { chart: Chart; onPress: () => void }) {
+  const styles = useAdaptiveStyles(baseStyles);
+  const surface = useSurfaceStyles();
+  const theme = useTheme();
   return (
-    <Pressable onPress={onPress} style={[styles.chartCard, surfaceStyles.card]}>
-      <View style={styles.chartTop}><View style={[styles.chartTone, { backgroundColor: chart.tone || '#00D3E5' }]} /><View style={styles.chartCopy}><Text style={styles.chartTitle}>{chart.title}</Text><Text style={styles.muted}>{chart.song_count} bài hát</Text></View><AppIcon name="chevron" color="#00D3E5" size={18} /></View>
-      {chart.songs?.slice(0, 5).map((song) => <View key={song.id} style={styles.chartSong}><Text style={styles.rank}>{song.rank}</Text><Artwork uri={song.cover_url} size={44} /><View style={styles.chartCopy}><Text numberOfLines={1} style={styles.songTitle}>{song.title}</Text><Text numberOfLines={1} style={styles.muted}>{song.artists?.map((artist) => artist.name).join(', ') || song.artist?.name}</Text></View><AppIcon name="music" color="#9CA8A2" size={15} /></View>)}
+    <Pressable onPress={onPress} style={[styles.chartCard, surface.card]}>
+      <View style={styles.chartTop}><View style={[styles.chartTone, { backgroundColor: chart.tone || theme.primary }]} /><View style={styles.chartCopy}><Text style={styles.chartTitle}>{chart.title}</Text><Text style={styles.muted}>{chart.song_count} bài hát</Text></View><AppIcon name="chevron" color={theme.primary} size={18} /></View>
+      {chart.songs?.slice(0, 5).map((song) => <View key={song.id} style={styles.chartSong}><Text style={styles.rank}>{song.rank}</Text><Artwork uri={song.cover_url} size={44} /><View style={styles.chartCopy}><Text numberOfLines={1} style={styles.songTitle}>{song.title}</Text><Text numberOfLines={1} style={styles.muted}>{song.artists?.map((artist) => artist.name).join(', ') || song.artist?.name}</Text></View><AppIcon name="music" color={theme.textMuted} size={15} /></View>)}
     </Pressable>
   );
 }
@@ -93,6 +101,8 @@ export function TrendingArtistsScreen() {
 }
 
 function TrendingArtistRow({ artist, rank, canFollow, onLogin }: { artist: TrendingArtist; rank: number; canFollow: boolean; onLogin: () => void }) {
+  const styles = useAdaptiveStyles(baseStyles);
+  const surface = useSurfaceStyles();
   const router = useRouter();
   const [following, setFollowingState] = useState(Boolean(artist.is_following));
   const [busy, setBusy] = useState(false);
@@ -114,7 +124,7 @@ function TrendingArtistRow({ artist, rank, canFollow, onLogin }: { artist: Trend
     }
   };
   return (
-    <View style={[styles.trendingRow, surfaceStyles.card]}>
+    <View style={[styles.trendingRow, surface.card]}>
       <View style={styles.trendingTop}>
         <Pressable onPress={() => router.push(('/artist/' + (artist.slug || artist.id)) as never)} style={styles.artistMain}>
           <Text style={styles.rank}>#{rank}</Text><Artwork uri={artist.avatar_url} size={58} round />
@@ -137,6 +147,9 @@ export function AlbumDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const identifier = identifierParam(slug);
   const { data, loading, error, reload } = useRemoteData(async () => (await getAlbum(identifier, await getVisitorId())).data, identifier);
+  useEffect(() => {
+    if (data) void recordRecentEntity({ kind: 'album', id: data.id, slug: data.slug, name: data.title, image: data.cover_url, subtitle: data.artist?.name }).catch(() => undefined);
+  }, [data]);
   return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{data ? <><EntityHero title={data.title} subtitle={data.artist?.name || 'Album'} image={data.cover_url} meta={data.song_count + ' bài hát'} action={<EntityFavoriteButton key={identifier} initial={Boolean(data.is_favorite)} toggle={(visitorId) => toggleAlbumFavorite(identifier, visitorId)} />} /><SongCollection title="Bài hát trong album" songs={data.songs ?? []} /></> : null}</ScrollPage></AppShell>;
 }
 
@@ -150,6 +163,9 @@ export function PlaylistDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const identifier = identifierParam(slug);
   const { data, loading, error, reload } = useRemoteData(async () => (await getPlaylist(identifier, await getVisitorId())).data, identifier);
+  useEffect(() => {
+    if (data) void recordRecentEntity({ kind: 'playlist', id: data.id, slug: data.slug, name: data.name, image: data.cover_url, subtitle: data.description }).catch(() => undefined);
+  }, [data]);
   return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{data ? <><EntityHero title={data.name} subtitle={data.description || 'Playlist Melodify'} image={data.cover_url} meta={data.song_count + ' bài hát'} action={<EntityFavoriteButton key={identifier} initial={Boolean(data.is_favorite)} toggle={(visitorId) => togglePlaylistFavorite(identifier, visitorId)} />} /><SongCollection title="Danh sách bài hát" songs={data.songs ?? []} /></> : null}</ScrollPage></AppShell>;
 }
 
@@ -157,6 +173,9 @@ export function ArtistDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const identifier = identifierParam(slug);
   const { data, loading, error, reload } = useRemoteData(async () => (await getArtist(identifier)).data, identifier);
+  useEffect(() => {
+    if (data) void recordRecentEntity({ kind: 'artist', id: data.id, slug: data.slug, name: data.name, image: data.avatar_url, subtitle: data.bio }).catch(() => undefined);
+  }, [data]);
   return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{data ? <><EntityHero title={data.name} subtitle={data.bio || 'Nghệ sĩ Melodify'} image={data.avatar_url} meta={(data.followers_count ?? 0).toLocaleString() + ' người theo dõi'} action={<ArtistFollowControl key={identifier} artist={data} />} /><SongCollection title="Bài hát" songs={data.featured_songs?.length ? data.featured_songs : data.songs ?? []} />{data.albums?.length ? <CatalogRows title="Album" items={data.albums.map((item) => ({ id: item.id, name: item.title, image: item.cover_url, slug: item.slug }))} routeBase="/album" /> : null}{data.playlists?.length ? <CatalogRows title="Playlist" items={data.playlists.map((item) => ({ id: item.id, name: item.name, image: item.cover_url, slug: item.slug }))} routeBase="/playlist" /> : null}</> : null}</ScrollPage></AppShell>;
 }
 
@@ -175,6 +194,8 @@ export function GenreDetailScreen() {
 }
 
 export function SongDetailScreen() {
+  const styles = useAdaptiveStyles(baseStyles);
+  const theme = useTheme();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const identifier = identifierParam(slug);
   const { data, loading, error, reload } = useRemoteData(async () => (await getSong(identifier)).data, identifier);
@@ -236,7 +257,7 @@ export function SongDetailScreen() {
             <Pressable onPress={handlePlayToggle} style={styles.playLarge}>
               <AppIcon
                 name={isThisTrackPlaying ? 'pause' : 'play'}
-                color="#092326"
+                color={theme.primaryOn}
                 size={18}
               />
               <Text style={styles.playLargeText}>
@@ -271,10 +292,14 @@ export function SongDetailScreen() {
 }
 
 function EntityHero({ title, subtitle, image, meta, action }: { title: string; subtitle: string; image?: string | null; meta: string; action?: ReactNode }) {
-  return <View style={[styles.hero, surfaceStyles.card]}>{image ? <Image source={{ uri: image }} style={styles.heroImage} resizeMode="cover" /> : <Artwork uri={image} size={112} />}<View style={styles.heroCopy}><Text style={styles.heroSubtitle}>{subtitle}</Text><Text style={styles.heroTitle}>{title}</Text><Text style={styles.muted}>{meta}</Text>{action}</View></View>;
+  const styles = useAdaptiveStyles(baseStyles);
+  const surface = useSurfaceStyles();
+  return <View style={[styles.hero, surface.card]}>{image ? <Image source={{ uri: image }} style={styles.heroImage} resizeMode="cover" /> : <Artwork uri={image} size={112} />}<View style={styles.heroCopy}><Text style={styles.heroSubtitle}>{subtitle}</Text><Text style={styles.heroTitle}>{title}</Text><Text style={styles.muted}>{meta}</Text>{action}</View></View>;
 }
 
 function EntityFavoriteButton({ initial, toggle }: { initial: boolean; toggle: (visitorId: string) => Promise<{ favorited: boolean }> }) {
+  const styles = useAdaptiveStyles(baseStyles);
+  const theme = useTheme();
   const [favorite, setFavorite] = useState(initial);
   const [busy, setBusy] = useState(false);
   const update = async () => {
@@ -290,10 +315,11 @@ function EntityFavoriteButton({ initial, toggle }: { initial: boolean; toggle: (
       setBusy(false);
     }
   };
-  return <Pressable disabled={busy} onPress={() => void update()} style={styles.entityAction}><AppIcon name="heart" color={favorite ? '#00D3E5' : '#E9EEEC'} size={15} /><Text style={styles.entityActionText}>{favorite ? 'Đã lưu' : 'Lưu'}</Text></Pressable>;
+  return <Pressable disabled={busy} onPress={() => void update()} style={styles.entityAction}><AppIcon name="heart" color={favorite ? theme.primary : theme.text} size={15} /><Text style={styles.entityActionText}>{favorite ? 'Đã lưu' : 'Lưu'}</Text></Pressable>;
 }
 
 function ArtistFollowControl({ artist }: { artist: { id: string; slug: string | null; is_following?: boolean } }) {
+  const styles = useAdaptiveStyles(baseStyles);
   const router = useRouter();
   const [userReady, setUserReady] = useState(false);
   const [hasUser, setHasUser] = useState(false);
@@ -319,7 +345,7 @@ function ArtistFollowControl({ artist }: { artist: { id: string; slug: string | 
   return <Pressable disabled={!userReady || busy} onPress={() => void update()} style={styles.entityAction}><Text style={styles.entityActionText}>{userReady && hasUser ? (following ? 'Đang theo dõi' : 'Theo dõi') : 'Đăng nhập để theo dõi'}</Text></Pressable>;
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   section: { gap: 9 },
   catalogList: { gap: 12, paddingRight: 16 },
   catalogCard: { gap: 7 },
@@ -338,7 +364,7 @@ const styles = StyleSheet.create({
   artistMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
   followButton: { minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 20, paddingHorizontal: 10, borderWidth: 1, borderColor: '#75817B' },
   followText: { color: '#E9EEEC', fontSize: 11, fontWeight: '800' },
-  featuredSong: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
+  featuredSong: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E2E8F0' },
   hero: { minHeight: 156, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14 },
   heroImage: { width: 112, height: 112, borderRadius: 12 },
   heroCopy: { flex: 1, gap: 7 },

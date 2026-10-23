@@ -10,9 +10,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useMusic } from '@/components/music';
+import { useMusicControls } from '@/components/music';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { getVisitorId, listSongs, toggleSongFavorite, type Song } from '@/lib/api';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
+import { useTheme } from '@/hooks/use-theme';
 
 type QueueBottomSheetProps = {
   visible: boolean;
@@ -20,6 +22,8 @@ type QueueBottomSheetProps = {
 };
 
 export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
+  const styles = useAdaptiveStyles(baseStyles);
+  const theme = useTheme();
   const {
     track,
     queue,
@@ -28,7 +32,7 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
     playAt,
     playSong,
     toggleRepeat,
-  } = useMusic();
+  } = useMusicControls();
 
   const [favorite, setFavorite] = useState(Boolean(track?.is_favorite));
   const [favoriteBusy, setFavoriteBusy] = useState(false);
@@ -116,7 +120,7 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
               >
                 <AppIcon
                   name={repeatMode === 'one' ? 'repeat-one' : 'repeat'}
-                  color={repeatMode !== 'off' ? '#00B5AD' : '#475569'}
+                  color={repeatMode !== 'off' ? theme.primary : theme.textSecondary}
                   size={20}
                 />
               </View>
@@ -126,7 +130,7 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
             {/* Add to Playlist */}
             <Pressable style={styles.actionBtn}>
               <View style={styles.circleIcon}>
-                <AppIcon name="playlist-add" color="#475569" size={20} />
+                <AppIcon name="playlist-add" color={theme.textSecondary} size={20} />
               </View>
               <Text style={styles.actionLabel}>Thêm vào{'\n'}playlist</Text>
             </Pressable>
@@ -145,7 +149,7 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
               >
                 <AppIcon
                   name="heart"
-                  color={favorite ? '#EF4444' : '#475569'}
+                  color={favorite ? '#EF4444' : theme.textSecondary}
                   size={20}
                 />
               </View>
@@ -157,7 +161,7 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
             {/* Download */}
             <Pressable style={styles.actionBtn}>
               <View style={styles.circleIcon}>
-                <AppIcon name="download" color="#475569" size={20} />
+                <AppIcon name="download" color={theme.textSecondary} size={20} />
               </View>
               <Text style={styles.actionLabel}>Tải về</Text>
             </Pressable>
@@ -188,13 +192,13 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
                 <Image source={{ uri: track.cover_url }} style={styles.songCover} />
               ) : (
                 <View style={[styles.songCover, styles.coverFallback]}>
-                  <AppIcon name="music" color="#00B5AD" size={20} />
+                  <AppIcon name="music" color={theme.primary} size={20} />
                 </View>
               )}
 
               <View style={styles.songMeta}>
                 <View style={styles.titleRow}>
-                  <AppIcon name="equalizer" color="#00B5AD" size={15} />
+                  <AppIcon name="equalizer" color={theme.primary} size={15} />
                   <Text numberOfLines={1} style={styles.songTitlePlaying}>
                     {track.title}
                   </Text>
@@ -226,7 +230,7 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
                         <Image source={{ uri: song.cover_url }} style={styles.songCover} />
                       ) : (
                         <View style={[styles.songCover, styles.coverFallback]}>
-                          <AppIcon name="music" color="#94A3B8" size={18} />
+                          <AppIcon name="music" color={theme.textMuted} size={18} />
                         </View>
                       )}
 
@@ -258,7 +262,7 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
                       <Image source={{ uri: song.cover_url }} style={styles.songCover} />
                     ) : (
                       <View style={[styles.songCover, styles.coverFallback]}>
-                        <AppIcon name="music" color="#94A3B8" size={18} />
+                      <AppIcon name="music" color={theme.textMuted} size={18} />
                       </View>
                     )}
 
@@ -296,7 +300,7 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',

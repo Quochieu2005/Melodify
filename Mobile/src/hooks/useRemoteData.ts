@@ -9,6 +9,7 @@ type ResourceState<T> = {
 
 export function useRemoteData<T>(loader: () => Promise<T>, dependencyKey = '') {
   const loaderRef = useRef(loader);
+  const requestVersion = useRef(0);
   const [resource, setResource] = useState<ResourceState<T>>({
     key: dependencyKey,
     loading: true,
@@ -20,6 +21,7 @@ export function useRemoteData<T>(loader: () => Promise<T>, dependencyKey = '') {
   }, [loader]);
 
   const reload = useCallback(async () => {
+    const version = ++requestVersion.current;
     setResource((current) => ({
       key: dependencyKey,
       data: current.key === dependencyKey ? current.data : undefined,
@@ -28,24 +30,27 @@ export function useRemoteData<T>(loader: () => Promise<T>, dependencyKey = '') {
     }));
     try {
       const data = await loaderRef.current();
+      if (version !== requestVersion.current) return;
       setResource({ key: dependencyKey, data, loading: false, error: '' });
     } catch (reason) {
-      setResource({
+      if (version !== requestVersion.current) return;
+      setResource((current) => ({
         key: dependencyKey,
+        data: current.key === dependencyKey ? current.data : undefined,
         loading: false,
         error: reason instanceof Error ? reason.message : 'Không thể tải dữ liệu.',
-      });
+      }));
     }
   }, [dependencyKey]);
 
   useEffect(() => {
-    let active = true;
+    const version = ++requestVersion.current;
     loaderRef.current()
       .then((data) => {
-        if (active) setResource({ key: dependencyKey, data, loading: false, error: '' });
+        if (version === requestVersion.current) setResource({ key: dependencyKey, data, loading: false, error: '' });
       })
       .catch((reason: unknown) => {
-        if (active) {
+        if (version === requestVersion.current) {
           setResource({
             key: dependencyKey,
             loading: false,
@@ -53,7 +58,7 @@ export function useRemoteData<T>(loader: () => Promise<T>, dependencyKey = '') {
           });
         }
       });
-    return () => { active = false; };
+    return () => { requestVersion.current += 1; };
   }, [dependencyKey]);
 
   const visible = resource.key === dependencyKey

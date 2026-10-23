@@ -4,25 +4,31 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppShell } from '@/components/layout';
 import { Artwork } from '@/components/music';
-import { PageHeading, ScrollPage, SectionHeading, StateMessage, surfaceStyles } from '@/components/shared';
+import { PageHeading, ScrollPage, SectionHeading, StateMessage, useSurfaceStyles } from '@/components/shared';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { useRemoteData } from '@/hooks/useRemoteData';
 import { getLibrary, getPublicUser, getSavedAuthUser, getVisitorId, setFollowing } from '@/lib/api';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
+import { useTheme } from '@/hooks/use-theme';
 
 export function UserProfileScreen() {
+  const styles = useAdaptiveStyles(baseStyles);
+  const surface = useSurfaceStyles();
   const { identifier: param } = useLocalSearchParams<{ identifier: string }>();
   const identifier = Array.isArray(param) ? param[0] : param ?? '';
   const { data, loading, error, reload } = useRemoteData(async () => (await getPublicUser(identifier)).data, identifier);
   return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}
-    {data ? <View style={[styles.profile, surfaceStyles.card]}><Artwork uri={data.avatar_url} size={88} round /><Text style={styles.name}>{data.name}</Text><Text style={styles.username}>{data.username ? '@' + data.username : 'Người dùng Melodify'}</Text><View style={styles.counts}><Count label="Đang theo dõi" count={data.following_count} /><Count label="Người theo dõi" count={data.followers_count} /></View><UserFollowButton key={data.id} identifier={data.username || data.id} initial={data.is_following} /></View> : null}
+    {data ? <View style={[styles.profile, surface.card]}><Artwork uri={data.avatar_url} size={88} round /><Text style={styles.name}>{data.name}</Text><Text style={styles.username}>{data.username ? '@' + data.username : 'Người dùng Melodify'}</Text><View style={styles.counts}><Count label="Đang theo dõi" count={data.following_count} /><Count label="Người theo dõi" count={data.followers_count} /></View><UserFollowButton key={data.id} identifier={data.username || data.id} initial={data.is_following} /></View> : null}
   </ScrollPage></AppShell>;
 }
 
 function Count({ label, count }: { label: string; count: number }) {
+  const styles = useAdaptiveStyles(baseStyles);
   return <View style={styles.count}><Text style={styles.countNumber}>{count.toLocaleString()}</Text><Text style={styles.countLabel}>{label}</Text></View>;
 }
 
 function UserFollowButton({ identifier, initial }: { identifier: string; initial: boolean }) {
+  const styles = useAdaptiveStyles(baseStyles);
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
@@ -50,29 +56,33 @@ function UserFollowButton({ identifier, initial }: { identifier: string; initial
 }
 
 export function FollowingScreen() {
+  const styles = useAdaptiveStyles(baseStyles);
+  const theme = useTheme();
   const { data, loading, error, reload } = useRemoteData(async () => (await getLibrary(await getVisitorId())).data);
   const artists = data?.following_artists ?? [];
   const users = data?.following_users ?? [];
   const router = useRouter();
   return <AppShell><ScrollPage><PageHeading title="Đang theo dõi" subtitle="Nghệ sĩ và người dùng bạn đã theo dõi." />
     {loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}
-    {artists.length ? <View style={styles.list}><SectionHeading title="Nghệ sĩ" />{artists.map((artist) => <Pressable key={artist.id} onPress={() => router.push(('/artist/' + (artist.slug || artist.id)) as never)} style={styles.personRow}><Artwork uri={artist.avatar_url} size={48} round /><Text style={styles.personName}>{artist.name}</Text><AppIcon name="chevron" color="#00D3E5" size={18} /></Pressable>)}</View> : null}
-    {users.length ? <View style={styles.list}><SectionHeading title="Người dùng" />{users.map((user) => <Pressable key={user.id} onPress={() => router.push(('/user/' + (user.username || user.id)) as never)} style={styles.personRow}><Artwork uri={user.avatar_url} size={48} round /><Text style={styles.personName}>{user.name}</Text><AppIcon name="chevron" color="#00D3E5" size={18} /></Pressable>)}</View> : null}
+    {artists.length ? <View style={styles.list}><SectionHeading title="Nghệ sĩ" />{artists.map((artist) => <Pressable key={artist.id} onPress={() => router.push(('/artist/' + (artist.slug || artist.id)) as never)} style={styles.personRow}><Artwork uri={artist.avatar_url} size={48} round /><Text style={styles.personName}>{artist.name}</Text><AppIcon name="chevron" color={theme.primary} size={18} /></Pressable>)}</View> : null}
+    {users.length ? <View style={styles.list}><SectionHeading title="Người dùng" />{users.map((user) => <Pressable key={user.id} onPress={() => router.push(('/user/' + (user.username || user.id)) as never)} style={styles.personRow}><Artwork uri={user.avatar_url} size={48} round /><Text style={styles.personName}>{user.name}</Text><AppIcon name="chevron" color={theme.primary} size={18} /></Pressable>)}</View> : null}
     {data && !artists.length && !users.length ? <StateMessage empty="Bạn chưa theo dõi nghệ sĩ hoặc người dùng nào." /> : null}
   </ScrollPage></AppShell>;
 }
 
 export function FollowersScreen() {
+  const styles = useAdaptiveStyles(baseStyles);
+  const theme = useTheme();
   const { data, loading, error, reload } = useRemoteData(async () => (await getLibrary(await getVisitorId())).data);
   const router = useRouter();
   return <AppShell><ScrollPage><PageHeading title="Người theo dõi" subtitle={data ? data.followers_count.toLocaleString() + ' người theo dõi' : undefined} />
     {loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}
-    {data?.followers.length ? <View style={styles.list}>{data.followers.map((user) => <Pressable key={user.id} onPress={() => router.push(('/user/' + (user.username || user.id)) as never)} style={styles.personRow}><Artwork uri={user.avatar_url} size={48} round /><Text style={styles.personName}>{user.name}</Text><AppIcon name="chevron" color="#00D3E5" size={18} /></Pressable>)}</View> : null}
+    {data?.followers.length ? <View style={styles.list}>{data.followers.map((user) => <Pressable key={user.id} onPress={() => router.push(('/user/' + (user.username || user.id)) as never)} style={styles.personRow}><Artwork uri={user.avatar_url} size={48} round /><Text style={styles.personName}>{user.name}</Text><AppIcon name="chevron" color={theme.primary} size={18} /></Pressable>)}</View> : null}
     {data && !data.followers.length ? <StateMessage empty="Chưa có người theo dõi được hiển thị." /> : null}
   </ScrollPage></AppShell>;
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   profile: { alignItems: 'center', padding: 22, gap: 10 },
   name: { color: '#F5F7F6', fontSize: 23, fontWeight: '900', textAlign: 'center' },
   username: { color: '#AEB8B3', fontSize: 13 },

@@ -10,8 +10,10 @@ import {
   View,
 } from 'react-native';
 
-import { useMusic } from '@/components/music';
+import { useMusicControls } from '@/components/music';
 import { AppIcon } from '@/components/shared/AppIcon';
+import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
+import { useTheme } from '@/hooks/use-theme';
 import {
   getTopic,
   getVisitorId,
@@ -41,6 +43,8 @@ const DEFAULT_TOPICS = [
 ];
 
 export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewProps) {
+  const styles = useAdaptiveStyles(baseStyles);
+  const theme = useTheme();
   const {
     track,
     queue,
@@ -50,7 +54,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
     playSong,
     addToQueue,
     removeFromQueue,
-  } = useMusic();
+  } = useMusicControls();
 
   const [activeTab, setActiveTab] = useState<QueueTab>('queue');
   const [searchQuery, setSearchQuery] = useState('');
@@ -221,7 +225,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
         >
           <AppIcon
             name="queue"
-            color={activeTab === 'queue' ? '#082326' : '#8F9994'}
+            color={activeTab === 'queue' ? theme.primaryOn : theme.textMuted}
             size={16}
           />
           <Text
@@ -237,7 +241,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
         >
           <AppIcon
             name="sparkles"
-            color={activeTab === 'related' ? '#082326' : '#8F9994'}
+            color={activeTab === 'related' ? theme.primaryOn : theme.textMuted}
             size={15}
           />
           <Text
@@ -253,7 +257,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
         >
           <AppIcon
             name="music"
-            color={activeTab === 'topics' ? '#082326' : '#8F9994'}
+            color={activeTab === 'topics' ? theme.primaryOn : theme.textMuted}
             size={15}
           />
           <Text
@@ -269,7 +273,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
         >
           <AppIcon
             name="heart"
-            color={activeTab === 'saved' ? '#082326' : '#8F9994'}
+            color={activeTab === 'saved' ? theme.primaryOn : theme.textMuted}
             size={15}
           />
           <Text
@@ -282,7 +286,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
 
       {/* Quick Filter Search Bar */}
       <View style={styles.searchRow}>
-        <AppIcon name="search" color="#6B7973" size={16} />
+        <AppIcon name="search" color={theme.textMuted} size={16} />
         <TextInput
           placeholder="Lọc trong danh sách này..."
           placeholderTextColor="#6B7973"
@@ -318,7 +322,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                   <Image source={{ uri: track.cover_url }} style={styles.coverThumbActive} />
                 ) : (
                   <View style={[styles.coverThumbActive, styles.coverFallback]}>
-                    <AppIcon name="music" color="#00D3E5" size={20} />
+                    <AppIcon name="music" color={theme.primary} size={20} />
                   </View>
                 )}
 
@@ -334,7 +338,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                 </View>
 
                 <View style={styles.currentIndicatorBox}>
-                  <AppIcon name="waveform" color="#00D3E5" size={18} />
+                  <AppIcon name="waveform" color={theme.primary} size={18} />
                 </View>
               </View>
             </View>
@@ -361,7 +365,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                 onPress={() => handleTabChange('related')}
                 style={styles.emptyActionBtn}
               >
-                <AppIcon name="sparkles" color="#082326" size={15} />
+                <AppIcon name="sparkles" color={theme.primaryOn} size={15} />
                 <Text style={styles.emptyActionText}>Khám phá bài liên quan</Text>
               </Pressable>
             </View>
@@ -395,7 +399,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                     <Image source={{ uri: song.cover_url }} style={styles.songThumb} />
                   ) : (
                     <View style={[styles.songThumb, styles.coverFallback]}>
-                      <AppIcon name="music" color="#6F7C77" size={16} />
+                      <AppIcon name="music" color={theme.textMuted} size={16} />
                     </View>
                   )}
 
@@ -432,7 +436,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                       }}
                       style={styles.itemActionBtn}
                     >
-                      <AppIcon name="trash" color="#6C7A75" size={15} />
+                      <AppIcon name="trash" color={theme.textMuted} size={15} />
                     </Pressable>
                   )}
                 </Pressable>
@@ -459,7 +463,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
 
           {loadingRelated ? (
             <View style={styles.loadingBox}>
-              <ActivityIndicator color="#00D3E5" size="small" />
+              <ActivityIndicator color={theme.primary} size="small" />
               <Text style={styles.loadingText}>Đang tìm bài hát liên quan...</Text>
             </View>
           ) : filterList(relatedSongs).length === 0 ? (
@@ -482,7 +486,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                       <Image source={{ uri: song.cover_url }} style={styles.songThumb} />
                     ) : (
                       <View style={[styles.songThumb, styles.coverFallback]}>
-                        <AppIcon name="music" color="#6F7C77" size={16} />
+                        <AppIcon name="music" color={theme.textMuted} size={16} />
                       </View>
                     )}
 
@@ -508,7 +512,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                     >
                       <AppIcon
                         name={isAdded ? 'check' : 'plus'}
-                        color={isAdded ? '#082326' : '#00D3E5'}
+                        color={isAdded ? theme.primaryOn : theme.primary}
                         size={14}
                       />
                       <Text
@@ -525,7 +529,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                       onPress={() => handlePlaySong(song, [song, ...relatedSongs])}
                       style={styles.playNowIconBtn}
                     >
-                      <AppIcon name="play" color="#082326" size={13} />
+                      <AppIcon name="play" color={theme.primaryOn} size={13} />
                     </Pressable>
                   </View>
                 </View>
@@ -574,7 +578,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
           >
             {loadingTopics ? (
               <View style={styles.loadingBox}>
-                <ActivityIndicator color="#00D3E5" size="small" />
+                <ActivityIndicator color={theme.primary} size="small" />
                 <Text style={styles.loadingText}>Đang tải nhạc theo chủ đề...</Text>
               </View>
             ) : filterList(topicSongs).length === 0 ? (
@@ -597,7 +601,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                         <Image source={{ uri: song.cover_url }} style={styles.songThumb} />
                       ) : (
                         <View style={[styles.songThumb, styles.coverFallback]}>
-                          <AppIcon name="music" color="#6F7C77" size={16} />
+                          <AppIcon name="music" color={theme.textMuted} size={16} />
                         </View>
                       )}
 
@@ -623,7 +627,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                       >
                         <AppIcon
                           name={isAdded ? 'check' : 'plus'}
-                          color={isAdded ? '#082326' : '#00D3E5'}
+                          color={isAdded ? theme.primaryOn : theme.primary}
                           size={14}
                         />
                         <Text
@@ -640,7 +644,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                         onPress={() => handlePlaySong(song, topicSongs)}
                         style={styles.playNowIconBtn}
                       >
-                        <AppIcon name="play" color="#082326" size={13} />
+                        <AppIcon name="play" color={theme.primaryOn} size={13} />
                       </Pressable>
                     </View>
                   </View>
@@ -697,7 +701,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
           >
             {loadingSaved ? (
               <View style={styles.loadingBox}>
-                <ActivityIndicator color="#00D3E5" size="small" />
+                <ActivityIndicator color={theme.primary} size="small" />
                 <Text style={styles.loadingText}>Đang tải danh sách đã lưu...</Text>
               </View>
             ) : filterList(savedSongs).length === 0 ? (
@@ -726,7 +730,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                         <Image source={{ uri: song.cover_url }} style={styles.songThumb} />
                       ) : (
                         <View style={[styles.songThumb, styles.coverFallback]}>
-                          <AppIcon name="music" color="#6F7C77" size={16} />
+                          <AppIcon name="music" color={theme.textMuted} size={16} />
                         </View>
                       )}
 
@@ -752,7 +756,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                       >
                         <AppIcon
                           name={isAdded ? 'check' : 'plus'}
-                          color={isAdded ? '#082326' : '#00D3E5'}
+                          color={isAdded ? theme.primaryOn : theme.primary}
                           size={14}
                         />
                         <Text
@@ -769,7 +773,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                         onPress={() => handlePlaySong(song, savedSongs)}
                         style={styles.playNowIconBtn}
                       >
-                        <AppIcon name="play" color="#082326" size={13} />
+                        <AppIcon name="play" color={theme.primaryOn} size={13} />
                       </Pressable>
                     </View>
                   </View>
@@ -783,7 +787,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: {
     width: '100%',
     backgroundColor: '#151D1A',

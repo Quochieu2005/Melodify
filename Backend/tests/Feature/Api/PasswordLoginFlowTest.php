@@ -38,17 +38,20 @@ class PasswordLoginFlowTest extends TestCase
         }
     }
 
-    public function test_email_and_username_login_issue_tokens_and_logout_revokes_only_current_token(): void
+    public function test_email_username_and_phone_login_issue_tokens_and_logout_revokes_only_current_token(): void
     {
-        $user = User::query()->create(['name' => 'Login Test', 'username' => 'login-test', 'email' => 'login@example.test', 'password' => 'BrowserTest!2026', 'status' => 'active']);
+        $user = User::query()->create(['name' => 'Login Test', 'username' => 'login-test', 'email' => 'login@example.test', 'phone' => '+84901234567', 'password' => 'BrowserTest!2026', 'status' => 'active']);
         $first = $this->postJson('/api/v1/auth/login', ['identifier' => 'login@example.test', 'password' => 'BrowserTest!2026'])
             ->assertOk()->assertJsonPath('user.id', (string) $user->getKey());
         $second = $this->postJson('/api/v1/auth/login', ['identifier' => 'login-test', 'password' => 'BrowserTest!2026', 'remember' => true])->assertOk();
+        $third = $this->postJson('/api/v1/auth/login', ['identifier' => '0901234567', 'password' => 'BrowserTest!2026'])->assertOk();
         $token = $first->json('token');
         $otherToken = $second->json('token');
+        $phoneToken = $third->json('token');
         $this->assertNotEmpty($token);
         $this->assertNotSame($token, $otherToken);
-        $this->assertSame(2, UserApiToken::query()->count());
+        $this->assertNotEmpty($phoneToken);
+        $this->assertSame(3, UserApiToken::query()->count());
         $this->getJson('/api/v1/auth/me', ['Authorization' => 'Bearer '.$token])->assertOk();
         $this->postJson('/api/v1/auth/logout', [], ['Authorization' => 'Bearer '.$token])->assertOk();
         $this->getJson('/api/v1/auth/me', ['Authorization' => 'Bearer '.$token])->assertUnauthorized();

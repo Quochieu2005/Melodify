@@ -4,7 +4,7 @@ import FollowButton from '@/components/follow/FollowButton';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { usePlayer } from '@/components/player';
+import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { getPlaylist, getVisitorId, recordPlaylistShare, togglePlaylistFavorite, type Playlist, type Song, type SongArtistCredit } from '@/lib/api';
 import { ArtistLink, ArtistNames } from '@/components/artists';
@@ -152,7 +152,7 @@ function PlaylistSongRow({ song, index, coverUrl, checked, onToggle, onPlay, isC
 }
 
 export default function PlaylistDetailPage({ slug }: { slug: string }) {
-  const { track, isPlaying, playSong, togglePlay } = usePlayer();
+  const { track, isPlaying, playSong, togglePlay } = usePlayerControls();
   const [request, setRequest] = useState({ slug: '', playlist: null as Playlist | null, visibleCount: 30, isLoading: true, error: '' });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isFavorite, setIsFavorite] = useState(false);

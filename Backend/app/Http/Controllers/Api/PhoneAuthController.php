@@ -71,6 +71,7 @@ class PhoneAuthController extends Controller
             $user = User::create([
                 'name' => 'Người dùng '.substr($phone, -4),
                 'username' => $this->tokens->uniqueUsername(null, 'user-'.substr($phone, -6)),
+                'slug' => $this->tokens->uniqueSlug('user-'.substr($phone, -6)),
                 'phone' => $phone,
                 'password' => Hash::make(Str::random(48)),
                 'is_premium' => 0,

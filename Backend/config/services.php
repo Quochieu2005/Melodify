@@ -35,16 +35,29 @@ return [
         ],
     ],
 
+    'oauth' => [
+        'web_redirect_origins' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('OAUTH_WEB_REDIRECT_ORIGINS', '')),
+        ))),
+    ],
+
     'google' => [
+        'guzzle' => ['connect_timeout' => 3, 'timeout' => 8],
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect' => env('GOOGLE_REDIRECT_URI'),
+        'redirect' => env('GOOGLE_REDIRECT_URI') ?: rtrim((string) env('APP_URL', 'http://localhost'), '/').'/auth/google/callback',
+        'mobile_client_ids' => env('GOOGLE_MOBILE_CLIENT_IDS', ''),
+        'mobile_redirect' => env('GOOGLE_MOBILE_REDIRECT_URI') ?: 'mobile://oauth/callback',
     ],
 
     'facebook' => [
+        'guzzle' => ['connect_timeout' => 3, 'timeout' => 8],
         'client_id' => env('FACEBOOK_CLIENT_ID'),
         'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
-        'redirect' => env('FACEBOOK_REDIRECT_URI'),
+        'redirect' => env('FACEBOOK_REDIRECT_URI') ?: rtrim((string) env('APP_URL', 'http://localhost'), '/').'/auth/facebook/callback',
+        'mobile_redirect' => env('FACEBOOK_MOBILE_REDIRECT_URI') ?: 'mobile://oauth/callback',
+        'graph_version' => env('FACEBOOK_GRAPH_VERSION', 'v23.0'),
     ],
 
     'twilio' => [

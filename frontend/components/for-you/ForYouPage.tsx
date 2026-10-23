@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { usePlayer } from '@/components/player/PlayerProvider';
+import { usePlayerControls } from '@/components/player/PlayerProvider';
 import {
   getForYouArtists,
   getForYouSong,
@@ -35,7 +35,7 @@ function toggleSelection(current: string[], id: string) {
 
 export default function ForYouPage() {
   const router = useRouter();
-  const { track, isPlaying, playSong, togglePlay } = usePlayer();
+  const { track, isPlaying, playSong, togglePlay } = usePlayerControls();
   const [genres, setGenres] = useState<GenreRecord[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [selectedGenreIds, setSelectedGenreIds] = useState<string[]>([]);

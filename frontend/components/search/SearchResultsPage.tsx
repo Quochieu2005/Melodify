@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import { searchCatalog, type SearchKind, type SearchResults } from '@/lib/library-api';
 import { type Artist } from '@/lib/api';
-import { usePlayer } from '@/components/player';
+import { usePlayerControls } from '@/components/player';
 import FollowButton from '@/components/follow/FollowButton';
 import UserAvatar from '@/components/auth/UserAvatar';
 import { ArtistNames } from '@/components/artists/ArtistLink';
@@ -25,7 +25,7 @@ function ArtistResult({ artist, featured = false }: { artist: Artist & { followe
 }
 
 export default function SearchResultsPage({ query, kind, page }: { query: string; kind: SearchKind; page: number }) {
-  const { playSong, track, isPlaying, togglePlay } = usePlayer();
+  const { playSong, track, isPlaying, togglePlay } = usePlayerControls();
   const [result, setResult] = useState<SearchResults | null>(null);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);

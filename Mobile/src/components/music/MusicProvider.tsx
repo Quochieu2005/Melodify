@@ -9,7 +9,7 @@ import {
   type PropsWithChildren,
 } from 'react';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 
 import { getAudioSource, getSavedAuthUser, getSong, getVisitorId, recordSongView, type Lyric, type Song, type SongAudioQuality } from '@/lib/api';
 import { findActiveLyricIndex, parseLrcLyrics, type ParsedLyricLine } from '@/lib/lyrics';
@@ -47,6 +47,8 @@ type MusicContextValue = {
 };
 
 const MusicContext = createContext<MusicContextValue | null>(null);
+type MusicControlsValue = Omit<MusicContextValue, 'currentTime' | 'activeLyricIndex'>;
+const MusicControlsContext = createContext<MusicControlsValue | null>(null);
 
 export function MusicProvider({ children }: PropsWithChildren) {
   const player = useAudioPlayer(null, { updateInterval: 250 });
@@ -66,12 +68,41 @@ export function MusicProvider({ children }: PropsWithChildren) {
     repeatModeRef.current = repeatMode;
   }, [repeatMode]);
 
-  useEffect(() => {
-    void setAudioModeAsync({
+  const configureBackgroundAudio = useCallback(async () => {
+    await setAudioModeAsync({
       playsInSilentMode: true,
       interruptionMode: 'doNotMix',
-    }).catch(() => undefined);
+      shouldPlayInBackground: true,
+    });
+    console.info('[Melodify audio] background mode configured');
   }, []);
+
+  useEffect(() => {
+    void configureBackgroundAudio().catch((cause) => {
+      console.warn('Không thể bật audio mode phát nền:', cause);
+    });
+  }, [configureBackgroundAudio]);
+
+  useEffect(() => {
+    let lastPlaying = player.playing;
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      console.info('[Melodify audio] appState:', nextState, 'playing:', player.playing, 'time:', Math.floor(player.currentTime));
+    });
+    const playbackSubscription = player.addListener('playbackStatusUpdate', (audioStatus) => {
+      if (audioStatus.playing !== lastPlaying) {
+        lastPlaying = audioStatus.playing;
+        console.info('[Melodify audio] playback:', audioStatus.playing ? 'playing' : 'paused', 'time:', Math.floor(audioStatus.currentTime));
+      }
+      if (audioStatus.error) {
+        console.warn('[Melodify audio] playback error:', audioStatus.error);
+      }
+    });
+
+    return () => {
+      appStateSubscription.remove();
+      playbackSubscription.remove();
+    };
+  }, [configureBackgroundAudio, player]);
 
   const loadSong = useCallback(
     async (song: Song, nextQueue: Song[], index: number) => {
@@ -81,6 +112,8 @@ export function MusicProvider({ children }: PropsWithChildren) {
       setCurrentIndex(index);
 
       try {
+        // Set the iOS audio session before awaiting storage or network work.
+        await configureBackgroundAudio();
         const savedUser = await getSavedAuthUser();
         const isPremium = Number(savedUser?.is_premium ?? 0) === 1;
         const playableQualities = song.audio_qualities?.filter((quality) => quality.available !== false && Boolean(quality.audio_url)) ?? [];
@@ -89,6 +122,15 @@ export function MusicProvider({ children }: PropsWithChildren) {
         setSelectedQualityId(defaultQuality?.quality_id ?? null);
         const source = await getAudioSource(song, defaultQuality?.quality_id);
         player.replace(source);
+        player.setActiveForLockScreen(true, {
+          title: song.title,
+          artist: song.artists?.map((artist) => artist.name).join(', ') || song.artist?.name || 'Melodify',
+          albumTitle: song.album?.title || 'Melodify',
+          artworkUrl: song.cover_url || undefined,
+        }, {
+          showSeekBackward: true,
+          showSeekForward: true,
+        });
         player.play();
         void recordRecentSong(song).catch(() => undefined);
         void getVisitorId()
@@ -109,12 +151,13 @@ export function MusicProvider({ children }: PropsWithChildren) {
             })
             .catch(() => undefined);
         }
-      } catch {
-        setError('Bài hát chưa có luồng phát hoặc máy chủ không thể tải âm thanh.');
+      } catch (cause) {
+        console.error('[Melodify audio] load/play failed:', cause);
+        setError(cause instanceof Error ? cause.message : 'Bài hát chưa có luồng phát hoặc máy chủ không thể tải âm thanh.');
         player.pause();
       }
     },
-    [player]
+    [configureBackgroundAudio, player]
   );
 
   const playSong = useCallback(
@@ -148,9 +191,9 @@ export function MusicProvider({ children }: PropsWithChildren) {
         }
       }
 
-      const wasPlaying = status.playing;
-      const position = status.currentTime;
       const source = await getAudioSource(track, qualityId);
+      const wasPlaying = player.playing;
+      const position = player.currentTime;
       player.pause();
       player.replace(source);
       setSelectedQualityId(qualityId);
@@ -162,7 +205,7 @@ export function MusicProvider({ children }: PropsWithChildren) {
       setError('Không thể chuyển chất lượng phát lúc này. Vui lòng thử lại.');
       return false;
     }
-  }, [player, selectedQualityId, status.currentTime, status.playing, track]);
+  }, [player, selectedQualityId, track]);
 
   const togglePlay = useCallback(() => {
     if (!track) {
@@ -240,14 +283,14 @@ export function MusicProvider({ children }: PropsWithChildren) {
   }, [next]);
 
   const previous = useCallback(() => {
-    if (status.currentTime > 3) {
+    if (player.currentTime > 3) {
       void player.seekTo(0);
       return;
     }
     if (queue.length > 0) {
       playAt((currentIndex - 1 + queue.length) % queue.length);
     }
-  }, [currentIndex, playAt, player, queue.length, status.currentTime]);
+  }, [currentIndex, playAt, player, queue.length]);
 
   const seekTo = useCallback(
     (seconds: number) => {
@@ -311,14 +354,13 @@ export function MusicProvider({ children }: PropsWithChildren) {
     [parsedLyrics, status.currentTime]
   );
 
-  const value = useMemo<MusicContextValue>(
+  const controls = useMemo<MusicControlsValue>(
     () => ({
       track,
       queue,
       currentIndex,
       isPlaying: status.playing,
       isBuffering: status.isBuffering,
-      currentTime: status.currentTime,
       duration: status.duration,
       error: error || status.error || '',
       qualityOptions: track?.audio_qualities ?? [],
@@ -327,7 +369,6 @@ export function MusicProvider({ children }: PropsWithChildren) {
       repeatMode,
       isShuffle,
       parsedLyrics,
-      activeLyricIndex,
       playSong,
       playAt,
       addToQueue,
@@ -341,7 +382,6 @@ export function MusicProvider({ children }: PropsWithChildren) {
       toggleShuffle,
     }),
     [
-      activeLyricIndex,
       addToQueue,
       clearQueue,
       currentIndex,
@@ -356,7 +396,10 @@ export function MusicProvider({ children }: PropsWithChildren) {
       removeFromQueue,
       repeatMode,
       seekTo,
-      status,
+      status.playing,
+      status.isBuffering,
+      status.duration,
+      status.error,
       selectedQualityId,
       setQuality,
       togglePlay,
@@ -366,7 +409,17 @@ export function MusicProvider({ children }: PropsWithChildren) {
     ]
   );
 
-  return <MusicContext.Provider value={value}>{children}</MusicContext.Provider>;
+  const value = useMemo<MusicContextValue>(() => ({
+    ...controls, currentTime: status.currentTime, activeLyricIndex,
+  }), [controls, status.currentTime, activeLyricIndex]);
+
+  return <MusicControlsContext.Provider value={controls}><MusicContext.Provider value={value}>{children}</MusicContext.Provider></MusicControlsContext.Provider>;
+}
+
+export function useMusicControls(): MusicControlsValue {
+  const context = useContext(MusicControlsContext);
+  if (!context) throw new Error('useMusicControls must be used inside MusicProvider');
+  return context;
 }
 
 export function useMusic(): MusicContextValue {

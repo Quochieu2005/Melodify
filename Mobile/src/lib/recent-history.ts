@@ -3,7 +3,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Song } from './api';
 
 const RECENT_SONGS_KEY = 'melodify_mobile_recent_songs';
+const RECENT_ENTITIES_KEY = 'melodify_mobile_recent_entities';
 const MAX_RECENT_SONGS = 40;
+const MAX_RECENT_ENTITIES = 60;
+
+export type RecentEntityKind = 'playlist' | 'album' | 'artist';
+export type RecentEntity = {
+  kind: RecentEntityKind;
+  id: string;
+  slug: string | null;
+  name: string;
+  image: string | null;
+  subtitle?: string | null;
+};
 
 export type RecentSong = Pick<
   Song,
@@ -14,6 +26,7 @@ export type RecentSong = Pick<
   | 'artist'
   | 'artists'
   | 'publisher'
+  | 'album'
   | 'preview_url'
   | 'cover_url'
   | 'audio_url'
@@ -45,6 +58,7 @@ export async function recordRecentSong(song: Song): Promise<void> {
     artist: song.artist,
     artists: song.artists,
     publisher: song.publisher,
+    album: song.album,
     preview_url: song.preview_url,
     cover_url: song.cover_url,
     audio_url: song.audio_url,
@@ -58,4 +72,22 @@ export async function recordRecentSong(song: Song): Promise<void> {
 
 export async function clearRecentSongs(): Promise<void> {
   await AsyncStorage.removeItem(RECENT_SONGS_KEY);
+}
+
+export async function getRecentEntities(): Promise<RecentEntity[]> {
+  const stored = await AsyncStorage.getItem(RECENT_ENTITIES_KEY);
+  if (!stored) return [];
+  try {
+    const parsed = JSON.parse(stored) as RecentEntity[];
+    return Array.isArray(parsed) ? parsed.slice(0, MAX_RECENT_ENTITIES) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function recordRecentEntity(entity: RecentEntity): Promise<void> {
+  const current = await getRecentEntities();
+  const next = [entity, ...current.filter((item) => item.kind !== entity.kind || item.id !== entity.id)]
+    .slice(0, MAX_RECENT_ENTITIES);
+  await AsyncStorage.setItem(RECENT_ENTITIES_KEY, JSON.stringify(next));
 }

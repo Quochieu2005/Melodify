@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 
-import { usePlayer, type PlayerTrack } from './PlayerProvider';
+import { usePlayerControls, type PlayerTrack } from './PlayerProvider';
 
 function QueueTrack({ track, current, playing, onClick }: { track: PlayerTrack; current?: boolean; playing?: boolean; onClick: () => void }) {
   return <button type="button" onClick={onClick} aria-current={current ? 'true' : undefined} aria-label={current ? `${playing ? 'Tạm dừng' : 'Phát'} ${track.title}` : `Phát ${track.title}`} className="group flex w-full items-center gap-3 rounded-lg py-3 text-left outline-none hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-300">
@@ -16,7 +16,7 @@ function QueueTrack({ track, current, playing, onClick }: { track: PlayerTrack; 
 }
 
 export default function PlayerQueue({ onClose }: { onClose: () => void }) {
-  const { track, queue, currentIndex, isPlaying, shuffle, repeatMode, playAt, togglePlay } = usePlayer();
+  const { track, queue, currentIndex, isPlaying, shuffle, repeatMode, playAt, togglePlay } = usePlayerControls();
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { closeRef.current?.focus(); }, []);
   const upcoming = queue.map((item, index) => ({ item, index })).slice(currentIndex + 1);

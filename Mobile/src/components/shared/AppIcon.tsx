@@ -1,4 +1,5 @@
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { useTheme } from '@/hooks/use-theme';
 
 type IconName =
   | 'home'
@@ -7,6 +8,7 @@ type IconName =
   | 'user'
   | 'library'
   | 'search'
+  | 'phone'
   | 'music'
   | 'play'
   | 'pause'
@@ -42,9 +44,13 @@ type IconName =
   | 'calendar'
   | 'upload'
   | 'copy'
+  | 'eye'
+  | 'eye-off'
   | 'sort';
 
-export function AppIcon({ name, color = '#F5F7F6', size = 22 }: { name: IconName; color?: string; size?: number }) {
+export function AppIcon({ name, color: requestedColor, size = 22 }: { name: IconName; color?: string; size?: number }) {
+  const theme = useTheme();
+  const color = requestedColor ?? theme.text;
   if (name === 'waveform') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -73,6 +79,10 @@ export function AppIcon({ name, color = '#F5F7F6', size = 22 }: { name: IconName
 
   if (name === 'search') {
     return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Circle cx="10.5" cy="10.5" r="7" stroke={color} strokeWidth="2" /><Path d="m16 16 5 5" stroke={color} strokeWidth="2" strokeLinecap="round" /></Svg>;
+  }
+
+  if (name === 'phone') {
+    return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Rect x="6" y="2" width="12" height="20" rx="2.5" stroke={color} strokeWidth="2" /><Path d="M10 5h4M11 18.5h2" stroke={color} strokeWidth="1.8" strokeLinecap="round" /></Svg>;
   }
 
   if (name === 'user') {
@@ -346,6 +356,16 @@ export function AppIcon({ name, color = '#F5F7F6', size = 22 }: { name: IconName
         <Rect x="8" y="8" width="13" height="13" rx="2.5" stroke={color} strokeWidth="2" />
         <Path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         <Path d="M12 14.5h5M14.5 12l2.5 2.5-2.5 2.5" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
+
+  if (name === 'eye' || name === 'eye-off') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" stroke={color} strokeWidth="1.8" strokeLinejoin="round" />
+        <Circle cx="12" cy="12" r="2.7" stroke={color} strokeWidth="1.8" />
+        {name === 'eye-off' ? <Path d="m4 4 16 16" stroke={color} strokeWidth="1.8" strokeLinecap="round" /> : null}
       </Svg>
     );
   }
