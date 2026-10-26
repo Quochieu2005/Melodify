@@ -10,6 +10,7 @@ import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { getSong, type Song } from '@/lib/api';
 import { usePlayerControls } from '@/components/player';
 import {
+  removeRecentSongs,
   readRecentItems,
   recordRecentItem,
   subscribeRecentHistory,
@@ -58,6 +59,20 @@ function imageStyle(item: RecentItem) {
   return { backgroundImage: `url("${item.imageUrl || fallbackCover}")` };
 }
 
+function recentItemToSong(item: RecentItem): Song {
+  return {
+    id: item.id,
+    title: item.title,
+    slug: decodeURIComponent(item.href.split('/').filter(Boolean).at(-1) || item.id),
+    duration_seconds: item.durationSeconds ?? null,
+    artist: item.artists?.length === 1 ? { id: item.artists[0].id, name: item.artists[0].name } : null,
+    artists: item.artists || [],
+    preview_url: null,
+    cover_url: item.imageUrl,
+    publisher: item.publisher,
+  };
+}
+
 function remember(item: RecentItem) {
   const rest = Object.fromEntries(Object.entries(item).filter(([key]) => key !== 'updatedAt')) as Omit<RecentItem, 'updatedAt'>;
   recordRecentItem(rest);
@@ -81,10 +96,13 @@ function EmptyState() {
   return <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.04] px-6 py-12 text-center text-sm text-white/55">Chưa có nội dung nào trong mục này.</div>;
 }
 
-function SongTable({ items, selectedIds, onToggle, onPlay, currentTrackId, isPlaying, isLoading }: {
+function SongTable({ items, selectedIds, allSelected, onToggle, onToggleAll, onDeleteSelected, onPlay, currentTrackId, isPlaying, isLoading }: {
   items: RecentItem[];
   selectedIds: string[];
+  allSelected: boolean;
   onToggle: (id: string) => void;
+  onToggleAll: () => void;
+  onDeleteSelected: () => void;
   onPlay: (item: RecentItem) => void;
   currentTrackId?: string;
   isPlaying: boolean;
@@ -94,9 +112,21 @@ function SongTable({ items, selectedIds, onToggle, onPlay, currentTrackId, isPla
 
   return (
     <div className="mt-7 min-w-[720px]">
-      <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4">
-        <span>#</span><span>Tiêu đề</span><span className="hidden sm:block">Nghệ sĩ</span><span className="grid size-5 place-items-center justify-self-end text-[18px] leading-none"><ClockIcon /></span><span aria-hidden="true" />
-      </div>
+      {selectedIds.length > 0 ? (
+        <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 border-b border-white/10 px-2 pb-2 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4" aria-label="Thao tác với bài hát đã chọn">
+          <SelectionCheckbox checked={allSelected} label="Chọn tất cả bài hát" onChange={onToggleAll} />
+          <div className="col-span-3 flex items-center sm:col-span-4">
+            <button type="button" onClick={onDeleteSelected} aria-label={`Xóa ${selectedIds.length} bài khỏi Nghe gần đây`} title="Xóa khỏi Nghe gần đây" className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+              <TrashIcon />
+              <span>Xóa</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4">
+          <span>#</span><span>Tiêu đề</span><span className="hidden sm:block">Nghệ sĩ</span><span className="grid size-5 place-items-center justify-self-end text-[18px] leading-none"><ClockIcon /></span><span aria-hidden="true" />
+        </div>
+      )}
       {items.map((item, index) => (
         <RecentSongRow
           key={`${item.category}-${item.id}`}
@@ -111,6 +141,14 @@ function SongTable({ items, selectedIds, onToggle, onPlay, currentTrackId, isPla
         />
       ))}
     </div>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[18px] fill-none stroke-current stroke-2">
+      <path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -129,22 +167,12 @@ function RecentSongRow({ item, index, checked, onToggle, onPlay, currentTrackId,
     ? 'opacity-100'
     : isCurrentTrack
       ? 'pointer-events-none opacity-0'
-      : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100';
+      : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100';
   const indexVisibility = checked ? 'hidden' : 'group-hover:hidden';
-  const song: Song = {
-    id: item.id,
-    title: item.title,
-    slug: decodeURIComponent(item.href.split('/').filter(Boolean).at(-1) || item.id),
-    duration_seconds: item.durationSeconds ?? null,
-    artist: item.artists?.length === 1 ? { id: item.artists[0].id, name: item.artists[0].name } : null,
-    artists: item.artists || [],
-    preview_url: null,
-    cover_url: item.imageUrl,
-    publisher: item.publisher,
-  };
+  const song = recentItemToSong(item);
 
   return (
-    <div className={`${styles.songRow} group grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 rounded-lg px-2 py-2.5 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4`}>
+    <div className={`${styles.songRow} song-row-menu-host group grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 rounded-lg px-2 py-2.5 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4`}>
       <div className="relative grid size-6 place-items-center">
         <span className={`text-[13px] text-white/70 ${indexVisibility}`}>{index + 1}</span>
         <div className={`absolute inset-0 grid place-items-center ${checkboxVisibility}`}>
@@ -175,6 +203,7 @@ export default function RecentlyPlayedPage() {
   const [items, setItems] = useState<RecentItem[]>([]);
   const [isLoadingSong, setIsLoadingSong] = useState(false);
   const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
+  const [status, setStatus] = useState('');
 
   useEffect(() => {
     const refresh = () => setItems(readRecentItems());
@@ -185,6 +214,7 @@ export default function RecentlyPlayedPage() {
   const visibleItems = useMemo(() => items.filter((item) => item.category === activeTab), [activeTab, items]);
   const songItems = useMemo(() => items.filter((item) => item.category === 'song'), [items]);
   const currentSong = songItems[0];
+  const allSongsSelected = songItems.length > 0 && songItems.every((item) => selectedSongIds.includes(item.id));
 
   const playRecentSong = async (item: RecentItem) => {
     if (track?.id === item.id) {
@@ -205,6 +235,17 @@ export default function RecentlyPlayedPage() {
 
   const toggleSongSelection = (id: string) => {
     setSelectedSongIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
+  };
+
+  const toggleAllSongSelection = () => {
+    setSelectedSongIds(allSongsSelected ? [] : songItems.map((item) => item.id));
+  };
+
+  const deleteSelectedSongs = () => {
+    const removedCount = removeRecentSongs(selectedSongIds);
+    setItems(readRecentItems());
+    setSelectedSongIds([]);
+    setStatus(`Đã xóa ${removedCount} bài khỏi Nghe gần đây.`);
   };
 
   return (
@@ -228,13 +269,25 @@ export default function RecentlyPlayedPage() {
               </button>
               <h2 className="text-[29px] font-extrabold tracking-[-0.03em]">Bài hát đã phát <span className="text-sm font-medium text-white/70">({displayCount(visibleItems.length)})</span></h2>
             </div>
-            <SongTable items={visibleItems} selectedIds={selectedSongIds} onToggle={toggleSongSelection} onPlay={(item) => void playRecentSong(item)} currentTrackId={track?.id} isPlaying={isPlaying} isLoading={isLoadingSong} />
+            <SongTable
+              items={visibleItems}
+              selectedIds={selectedSongIds}
+              allSelected={allSongsSelected}
+              onToggle={toggleSongSelection}
+              onToggleAll={toggleAllSongSelection}
+              onDeleteSelected={deleteSelectedSongs}
+              onPlay={(item) => void playRecentSong(item)}
+              currentTrackId={track?.id}
+              isPlaying={isPlaying}
+              isLoading={isLoadingSong}
+            />
           </section>
         ) : activeTab === 'radio' ? (
           <EmptyState />
         ) : (
           <EntityGrid items={visibleItems} />
         )}
+        <p role="status" aria-live="polite" className="sr-only">{status}</p>
       </div>
     </main>
   );

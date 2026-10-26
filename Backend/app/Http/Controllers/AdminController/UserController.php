@@ -34,6 +34,9 @@ class UserController extends CrudResourceController
     {
         $data = parent::normalize($data, $ignoreId);
         $data['is_premium'] = request()->boolean('is_premium') ? 1 : 0;
+        if (request()->has('is_premium') && $data['is_premium'] === 1) {
+            $data['vip_expires_at'] = null;
+        }
 
         return $data;
     }

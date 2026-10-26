@@ -31,11 +31,21 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_premium' => 'integer',
+            'vip_expires_at' => 'datetime',
             'date_of_birth' => 'date',
             'last_login_at' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
+    }
+
+    public function hasPremiumAccess(): bool
+    {
+        if ((int) ($this->is_premium ?? 0) !== 1) {
+            return false;
+        }
+
+        return ! $this->vip_expires_at || $this->vip_expires_at->isFuture();
     }
 
     public function artist()

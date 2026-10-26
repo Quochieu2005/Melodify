@@ -1,16 +1,19 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { AUTH_TOKEN_STORAGE_KEY, getSong, getVisitorId, recordSongView, type Song, type SongArtistCredit, type SongAudioQuality } from '@/lib/api';
 import { recordRecentItem, songPath } from '@/lib/recent-history';
 import { useLoginModal } from '@/components/auth/LoginModalProvider';
+import { VipAccessDialog } from '@/components/player/VipAccessDialog';
 
 const PLAYER_SESSION_KEY = 'melodify_player_state';
 const PLAYER_SYNC_CHANNEL = 'melodify_player_sync';
 
 export type PlayerTrack = {
   id: string;
+  queueEntryId?: string;
   slug?: string | null;
   title: string;
   artist: string;
@@ -43,13 +46,15 @@ type PlayerContextValue = {
   elapsed: number;
   duration: number;
   notice: string | null;
-  playSong: (song: Song, queue?: Song[]) => void;
+  requestVipAccess: () => void;
+  playSong: (song: Song, queue?: Song[], viewSource?: 'player' | 'for_you') => void;
   refreshTrackMetadata: (song?: Song) => Promise<void>;
   togglePlay: () => void;
   playPrevious: () => void;
   playNext: () => void;
   seek: (seconds: number) => void;
   playAt: (index: number) => void;
+  removeFromQueue: (index: number) => void;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
   setVolume: (volume: number) => void;
@@ -59,9 +64,13 @@ type PlayerContextValue = {
 type PersistedPlayerState = {
   track: PlayerTrack;
   queue: PlayerTrack[];
+  originalQueue?: PlayerTrack[];
   currentIndex: number;
   elapsed: number;
   isPlaying: boolean;
+  shuffle?: boolean;
+  repeatMode?: 'off' | 'all' | 'one';
+  lastShuffleSignature?: string | null;
 };
 
 type PlayerSyncMessage =
@@ -71,15 +80,29 @@ type PlayerSyncMessage =
 const PlayerContext = createContext<PlayerContextValue | null>(null);
 const PlayerControlsContext = createContext<Omit<PlayerContextValue, 'elapsed'> | null>(null);
 
-function persistPlayerState(track: PlayerTrack, queue: PlayerTrack[], currentIndex: number, elapsed: number, isPlaying: boolean): PersistedPlayerState | null {
+function persistPlayerState(
+  track: PlayerTrack,
+  queue: PlayerTrack[],
+  currentIndex: number,
+  elapsed: number,
+  isPlaying: boolean,
+  originalQueue: PlayerTrack[] = queue,
+  shuffle = false,
+  repeatMode: 'off' | 'all' | 'one' = 'off',
+  lastShuffleSignature: string | null = null,
+): PersistedPlayerState | null {
   if (typeof window === 'undefined') return null;
 
   const state = {
     track,
     queue: queue.length > 0 ? queue : [track],
+    originalQueue: originalQueue.length > 0 ? originalQueue : [track],
     currentIndex,
     elapsed: Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0,
     isPlaying,
+    shuffle,
+    repeatMode,
+    lastShuffleSignature,
   } satisfies PersistedPlayerState;
 
   window.sessionStorage.setItem(PLAYER_SESSION_KEY, JSON.stringify(state));
@@ -117,6 +140,7 @@ function toPlayerTrack(song: Song, isPremium: boolean): PlayerTrack {
 
   return {
     id: song.id,
+    queueEntryId: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
     slug: song.slug,
     title: song.title,
     artist: song.artists?.map((artist) => artist.name).filter(Boolean).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật',
@@ -139,6 +163,90 @@ function toPlayerTrack(song: Song, isPremium: boolean): PlayerTrack {
   };
 }
 
+function queueEntryIndex(queue: PlayerTrack[], entry: PlayerTrack | null, sourceQueue: PlayerTrack[], sourceIndex: number) {
+  if (!entry) return -1;
+  if (entry.queueEntryId) return queue.findIndex((item) => item.queueEntryId === entry.queueEntryId);
+
+  const occurrence = sourceQueue.slice(0, sourceIndex + 1).filter((item) => item.id === entry.id).length - 1;
+  let seen = 0;
+  return queue.findIndex((item) => {
+    if (item.id !== entry.id) return false;
+    return seen++ === Math.max(0, occurrence);
+  });
+}
+
+function queueOrderSignature(queue: PlayerTrack[]) {
+  const occurrences = new Map<string, number>();
+  return queue.map((item) => {
+    if (item.queueEntryId) return item.queueEntryId;
+    const occurrence = occurrences.get(item.id) ?? 0;
+    occurrences.set(item.id, occurrence + 1);
+    return `${item.id}#${occurrence}`;
+  }).join('|');
+}
+
+function shuffleUpcoming(queue: PlayerTrack[], currentIndex: number, previousShuffleSignature: string | null) {
+  const prefix = queue.slice(0, currentIndex + 1);
+  const remaining = queue.slice(currentIndex + 1);
+  if (remaining.length < 2) return queue;
+
+  const originalSignature = queueOrderSignature(remaining);
+  const isUsefulOrder = (candidate: PlayerTrack[]) => {
+    const signature = queueOrderSignature(candidate);
+    return signature !== originalSignature && signature !== previousShuffleSignature;
+  };
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const candidate = [...remaining];
+    for (let index = candidate.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [candidate[index], candidate[swapIndex]] = [candidate[swapIndex], candidate[index]];
+    }
+    if (isUsefulOrder(candidate)) return [...prefix, ...candidate];
+  }
+
+  for (let offset = 1; offset < remaining.length; offset += 1) {
+    const candidate = [...remaining.slice(offset), ...remaining.slice(0, offset)];
+    if (isUsefulOrder(candidate)) return [...prefix, ...candidate];
+  }
+  for (let left = 0; left < remaining.length - 1; left += 1) {
+    for (let right = left + 1; right < remaining.length; right += 1) {
+      const candidate = [...remaining];
+      [candidate[left], candidate[right]] = [candidate[right], candidate[left]];
+      if (isUsefulOrder(candidate)) return [...prefix, ...candidate];
+    }
+  }
+
+  // With only two remaining tracks there are only two possible orders, so it
+  // is impossible to differ from both the normal order and the previous shuffle.
+  const fallback = [...remaining];
+  [fallback[0], fallback[1]] = [fallback[1], fallback[0]];
+  return [...prefix, ...fallback];
+}
+
+function removeQueueEntry(queue: PlayerTrack[], removed: PlayerTrack, sourceQueue: PlayerTrack[], sourceIndex: number) {
+  if (removed.queueEntryId) return queue.filter((item) => item.queueEntryId !== removed.queueEntryId);
+
+  const occurrence = sourceQueue.slice(0, sourceIndex).filter((item) => item.id === removed.id).length;
+  let seen = 0;
+  return queue.filter((item) => {
+    if (item.id !== removed.id) return true;
+    return seen++ !== occurrence;
+  });
+}
+
+function replaceQueueTrack(queue: PlayerTrack[], nextTrack: PlayerTrack) {
+  return queue.map((item) => item.id === nextTrack.id
+    ? { ...item, ...nextTrack, queueEntryId: item.queueEntryId ?? nextTrack.queueEntryId }
+    : item);
+}
+
+function requiresVipForTrack(track: PlayerTrack | null | undefined) {
+  if (!track) return false;
+  const selectedQuality = track.audioQualities?.find((quality) => quality.quality_id === track.selectedQualityId);
+  return track.premiumOnly || Boolean(selectedQuality?.premium_only);
+}
+
 function isPlayerTrack(value: unknown): value is PlayerTrack {
   if (!value || typeof value !== 'object') return false;
 
@@ -157,23 +265,25 @@ function isPlayerTrack(value: unknown): value is PlayerTrack {
 }
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
-  const { user, openLogin } = useLoginModal();
+  const router = useRouter();
+  const { user } = useLoginModal();
   const isPremium = Number(user?.is_premium ?? 0) === 1;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const trackRef = useRef<PlayerTrack | null>(null);
   const queueRef = useRef<PlayerTrack[]>([]);
+  const originalQueueRef = useRef<PlayerTrack[]>([]);
+  const lastShuffleSignatureRef = useRef<string | null>(null);
   const currentIndexRef = useRef(0);
   const playNextRef = useRef<() => void>(() => undefined);
   const restoredElapsedRef = useRef(0);
   const tabIdRef = useRef<string | null>(null);
   const syncChannelRef = useRef<BroadcastChannel | null>(null);
   const isPremiumRef = useRef(false);
-  const userRef = useRef(user);
-  const openLoginRef = useRef(openLogin);
   const noticeTimerRef = useRef<number | null>(null);
   const shuffleRef = useRef(false);
   const repeatRef = useRef<'off' | 'all' | 'one'>('off');
   const viewRecordedRef = useRef(false);
+  const viewSourceRef = useRef<'player' | 'for_you'>('player');
   const [track, setTrack] = useState<PlayerTrack | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -185,25 +295,40 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [elapsed, setElapsed] = useState(0);
   const [duration, setDuration] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  const [vipDialogOpen, setVipDialogOpen] = useState(false);
+
+  const savePlayerState = useCallback((currentTrack: PlayerTrack, currentQueue: PlayerTrack[], index: number, position: number, playing: boolean) => (
+    persistPlayerState(currentTrack, currentQueue, index, position, playing, originalQueueRef.current, shuffleRef.current, repeatRef.current, lastShuffleSignatureRef.current)
+  ), []);
 
   useEffect(() => {
     const isPremium = Number(user?.is_premium ?? 0) === 1;
     isPremiumRef.current = isPremium;
-    userRef.current = user;
-    openLoginRef.current = openLogin;
 
-    if (!isPremium && trackRef.current?.premiumOnly) {
+    if (!isPremium && requiresVipForTrack(trackRef.current)) {
       audioRef.current?.pause();
       trackRef.current = null;
       queueRef.current = [];
+      originalQueueRef.current = [];
       setQueue([]);
       setIsLoading(false);
       setTrack(null);
       setElapsed(0);
       setDuration(0);
       setIsPlaying(false);
+      shuffleRef.current = false;
+      repeatRef.current = 'off';
+      setShuffle(false);
+      setRepeatMode('off');
     }
-  }, [openLogin, user]);
+  }, [user]);
+
+  const requestVipAccess = useCallback(() => setVipDialogOpen(true), []);
+  const closeVipDialog = useCallback(() => setVipDialogOpen(false), []);
+  const upgradeVip = useCallback(() => {
+    setVipDialogOpen(false);
+    router.push('/mua-vip');
+  }, [router]);
 
   const showNotice = useCallback((message: string) => {
     setNotice(message);
@@ -223,19 +348,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } satisfies PlayerSyncMessage);
   }, []);
 
-  const startTrack = useCallback((nextTrack: PlayerTrack) => {
-    if (nextTrack.premiumOnly && !isPremiumRef.current && !nextTrack.audioUrl) {
-      showNotice(userRef.current ? 'Bài hát này cần tài khoản VIP đã nạp để nghe full.' : 'Hãy đăng nhập và nạp VIP để nghe bài hát này full.');
-      if (!userRef.current) openLoginRef.current();
+  const startTrack = useCallback((nextTrack: PlayerTrack, viewSource: 'player' | 'for_you' = 'player') => {
+    if (requiresVipForTrack(nextTrack) && !isPremiumRef.current) {
+      requestVipAccess();
       audioRef.current?.pause();
       trackRef.current = null;
       queueRef.current = [];
+      originalQueueRef.current = [];
       setQueue([]);
       setIsLoading(false);
       setTrack(null);
       setElapsed(0);
       setDuration(0);
       setIsPlaying(false);
+      shuffleRef.current = false;
+      repeatRef.current = 'off';
+      setShuffle(false);
+      setRepeatMode('off');
       return;
     }
 
@@ -252,12 +381,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     });
     trackRef.current = nextTrack;
     viewRecordedRef.current = false;
+    viewSourceRef.current = viewSource;
     restoredElapsedRef.current = 0;
     setTrack(nextTrack);
     setElapsed(0);
     setDuration(nextTrack.durationSeconds ?? 0);
 
-    broadcastState(persistPlayerState(nextTrack, queueRef.current, currentIndexRef.current, 0, false));
+    broadcastState(savePlayerState(nextTrack, queueRef.current, currentIndexRef.current, 0, false));
 
     const audio = audioRef.current;
     audio?.pause();
@@ -291,7 +421,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           }
         }
       });
-  }, [broadcastState, showNotice]);
+  }, [broadcastState, requestVipAccess, savePlayerState, showNotice]);
 
   const playAt = useCallback((index: number) => {
     const nextTrack = queueRef.current[index];
@@ -302,13 +432,39 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     startTrack(nextTrack);
   }, [startTrack]);
 
-  const playNext = useCallback(() => {
-    const length = queueRef.current.length;
-    if (shuffleRef.current && length > 1) {
-      const offset = 1 + Math.floor(Math.random() * (length - 1));
-      playAt((currentIndexRef.current + offset) % length);
+  const removeFromQueue = useCallback((index: number) => {
+    const currentTrack = trackRef.current;
+    const currentIndex = currentIndexRef.current;
+    const currentQueue = queueRef.current;
+    const removingCurrentTrack = index === currentIndex;
+    if (!currentTrack || index < 0 || index >= currentQueue.length || (removingCurrentTrack && currentQueue.length === 1)) return;
+
+    const removedTrack = currentQueue[index];
+    const nextQueue = currentQueue.filter((_, itemIndex) => itemIndex !== index);
+    originalQueueRef.current = removeQueueEntry(originalQueueRef.current, removedTrack, currentQueue, index);
+    lastShuffleSignatureRef.current = null;
+    const nextIndex = removingCurrentTrack
+      ? Math.min(currentIndex, nextQueue.length - 1)
+      : index < currentIndex ? currentIndex - 1 : currentIndex;
+    queueRef.current = nextQueue;
+    currentIndexRef.current = nextIndex;
+    setQueue(nextQueue);
+    setCurrentIndex(nextIndex);
+    if (removingCurrentTrack) {
+      startTrack(nextQueue[nextIndex]);
       return;
     }
+    broadcastState(savePlayerState(
+      currentTrack,
+      nextQueue,
+      nextIndex,
+      audioRef.current?.currentTime ?? 0,
+      Boolean(audioRef.current && !audioRef.current.paused),
+    ));
+  }, [broadcastState, savePlayerState, startTrack]);
+
+  const playNext = useCallback(() => {
+    const length = queueRef.current.length;
     const nextIndex = currentIndexRef.current + 1;
     if (nextIndex < queueRef.current.length) playAt(nextIndex);
     else if (repeatRef.current === 'all' && length > 0) playAt(0);
@@ -342,7 +498,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const now = Date.now();
         if (now - lastBroadcastAt >= 1000) {
           lastBroadcastAt = now;
-          const state = persistPlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime, !audio.paused);
+          const state = savePlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime, !audio.paused);
           broadcastState(state);
         }
       }
@@ -356,7 +512,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const currentTrack = trackRef.current;
       if (currentTrack) {
         broadcastState(
-          persistPlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime, true),
+          savePlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime, true),
           'play',
         );
       }
@@ -368,7 +524,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (currentTrack && !viewRecordedRef.current) {
         viewRecordedRef.current = true;
         // Start statistics only after media starts, not in front of the audio request.
-        void recordSongView(currentTrack.slug || currentTrack.id, undefined, 'player').catch(() => undefined);
+        void recordSongView(currentTrack.slug || currentTrack.id, getVisitorId(), viewSourceRef.current).catch(() => undefined);
       }
     };
     const handleWaiting = () => { if (!audio.paused) setIsLoading(true); };
@@ -415,7 +571,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (repeatRef.current === 'one') {
         audio.currentTime = 0;
         void audio.play().catch(handleAudioError);
-      } else if (shuffleRef.current || repeatRef.current === 'all' || currentIndexRef.current + 1 < queueRef.current.length) playNextRef.current();
+      } else if (repeatRef.current === 'all' || currentIndexRef.current + 1 < queueRef.current.length) playNextRef.current();
       else {
         setIsPlaying(false);
         persistCurrentPosition();
@@ -448,7 +604,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (savedTrack.premiumOnly && !isPremiumRef.current) return;
 
       const restoredQueue = savedQueue.length > 0 ? savedQueue : [savedTrack];
+      const savedOriginalQueue = Array.isArray(savedState.originalQueue)
+        ? savedState.originalQueue.filter(isPlayerTrack)
+        : [];
+      originalQueueRef.current = savedOriginalQueue.length > 0 ? savedOriginalQueue : restoredQueue;
+      shuffleRef.current = savedState.shuffle === true;
+      repeatRef.current = savedState.repeatMode === 'all' || savedState.repeatMode === 'one' ? savedState.repeatMode : 'off';
+      setShuffle(shuffleRef.current);
+      setRepeatMode(repeatRef.current);
       const restoredIndex = Math.min(Math.max(0, savedState.currentIndex), restoredQueue.length - 1);
+      lastShuffleSignatureRef.current = typeof savedState.lastShuffleSignature === 'string'
+        ? savedState.lastShuffleSignature
+        : shuffleRef.current ? queueOrderSignature(restoredQueue.slice(restoredIndex + 1)) : null;
       const restoredTrack = restoredQueue[restoredIndex] || savedTrack;
       const restoreLimit = restoredTrack.previewLimitSeconds ?? restoredTrack.durationSeconds;
       const restoredElapsed = restoreLimit === null || restoreLimit === undefined
@@ -497,7 +664,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const currentTrack = trackRef.current;
         if (!currentTrack || !syncChannel) return;
 
-        const state = persistPlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime, !audio.paused);
+        const state = savePlayerState(currentTrack, queueRef.current, currentIndexRef.current, audio.currentTime, !audio.paused);
         if (state) {
           syncChannel.postMessage({
             type: 'state',
@@ -510,7 +677,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
       if (message.type === 'state' && message.state && isPlayerTrack(message.state.track) && Array.isArray(message.state.queue)) {
         applySyncedState(message.state, message.playbackIntent);
-        persistPlayerState(message.state.track, message.state.queue, message.state.currentIndex, message.state.elapsed, message.state.isPlaying === true);
+        savePlayerState(message.state.track, message.state.queue, message.state.currentIndex, message.state.elapsed, message.state.isPlaying === true);
       }
     };
 
@@ -526,9 +693,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
         if (isPlayerTrack(savedTrack) && (!savedTrack.premiumOnly || isPremiumRef.current)) {
           const restoredQueue = savedQueue.length > 0 ? savedQueue : [savedTrack];
+          const savedOriginalQueue = Array.isArray(savedState?.originalQueue)
+            ? savedState.originalQueue.filter(isPlayerTrack)
+            : [];
+          originalQueueRef.current = savedOriginalQueue.length > 0 ? savedOriginalQueue : restoredQueue;
+          shuffleRef.current = savedState?.shuffle === true;
+          repeatRef.current = savedState?.repeatMode === 'all' || savedState?.repeatMode === 'one' ? savedState.repeatMode : 'off';
+          setShuffle(shuffleRef.current);
+          setRepeatMode(repeatRef.current);
           const restoredIndex = typeof savedState?.currentIndex === 'number'
             ? Math.min(Math.max(0, savedState.currentIndex), restoredQueue.length - 1)
             : 0;
+          lastShuffleSignatureRef.current = typeof savedState?.lastShuffleSignature === 'string'
+            ? savedState.lastShuffleSignature
+            : shuffleRef.current ? queueOrderSignature(restoredQueue.slice(restoredIndex + 1)) : null;
           const restoredTrack = restoredQueue[restoredIndex] || savedTrack;
           const savedElapsed = typeof savedState?.elapsed === 'number' && Number.isFinite(savedState.elapsed)
             ? Math.max(0, savedState.elapsed)
@@ -584,28 +762,32 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.removeAttribute('src');
       audio.load();
     };
-  }, [broadcastState, playNext, showNotice]);
+  }, [broadcastState, playNext, savePlayerState, showNotice]);
 
-  const playSong = useCallback((song: Song, queue: Song[] = [song]) => {
+  const playSong = useCallback((song: Song, queue: Song[] = [song], viewSource: 'player' | 'for_you' = 'player') => {
     const nextQueue = queue.length > 0
       ? queue.map((item) => toPlayerTrack(item, isPremiumRef.current))
       : [toPlayerTrack(song, isPremiumRef.current)];
     const index = Math.max(0, nextQueue.findIndex((item) => item.id === song.id));
+    originalQueueRef.current = nextQueue;
+    lastShuffleSignatureRef.current = null;
+    const playbackQueue = shuffleRef.current ? shuffleUpcoming(nextQueue, index, null) : nextQueue;
+    if (shuffleRef.current) lastShuffleSignatureRef.current = queueOrderSignature(playbackQueue.slice(index + 1));
 
-    queueRef.current = nextQueue;
-    setQueue(nextQueue);
+    queueRef.current = playbackQueue;
+    setQueue(playbackQueue);
     currentIndexRef.current = index;
     setCurrentIndex(index);
-    startTrack(nextQueue[index]);
+    startTrack(playbackQueue[index], viewSource);
   }, [startTrack]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
+    if (requiresVipForTrack(track) && !isPremiumRef.current) {
+      requestVipAccess();
+      return;
+    }
     if (!audio || !track?.audioUrl) {
-      if (track?.premiumOnly && !isPremiumRef.current) {
-        showNotice(userRef.current ? 'Bài hát này cần tài khoản VIP đã nạp để nghe full.' : 'Hãy đăng nhập và nạp VIP để nghe bài hát này full.');
-        if (!userRef.current) openLoginRef.current();
-      }
       return;
     }
 
@@ -613,7 +795,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (track.previewLimitSeconds !== null && audio.currentTime >= track.previewLimitSeconds) {
         audio.currentTime = 0;
         setElapsed(0);
-        broadcastState(persistPlayerState(track, queueRef.current, currentIndexRef.current, 0, false));
+        broadcastState(savePlayerState(track, queueRef.current, currentIndexRef.current, 0, false));
       }
       setIsLoading(true);
       void audio.play()
@@ -634,9 +816,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } else {
       audio.pause();
       setIsPlaying(false);
-      broadcastState(persistPlayerState(track, queueRef.current, currentIndexRef.current, audio.currentTime, false), 'pause');
+      broadcastState(savePlayerState(track, queueRef.current, currentIndexRef.current, audio.currentTime, false), 'pause');
     }
-  }, [broadcastState, showNotice, track]);
+  }, [broadcastState, requestVipAccess, savePlayerState, showNotice, track]);
 
   const seek = useCallback((seconds: number) => {
     if (!audioRef.current || !track || !Number.isFinite(seconds)) return;
@@ -646,18 +828,63 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (audioRef.current.readyState === 0) restoredElapsedRef.current = nextTime;
     else audioRef.current.currentTime = nextTime;
     setElapsed(nextTime);
-    broadcastState(persistPlayerState(track, queueRef.current, currentIndexRef.current, nextTime, Boolean(audioRef.current && !audioRef.current.paused)));
-  }, [broadcastState, duration, track]);
+    broadcastState(savePlayerState(track, queueRef.current, currentIndexRef.current, nextTime, Boolean(audioRef.current && !audioRef.current.paused)));
+  }, [broadcastState, duration, savePlayerState, track]);
 
   const toggleShuffle = useCallback(() => {
-    shuffleRef.current = !shuffleRef.current;
-    setShuffle(shuffleRef.current);
-  }, []);
+    const currentTrack = trackRef.current;
+    if (!currentTrack) return;
+
+    const currentQueue = queueRef.current;
+    const currentIndex = currentIndexRef.current;
+    const enablingShuffle = !shuffleRef.current;
+    const baseQueue = originalQueueRef.current.length > 0 ? originalQueueRef.current : currentQueue;
+    const baseIndex = Math.max(0, queueEntryIndex(baseQueue, currentQueue[currentIndex] ?? currentTrack, currentQueue, currentIndex));
+
+    if (enablingShuffle) {
+      const nextQueue = shuffleUpcoming(baseQueue, baseIndex, lastShuffleSignatureRef.current);
+      lastShuffleSignatureRef.current = queueOrderSignature(nextQueue.slice(baseIndex + 1));
+      queueRef.current = nextQueue;
+      setQueue(nextQueue);
+      currentIndexRef.current = baseIndex;
+      setCurrentIndex(baseIndex);
+    } else {
+      const restoredIndex = Math.max(0, queueEntryIndex(baseQueue, currentTrack, currentQueue, currentIndex));
+      const restoredTrack = baseQueue[restoredIndex] ?? currentTrack;
+      queueRef.current = baseQueue;
+      setQueue(baseQueue);
+      currentIndexRef.current = restoredIndex;
+      setCurrentIndex(restoredIndex);
+      trackRef.current = restoredTrack;
+      setTrack(restoredTrack);
+    }
+
+    shuffleRef.current = enablingShuffle;
+    setShuffle(enablingShuffle);
+    const nextTrack = queueRef.current[currentIndexRef.current] ?? currentTrack;
+    broadcastState(savePlayerState(
+      nextTrack,
+      queueRef.current,
+      currentIndexRef.current,
+      audioRef.current?.currentTime ?? 0,
+      Boolean(audioRef.current && !audioRef.current.paused),
+    ));
+  }, [broadcastState, savePlayerState]);
 
   const cycleRepeat = useCallback(() => {
     repeatRef.current = repeatRef.current === 'off' ? 'all' : repeatRef.current === 'all' ? 'one' : 'off';
     setRepeatMode(repeatRef.current);
-  }, []);
+    const currentTrack = trackRef.current;
+    if (currentTrack) {
+      broadcastState(savePlayerState(
+        currentTrack,
+        queueRef.current,
+        currentIndexRef.current,
+        audioRef.current?.currentTime ?? 0,
+        Boolean(audioRef.current && !audioRef.current.paused),
+      ));
+    }
+  }, [broadcastState, savePlayerState]);
 
   const setVolume = useCallback((nextVolume: number) => {
     if (!Number.isFinite(nextVolume)) return;
@@ -671,16 +898,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const option = currentTrack?.audioQualities?.find((quality) => quality.quality_id === qualityId);
     if (!currentTrack || !option || currentTrack.selectedQualityId === qualityId) return;
 
-    if (option.available === false || !option.audio_url) {
-      showNotice('NCT có thông tin chất lượng VIP nhưng chưa trả luồng phát/tải cho yêu cầu này.');
+    if ((currentTrack.premiumOnly || option.premium_only) && !isPremiumRef.current) {
+      requestVipAccess();
       return;
     }
 
-    if ((currentTrack.premiumOnly || option.premium_only) && !isPremiumRef.current) {
-      showNotice(userRef.current
-        ? 'Chất lượng này yêu cầu tài khoản VIP. Hãy nâng cấp VIP để mở khóa.'
-        : 'Đăng nhập và nâng cấp VIP để mở khóa chất lượng này.');
-      if (!userRef.current) openLoginRef.current();
+    if (option.available === false || !option.audio_url) {
+      showNotice('NCT có thông tin chất lượng VIP nhưng chưa trả luồng phát/tải cho yêu cầu này.');
       return;
     }
 
@@ -693,7 +917,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       qualityLabel: option.label,
     };
     trackRef.current = nextTrack;
-    queueRef.current = queueRef.current.map((item) => item.id === nextTrack.id ? nextTrack : item);
+    queueRef.current = replaceQueueTrack(queueRef.current, nextTrack);
+    originalQueueRef.current = replaceQueueTrack(originalQueueRef.current, nextTrack);
     setTrack(nextTrack);
     setQueue(queueRef.current);
 
@@ -716,8 +941,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    broadcastState(persistPlayerState(nextTrack, queueRef.current, currentIndexRef.current, audio?.currentTime ?? 0, Boolean(audio && !audio.paused)));
-  }, [broadcastState, showNotice]);
+    broadcastState(savePlayerState(nextTrack, queueRef.current, currentIndexRef.current, audio?.currentTime ?? 0, Boolean(audio && !audio.paused)));
+  }, [broadcastState, requestVipAccess, savePlayerState, showNotice]);
 
   const refreshTrackMetadata = useCallback(async (song?: Song) => {
     const currentTrack = trackRef.current;
@@ -763,10 +988,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const resumeAt = sourceChanged && audio ? audio.currentTime : 0;
 
       trackRef.current = nextTrack;
-      queueRef.current = queueRef.current.map((item) => item.id === nextTrack.id ? nextTrack : item);
+      queueRef.current = replaceQueueTrack(queueRef.current, nextTrack);
+      originalQueueRef.current = replaceQueueTrack(originalQueueRef.current, nextTrack);
       setTrack(nextTrack);
       setQueue(queueRef.current);
-      broadcastState(persistPlayerState(
+      broadcastState(savePlayerState(
         nextTrack,
         queueRef.current,
         currentIndexRef.current,
@@ -792,7 +1018,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } catch {
       // Keep existing playback usable when the metadata refresh endpoint is unavailable.
     }
-  }, [broadcastState, showNotice]);
+  }, [broadcastState, savePlayerState, showNotice]);
 
   const controls = useMemo(() => ({
     track,
@@ -806,6 +1032,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     volume,
     duration,
     notice,
+    requestVipAccess,
     playSong,
     refreshTrackMetadata,
     togglePlay,
@@ -813,14 +1040,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     playNext,
     seek,
     playAt,
+    removeFromQueue,
     toggleShuffle,
     cycleRepeat,
     setVolume,
     setQuality,
-  }), [currentIndex, duration, isPlaying, isLoading, queue, shuffle, repeatMode, volume, notice, isPremium, playNext, playPrevious, playSong, refreshTrackMetadata, seek, togglePlay, track, playAt, toggleShuffle, cycleRepeat, setVolume, setQuality]);
+  }), [currentIndex, duration, isPlaying, isLoading, queue, shuffle, repeatMode, volume, notice, isPremium, requestVipAccess, playNext, playPrevious, playSong, refreshTrackMetadata, seek, togglePlay, track, playAt, removeFromQueue, toggleShuffle, cycleRepeat, setVolume, setQuality]);
   const value = useMemo(() => ({ ...controls, elapsed }), [controls, elapsed]);
 
-  return <PlayerControlsContext.Provider value={controls}><PlayerContext.Provider value={value}>{children}</PlayerContext.Provider></PlayerControlsContext.Provider>;
+  return <PlayerControlsContext.Provider value={controls}><PlayerContext.Provider value={value}>{children}<VipAccessDialog open={vipDialogOpen} onClose={closeVipDialog} onUpgrade={upgradeVip} /></PlayerContext.Provider></PlayerControlsContext.Provider>;
 }
 
 export function usePlayerControls() {

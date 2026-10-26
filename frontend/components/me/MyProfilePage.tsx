@@ -2,11 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useLoginModal } from '@/components/auth/LoginModalProvider';
 import UserAvatar from '@/components/auth/UserAvatar';
+import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { useLibrary } from '@/components/library/LibraryProvider';
 import CreatePlaylistDialog from '@/components/playlists/CreatePlaylistDialog';
+import { getMyUploads } from '@/lib/api';
 import { readRecentItems, subscribeRecentHistory } from '@/lib/recent-history';
 
 function ProfileAvatar({ name, avatarUrl, large = false }: { name: string; avatarUrl: string | null; large?: boolean }) {
@@ -37,12 +39,47 @@ function EmptyPlaylistIcon() {
   );
 }
 
+function LibraryCollectionCard({ href, coverUrl, title, subtitle, isPrivate = false }: { href: string; coverUrl: string | null; title: string; subtitle?: string; isPrivate?: boolean }) {
+  return (
+    <Link href={href} className="group block rounded-lg p-2 outline-none focus-visible:outline-2 focus-visible:outline-cyan-300">
+      <div role="img" aria-label={`Ảnh bìa ${title}`} className="relative aspect-square overflow-hidden rounded-lg bg-[#18211f] bg-cover bg-center" style={{ backgroundImage: `url("${coverUrl || '/images/cover-placeholder.svg'}")` }}>
+        <span aria-hidden="true" className="absolute inset-0 bg-black/25 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100" />
+        <span aria-hidden="true" className="absolute bottom-3 right-3 grid size-12 translate-y-2 place-items-center rounded-full bg-[#00d3e5] text-[#13201e] opacity-0 shadow-lg shadow-black/30 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
+          <PlayGlyph className="size-6" />
+        </span>
+      </div>
+      <h3 className="mt-3 truncate font-bold text-white transition-colors group-hover:text-cyan-300">{title}</h3>
+      {subtitle ? <p className="mt-1 flex items-center gap-1.5 text-sm text-white/50">{subtitle}{isPrivate ? <svg role="img" aria-label="Playlist riêng tư" viewBox="0 0 16 16" className="size-3.5 fill-none stroke-current stroke-[1.5]"><rect x="3.5" y="7" width="9" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" strokeLinecap="round" /></svg> : null}</p> : null}
+    </Link>
+  );
+}
+
 export default function MyProfilePage() {
   const router = useRouter();
-  const { user, openLogin } = useLoginModal();
+  const { user, authReady, openLogin } = useLoginModal();
   const { data, error, refresh } = useLibrary();
   const [creating, setCreating] = useState(false);
+  const [uploadedCount, setUploadedCount] = useState<number | null>(null);
+  const [uploadCountFailed, setUploadCountFailed] = useState(false);
   const recentCount = useSyncExternalStore(subscribeRecentHistory, () => readRecentItems().filter((item) => item.category === 'song').length, () => 0);
+
+  useEffect(() => {
+    if (!authReady || !user) return;
+
+    let isCurrent = true;
+    void getMyUploads().then(({ meta }) => {
+      if (isCurrent) {
+        setUploadedCount(meta.total);
+        setUploadCountFailed(false);
+      }
+    }).catch(() => {
+      if (isCurrent) setUploadCountFailed(true);
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [authReady, user]);
 
   if (!user) {
     return (
@@ -63,7 +100,7 @@ export default function MyProfilePage() {
   const collections = [
     { type: 'favorite' as const, title: 'Yêu thích', count: data ? `${data.favorite_song_count} bài hát` : 'Đang tải…', color: 'bg-gradient-to-br from-[#ff6f91] to-[#ff4fba]', href: '/favorite' },
     { type: 'recent' as const, title: 'Nghe gần đây', count: `${recentCount} bài hát`, color: 'bg-gradient-to-br from-[#1f9ee2] to-[#124791]', href: '/recent' },
-    { type: 'upload' as const, title: 'Đã tải lên', count: 'Quản lý nội dung tải lên', color: 'bg-gradient-to-br from-[#69d99a] to-[#0a5d3c]', href: '/upload' },
+    { type: 'upload' as const, title: 'Đã tải lên', count: uploadedCount === null ? (uploadCountFailed ? 'Xem nội dung đã tải' : 'Đang tải…') : `${uploadedCount} bài hát`, color: 'bg-gradient-to-br from-[#69d99a] to-[#0a5d3c]', href: '/me/uploaded' },
   ];
 
   return (
@@ -104,15 +141,22 @@ export default function MyProfilePage() {
             <h2 className="text-3xl font-extrabold tracking-[-0.04em]">Playlist đã tạo ({data?.created_playlists.length ?? '…'})</h2>
             <button type="button" aria-label="Tạo playlist" onClick={() => setCreating(true)} className="grid size-8 place-items-center rounded-full border-2 border-white text-xl leading-none hover:border-cyan-300 hover:text-cyan-300">+</button>
           </div>
-          {data?.created_playlists.length ? <div className="mt-6 grid grid-cols-2 gap-5 md:grid-cols-4 xl:grid-cols-5">{data.created_playlists.map((playlist) => <Link key={playlist.id} href={`/playlist/${encodeURIComponent(playlist.slug || playlist.id)}`} className="group rounded-lg p-2 hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-cyan-300">
-            <div className="aspect-square rounded-lg bg-white/10 bg-cover bg-center" style={{ backgroundImage: `url("${playlist.cover_url || '/sidebar-favorites.png'}")` }} />
-            <h3 className="mt-3 truncate font-bold group-hover:text-cyan-300">{playlist.name}</h3><p className="mt-1 text-sm text-white/50">{playlist.song_count} bài hát</p>
-          </Link>)}</div> : data ? <div className="mt-8 flex min-h-[300px] flex-col items-center justify-center rounded-2xl bg-black/10 text-center">
+          {data?.created_playlists.length ? <div className="mt-6 grid grid-cols-2 gap-5 md:grid-cols-4 xl:grid-cols-5">{data.created_playlists.map((playlist) => <LibraryCollectionCard key={playlist.id} href={`/playlist/${encodeURIComponent(playlist.slug || playlist.id)}`} coverUrl={playlist.cover_url} title={playlist.name} subtitle={`${playlist.song_count} bài hát`} isPrivate={playlist.visibility === 'private'} />)}</div> : data ? <div className="mt-8 flex min-h-[300px] flex-col items-center justify-center rounded-2xl bg-black/10 text-center">
             <EmptyPlaylistIcon />
             <h3 className="mt-3 text-lg font-bold">Danh sách playlist chưa có</h3>
             <p className="mt-2 text-sm text-white/55">Hãy tạo playlist đầu tiên của bạn.</p>
             <button type="button" onClick={() => setCreating(true)} className="mt-6 rounded-full bg-white/15 px-8 py-3 text-sm font-bold text-white hover:bg-white/25">Tạo playlist</button>
           </div> : <p className="mt-6 text-white/50">Đang tải playlist…</p>}
+        </section>
+
+        <section className="mt-12">
+          <h2 className="text-3xl font-extrabold tracking-[-0.04em]">Playlist yêu thích ({data?.favorite_playlists.length ?? '…'})</h2>
+          {data?.favorite_playlists.length ? <div className="mt-6 grid grid-cols-2 gap-5 md:grid-cols-4 xl:grid-cols-5">{data.favorite_playlists.map((playlist) => <LibraryCollectionCard key={playlist.id} href={`/playlist/${encodeURIComponent(playlist.slug || playlist.id)}`} coverUrl={playlist.cover_url} title={playlist.name} subtitle={`${playlist.song_count} bài hát`} />)}</div> : data ? <p className="mt-5 text-white/50">Bạn chưa có playlist yêu thích.</p> : <p className="mt-5 text-white/50">Đang tải playlist yêu thích…</p>}
+        </section>
+
+        <section className="mt-12">
+          <h2 className="text-3xl font-extrabold tracking-[-0.04em]">Album yêu thích ({data?.favorite_albums.length ?? '…'})</h2>
+          {data?.favorite_albums.length ? <div className="mt-6 grid grid-cols-2 gap-5 md:grid-cols-4 xl:grid-cols-5">{data.favorite_albums.map((album) => <LibraryCollectionCard key={album.id} href={`/album/${encodeURIComponent(album.slug || album.id)}`} coverUrl={album.cover_url} title={album.title} />)}</div> : data ? <p className="mt-5 text-white/50">Bạn chưa có album yêu thích.</p> : <p className="mt-5 text-white/50">Đang tải album yêu thích…</p>}
         </section>
       </div>
       {creating && <CreatePlaylistDialog onClose={() => setCreating(false)} />}

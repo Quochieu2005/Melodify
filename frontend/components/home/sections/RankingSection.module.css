@@ -14,7 +14,7 @@
   gap: 16px;
   width: 100%;
   align-items: stretch;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .boardTrack > :nth-child(n + 2) {

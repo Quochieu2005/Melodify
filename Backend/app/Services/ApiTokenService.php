@@ -75,7 +75,7 @@ class ApiTokenService
             'email' => $user->email,
             'phone' => $user->phone,
             'avatar_url' => $user->avatar_url,
-            'is_premium' => (int) $user->is_premium,
+            'is_premium' => $user->hasPremiumAccess() ? 1 : 0,
             'status' => $user->status ?? 'active',
             'created_at' => optional($user->created_at)->toISOString(),
             'google_connected' => filled($user->google_id),

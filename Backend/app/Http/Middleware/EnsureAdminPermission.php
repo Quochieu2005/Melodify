@@ -16,9 +16,11 @@ class EnsureAdminPermission
         $resourceGroup = $resource ? config("admin-permissions.resource_groups.{$resource}") : null;
         $action = $this->actionFor($request);
 
-        $allowed = $admin && $resourceGroup === $permission
-            ? $admin->hasAdminResourcePermission($resource, $action)
-            : $admin?->hasAdminPermission($permission);
+        $allowed = $permission === 'uploads.review'
+            ? $admin && ($admin->hasAdminPermission('uploads.review') || $admin->hasAdminResourcePermission('songs', 'update'))
+            : ($admin && $resourceGroup === $permission
+                ? $admin->hasAdminResourcePermission($resource, $action)
+                : $admin?->hasAdminPermission($permission));
 
         if (! $allowed) {
             abort(403, 'Tài khoản quản trị không có quyền truy cập chức năng này.');

@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\SongReportController;
 use App\Http\Controllers\Api\SubscriptionPlanController;
 use App\Http\Controllers\Api\UserLibraryController;
 use App\Http\Controllers\Api\UserPlaylistController;
+use App\Http\Controllers\Api\UserUploadController;
 use App\Http\Controllers\Api\VipCheckoutController;
 use App\Http\Controllers\AudioController;
 use App\Http\Controllers\VideoController;
@@ -61,6 +62,19 @@ Route::get('/health', function () {
 })->middleware('admin.timing');
 
 Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.optional'])->group(function () {
+    Route::get('/vip/payment-methods', [VipCheckoutController::class, 'methods'])
+        ->name('vip.payment-methods.index');
+    Route::post('/vip/payments/momo/ipn', [VipCheckoutController::class, 'momoIpn'])
+        ->name('vip.payments.momo.ipn');
+    Route::get('/vip/payments/momo/return', [VipCheckoutController::class, 'momoReturn'])
+        ->name('vip.payments.momo.return');
+    Route::get('/vip/payments/vnpay/ipn', [VipCheckoutController::class, 'vnpayIpn'])
+        ->name('vip.payments.vnpay.ipn');
+    Route::get('/vip/payments/vnpay/return', [VipCheckoutController::class, 'vnpayReturn'])
+        ->name('vip.payments.vnpay.return');
+    Route::post('/vip/payments/zalopay/callback', [VipCheckoutController::class, 'zalopayCallback'])
+        ->name('vip.payments.zalopay.callback');
+
     Route::post('/auth/social/browser/start', [BrowserSocialAuthController::class, 'start'])
         ->middleware('throttle:10,1');
     Route::post('/auth/social/browser/poll', [BrowserSocialAuthController::class, 'poll'])
@@ -119,13 +133,32 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
             ->name('vip.checkout');
         Route::get('/vip/transactions', [VipCheckoutController::class, 'index'])
             ->name('vip.transactions.index');
+        Route::get('/vip/transactions/{paymentCode}', [VipCheckoutController::class, 'show'])
+            ->where('paymentCode', '[A-Za-z0-9_-]{1,100}')
+            ->name('vip.transactions.show');
         Route::get('/me/playlists', [UserPlaylistController::class, 'index'])->name('me.playlists.index');
         Route::post('/me/playlists', [UserPlaylistController::class, 'store'])
             ->middleware('throttle:20,1')
             ->name('me.playlists.store');
+        Route::post('/me/playlists/{playlistId}', [UserPlaylistController::class, 'update'])
+            ->middleware('throttle:20,1')
+            ->name('me.playlists.update');
+        Route::delete('/me/playlists/{playlistId}', [UserPlaylistController::class, 'destroy'])
+            ->middleware('throttle:20,1')
+            ->name('me.playlists.destroy');
         Route::post('/me/playlists/{playlistId}/songs', [UserPlaylistController::class, 'addSongs'])
             ->middleware('throttle:30,1')
             ->name('me.playlists.songs.store');
+        Route::get('/me/uploads', [UserUploadController::class, 'index'])->name('me.uploads.index');
+        Route::post('/me/uploads/stage', [UserUploadController::class, 'stageAudio'])
+            ->middleware('throttle:5,1')
+            ->name('me.uploads.stage');
+        Route::delete('/me/uploads/stage/{uploadToken}', [UserUploadController::class, 'destroyStage'])
+            ->where('uploadToken', '[A-Za-z0-9]+')
+            ->name('me.uploads.stage.destroy');
+        Route::post('/me/uploads', [UserUploadController::class, 'store'])
+            ->middleware('throttle:5,1')
+            ->name('me.uploads.store');
     });
 
     Route::get('/me/library', [UserLibraryController::class, 'index'])->name('me.library');

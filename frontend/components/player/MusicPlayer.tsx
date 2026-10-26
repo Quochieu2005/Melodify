@@ -49,8 +49,18 @@ function NextIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-current"><path d="M16 5h2v14h-2zM5 6.3v11.4a1.3 1.3 0 0 0 2 1.05l7.4-5.7a1.3 1.3 0 0 0 0-2.1L7 5.25A1.3 1.3 0 0 0 5 6.3Z" /></svg>;
 }
 
-function RepeatIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-none stroke-current stroke-[1.8]"><path d="M4 8h13l-2.5-2.5M20 16H7l2.5 2.5M17 8l2.5 2.5L22 8M7 16l-2.5-2.5L2 16" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+function RepeatIcon({ mode }: { mode: 'off' | 'all' | 'one' }) {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="svg-icon size-6 fill-current">
+    <defs>
+      <symbol id="icon-player_refresh_icon" viewBox="8 8 24 24">
+        <path d="M20 13.328c-1.14 0-2.203.266-3.172.813a6.699 6.699 0 0 0-2.406 2.171 6.645 6.645 0 0 0-1.094 3.094.545.545 0 0 1-.187.438.641.641 0 0 1-.454.156c-.171 0-.328-.078-.468-.219a.588.588 0 0 1-.172-.531 7.44 7.44 0 0 1 1.547-4.047c.937-1.219 2.094-2.094 3.5-2.64 1.406-.547 2.843-.704 4.312-.422a7.881 7.881 0 0 1 3.922 1.89v-1.39c0-.172.063-.329.188-.454.125-.124.297-.187.515-.187.172 0 .328.063.453.188a.626.626 0 0 1 .188.453v2.765c0 .36-.125.656-.375.89-.25.235-.531.36-.86.392h-2.765a.563.563 0 0 1-.453-.204.727.727 0 0 1-.188-.484h-.062c0-.172.078-.328.218-.453a.699.699 0 0 1 .485-.188h2.078a7.187 7.187 0 0 0-2.188-1.5A6.542 6.542 0 0 0 20 13.33ZM27.313 20c.171 0 .328.078.468.219.14.14.203.312.172.531a7.44 7.44 0 0 1-1.547 4.047c-.937 1.219-2.093 2.094-3.5 2.64-1.406.547-2.843.704-4.312.422a7.881 7.881 0 0 1-3.922-1.89v1.343a.684.684 0 0 1-.188.5.626.626 0 0 1-.453.188h-.062a.626.626 0 0 1-.453-.188.684.684 0 0 1-.188-.5v-2.718c0-.36.125-.672.375-.907.25-.25.531-.359.86-.328h2.765c.188 0 .328.063.453.188a.997.997 0 0 1 .25.453h-.062a.626.626 0 0 1-.188.453.601.601 0 0 1-.453.188H15.25c.922.953 2.016 1.578 3.281 1.859 1.266.297 2.516.203 3.735-.234a6.396 6.396 0 0 0 3.015-2.22 6.903 6.903 0 0 0 1.39-3.452c0-.188.063-.328.188-.438a.641.641 0 0 1 .453-.156Z" />
+      </symbol>
+      <symbol id="icon-player_refresh_one_icon" viewBox="8 8 24 24">
+        <path d="M18.14 23.047h3.297v-1.078h-3.296v1.078Zm1.063-.438h1.172v-5.968h-.64l-1.766.906.265 1.015 1.282-.64-.313-.422v5.11Zm7.469-2.015c0-.188.062-.328.187-.438a.641.641 0 0 1 .453-.156c.172 0 .329.078.47.219.14.14.202.312.171.531a7.968 7.968 0 0 1-1.094 3.36 8.293 8.293 0 0 1-2.437 2.562 7.51 7.51 0 0 1-3.297 1.25 8.142 8.142 0 0 1-3.531-.297 7.941 7.941 0 0 1-3.032-1.766 7.578 7.578 0 0 1-2-2.922 7.73 7.73 0 0 1-.53-3.5 7.785 7.785 0 0 1 1.015-3.359 7.488 7.488 0 0 1 2.39-2.61 7.883 7.883 0 0 1 3.282-1.327 7.81 7.81 0 0 1 3.5.203 8.499 8.499 0 0 1 3.11 1.687v-1.39c0-.172.062-.329.187-.454.125-.124.297-.187.515-.187.172 0 .328.063.453.188a.626.626 0 0 1 .188.453v2.765c0 .36-.125.656-.375.89-.25.235-.531.36-.86.392h-2.765a.563.563 0 0 1-.453-.204.727.727 0 0 1-.188-.484h-.062c0-.172.078-.344.218-.484a.65.65 0 0 1 .485-.204h2.078a6.61 6.61 0 0 0-2.516-1.578c-.953-.343-1.953-.453-2.984-.343a6.516 6.516 0 0 0-2.844.984 6.525 6.525 0 0 0-2.11 2.125 6.782 6.782 0 0 0-.968 2.828 6.64 6.64 0 0 0 .375 2.969c.36.953.906 1.797 1.625 2.5a6.455 6.455 0 0 0 2.531 1.547 6.713 6.713 0 0 0 3 .297 6.347 6.347 0 0 0 2.828-1.047 6.589 6.589 0 0 0 2.047-2.157 6.956 6.956 0 0 0 .938-2.843Z" />
+      </symbol>
+    </defs>
+    <use href={mode === 'one' ? '#icon-player_refresh_one_icon' : '#icon-player_refresh_icon'} />
+  </svg>;
 }
 
 function VolumeIcon() {
@@ -276,7 +286,7 @@ export default function MusicPlayer() {
           <button type="button" role="menuitem" onClick={() => void handleShare('copy_link')} className="block w-full rounded-lg px-3 py-2.5 text-left hover:bg-white/10 hover:text-[#00d3e5] focus-visible:outline-2 focus-visible:outline-cyan-300">Sao chép đường dẫn</button>
         </div> : null}
       </div>
-      <SongRowActionMenu placement="up" buttonClassName="!size-10" iconClassName="size-6" onStatus={setActionFeedback} onShareRecorded={(shares) => setEngagementCounts((current) => ({ ...current, [track.id]: { favorites: current[track.id]?.favorites ?? track.favoriteCount ?? 0, shares } }))} downloadUrl={track.downloadUrl} song={{ id: track.id, slug: track.slug ?? null, title: track.title, duration_seconds: track.durationSeconds, artist: track.artists?.[0] ?? null, artists: track.artists, cover_url: track.coverUrl, audio_url: track.audioUrl, download_url: track.downloadUrl, preview_url: null, premium_only: track.premiumOnly }} />
+              <SongRowActionMenu placement="up" buttonClassName="!size-10" iconClassName="size-6" onStatus={setActionFeedback} onShareRecorded={(shares) => setEngagementCounts((current) => ({ ...current, [track.id]: { favorites: current[track.id]?.favorites ?? track.favoriteCount ?? 0, shares } }))} downloadUrl={track.downloadUrl} song={{ id: track.id, slug: track.slug ?? null, title: track.title, duration_seconds: track.durationSeconds, artist: track.artists?.[0] ?? null, artists: track.artists, cover_url: track.coverUrl, audio_url: track.audioUrl, audio_qualities: track.audioQualities, download_url: track.downloadUrl, preview_url: null, premium_only: track.premiumOnly }} />
     </>} /> : null}
     <div role="region" aria-label="Trình phát nhạc" className={`fixed bottom-0 left-0 z-50 flex w-full flex-col px-2.5 py-1.5 text-white sm:px-3 ${lyricsVisible ? 'h-[98px] bg-transparent' : 'h-[74px] border-t border-white/[0.04] bg-[#242424] shadow-[0_-12px_30px_rgba(0,0,0,0.2)]'}`}>
       {lyricsVisible && track ? <div className="flex h-6 shrink-0 items-center gap-2 px-5 text-[11px] tabular-nums text-white/70 sm:px-9">
@@ -297,7 +307,7 @@ export default function MusicPlayer() {
             </div>
             <div className="ml-auto hidden items-center gap-2 sm:flex">
               <button type="button" aria-label={isLiked ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'} aria-pressed={isLiked} disabled={isFavoritePending} onClick={() => void handleFavorite()} className="grid size-7 place-items-center rounded-full text-white/65 outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-50"><HeartIcon filled={isLiked} /></button>
-              <SongRowActionMenu placement="up" onStatus={setActionFeedback} onShareRecorded={(shares) => setEngagementCounts((current) => ({ ...current, [track.id]: { favorites: current[track.id]?.favorites ?? track.favoriteCount ?? 0, shares } }))} downloadUrl={track.downloadUrl} song={{ id: track.id, slug: track.slug ?? null, title: track.title, duration_seconds: track.durationSeconds, artist: track.artists?.[0] ?? null, artists: track.artists, cover_url: track.coverUrl, audio_url: track.audioUrl, download_url: track.downloadUrl, preview_url: null, premium_only: track.premiumOnly }} />
+              <SongRowActionMenu placement="up" onStatus={setActionFeedback} onShareRecorded={(shares) => setEngagementCounts((current) => ({ ...current, [track.id]: { favorites: current[track.id]?.favorites ?? track.favoriteCount ?? 0, shares } }))} downloadUrl={track.downloadUrl} song={{ id: track.id, slug: track.slug ?? null, title: track.title, duration_seconds: track.durationSeconds, artist: track.artists?.[0] ?? null, artists: track.artists, cover_url: track.coverUrl, audio_url: track.audioUrl, audio_qualities: track.audioQualities, download_url: track.downloadUrl, preview_url: null, premium_only: track.premiumOnly }} />
             </div>
           </div>
         ) : (
@@ -315,7 +325,7 @@ export default function MusicPlayer() {
               {isLoading ? <span role="status" aria-label="Đang tải âm thanh" className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : isPlaying ? <span className="flex gap-1"><span className="h-4 w-1 rounded-full bg-current" /><span className="h-4 w-1 rounded-full bg-current" /></span> : <PlayGlyph className="size-5" />}
             </button>
             <PlayerButton label="Bài tiếp theo" className="size-6" onClick={playNext} disabled={!track}><NextIcon /></PlayerButton>
-            <PlayerButton label={repeatMode === 'one' ? 'Lặp lại một bài' : 'Lặp lại'} pressed={repeatMode !== 'off'} onClick={cycleRepeat} className={`relative size-5 ${repeatMode !== 'off' ? '!text-[#00d3e5]' : ''}`} disabled={!track}><RepeatIcon />{repeatMode === 'one' ? <span className="absolute text-[9px] font-bold">1</span> : null}</PlayerButton>
+            <PlayerButton label={repeatMode === 'one' ? 'Lặp lại một bài' : repeatMode === 'all' ? 'Lặp lại toàn bộ danh sách' : 'Bật lặp lại toàn bộ danh sách'} pressed={repeatMode !== 'off'} onClick={cycleRepeat} className={`relative size-6 ${repeatMode !== 'off' ? '!text-[#00d3e5]' : '!text-[#bdbdbd]'}`} disabled={!track}><RepeatIcon mode={repeatMode} /></PlayerButton>
           </div>
           {track && !lyricsVisible ? <div className="flex w-full max-w-[500px] items-center gap-1.5 text-[10px] tabular-nums text-white/45">
             <span>{formatPlaybackTime(displayElapsed)}</span>
@@ -343,9 +353,11 @@ export default function MusicPlayer() {
               {qualityOptions.length ? <ul className="max-h-[min(320px,50vh)] overflow-y-auto px-1 pb-1">
                 {qualityOptions.map((quality) => {
                   const unavailable = quality.available === false || !quality.audio_url;
+                  const requiresVip = track.premiumOnly || quality.premium_only;
+                  const disabled = unavailable && !(requiresVip && !isPremium);
                   const selected = track.selectedQualityId === quality.quality_id;
                   return <li key={quality.quality_id}>
-                    <button type="button" disabled={unavailable} aria-pressed={selected} title={unavailable ? 'Chất lượng này chưa có nguồn phát' : undefined} onClick={() => {
+                    <button type="button" disabled={disabled} aria-pressed={selected} title={disabled ? 'Chất lượng này chưa có nguồn phát' : undefined} onClick={() => {
                       setQuality(quality.quality_id);
                       if (isPremium || (!track.premiumOnly && !quality.premium_only)) {
                         setPanel(null);
@@ -373,7 +385,7 @@ export default function MusicPlayer() {
         </div>
       </div>
     </div>
-    {panel === 'queue' ? <PlayerQueue onClose={closeQueue} /> : null}
+    {panel === 'queue' ? <PlayerQueue onClose={closeQueue} onStatus={setActionFeedback} /> : null}
     {panel === 'volume' ? <section aria-label="Điều chỉnh âm lượng" className="fixed bottom-[82px] right-3 z-[60] max-h-[60vh] w-[min(360px,calc(100vw-24px))] overflow-y-auto rounded-xl border border-white/10 bg-[#242a28] p-4 text-white shadow-2xl">
       <div className="mb-3 flex items-center justify-between"><h2 className="font-bold">Âm lượng</h2><button type="button" aria-label="Đóng bảng điều khiển" onClick={() => setPanel(null)} className="size-8 rounded-full hover:bg-white/10">×</button></div>
       <div className="flex items-center gap-3"><button type="button" aria-label={volume === 0 ? 'Bật âm thanh' : 'Tắt âm thanh'} onClick={() => setVolume(volume === 0 ? 1 : 0)} className="rounded-lg px-2 py-1 hover:bg-white/10">{volume === 0 ? 'Bật' : 'Tắt'}</button><input type="range" aria-label="Mức âm lượng" min="0" max="1" step="0.01" value={volume} onChange={(event) => setVolume(Number(event.target.value))} className="min-w-0 flex-1 accent-[#00d3e5]" /><span className="w-10 text-right text-xs">{Math.round(volume * 100)}%</span></div>

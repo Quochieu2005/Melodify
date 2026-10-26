@@ -11,6 +11,7 @@ import styles from './RankingSection.module.css';
 
 export default function RankingSection() {
   const [request, setRequest] = useState<{ charts: ChartRecord[]; loading: boolean; error: string }>({ charts: [], loading: true, error: '' });
+  const populatedCharts = request.charts.filter((chart) => chart.song_count > 0 && chart.songs.length > 0);
 
   useEffect(() => {
     let cancelled = false;
@@ -19,6 +20,8 @@ export default function RankingSection() {
       .catch(() => { if (!cancelled) setRequest({ charts: [], loading: false, error: 'Không thể tải bảng xếp hạng.' }); });
     return () => { cancelled = true; };
   }, []);
+
+  if (!request.loading && !request.error && populatedCharts.length === 0) return null;
 
   return (
     <section aria-labelledby="ranking-heading" className={`mt-12 w-full ${styles.rankingSection}`}>
@@ -32,8 +35,8 @@ export default function RankingSection() {
           <div className={styles.boardTrack}>{[1, 2, 3].map((item) => <div key={item} className="min-h-[460px] animate-pulse rounded-[12px] bg-white/10" />)}</div>
         ) : request.error ? (
           <p role="alert" className="rounded-xl bg-white/10 px-4 py-5 text-sm text-white/70">{request.error}</p>
-        ) : request.charts.length > 0 ? (
-          <div className={styles.boardTrack}>{request.charts.map((chart) => <ChartCard key={chart.slug} chart={chart} />)}</div>
+        ) : populatedCharts.length > 0 ? (
+          <div className={styles.boardTrack}>{populatedCharts.map((chart) => <ChartCard key={chart.slug} chart={chart} />)}</div>
         ) : (
           <p className="rounded-xl bg-white/10 px-4 py-5 text-sm text-white/70">Chưa có bảng xếp hạng.</p>
         )}

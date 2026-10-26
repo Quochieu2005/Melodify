@@ -10,16 +10,21 @@ use App\Models\ArtistViewEvent;
 use App\Models\Favorite;
 use App\Models\Playlist;
 use App\Models\PlaylistFavorite;
+use App\Models\PlaylistShare;
 use App\Models\PlaylistSong;
 use App\Models\Song;
 use App\Models\SongArtist;
 use App\Models\SongPlayEvent;
+use App\Models\SongVideo;
 use App\Models\User;
 use App\Models\UserApiToken;
+use App\Services\CloudinaryService;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Mockery;
 use Tests\TestCase;
 
 class LibraryAndFollowTest extends TestCase
@@ -45,7 +50,7 @@ class LibraryAndFollowTest extends TestCase
         try {
             $connection = DB::connection('mongodb');
             if ($connection->getTablePrefix() === $this->testPrefix && preg_match('/^test_library_[a-f0-9]{16}_$/', $this->testPrefix)) {
-                foreach (['users', 'user_api_tokens', 'artists', 'artist_followers', 'artist_view_events', 'user_followers', 'songs', 'song_artists', 'song_play_events', 'favorites', 'albums', 'album_favorites', 'playlists', 'playlist_favorites', 'playlist_songs'] as $collection) {
+                foreach (['users', 'user_api_tokens', 'artists', 'artist_followers', 'artist_view_events', 'user_followers', 'songs', 'song_artists', 'song_play_events', 'song_videos', 'favorites', 'albums', 'album_favorites', 'playlists', 'playlist_favorites', 'playlist_shares', 'playlist_songs'] as $collection) {
                     $connection->getCollection($collection)->drop();
                 }
             }
@@ -90,13 +95,14 @@ class LibraryAndFollowTest extends TestCase
         $visitor = (string) Str::uuid();
         $song = Song::query()->create(['title' => 'Library Song', 'slug' => 'library-song', 'status' => 'published']);
         $album = Album::query()->create(['title' => 'Library Album', 'slug' => 'library-album', 'status' => 'published']);
+        Song::query()->create(['title' => 'Album Track', 'slug' => 'album-track', 'status' => 'published', 'album_id' => (string) $album->getKey()]);
         $playlist = Playlist::query()->create(['name' => 'Library Playlist', 'slug' => 'library-playlist', 'status' => 'active', 'visibility' => 'public']);
         Favorite::query()->create(['user_id' => $visitor, 'song_id' => (string) $song->getKey()]);
         AlbumFavorite::query()->create(['user_id' => $visitor, 'album_id' => (string) $album->getKey()]);
         PlaylistFavorite::query()->create(['user_id' => $visitor, 'playlist_id' => (string) $playlist->getKey()]);
         $this->postJson('/api/v1/me/library/import', ['visitor_id' => $visitor], $headers)->assertOk();
         $this->postJson('/api/v1/me/library/import', ['visitor_id' => $visitor], $headers)->assertOk();
-        $this->getJson('/api/v1/me/library', $headers)->assertOk()->assertJsonPath('data.favorite_song_count', 1)->assertJsonCount(1, 'data.favorite_albums')->assertJsonCount(1, 'data.favorite_playlists');
+        $this->getJson('/api/v1/me/library', $headers)->assertOk()->assertJsonPath('data.favorite_song_count', 1)->assertJsonCount(1, 'data.favorite_albums')->assertJsonPath('data.favorite_albums.0.song_count', 1)->assertJsonCount(1, 'data.favorite_playlists');
         $this->getJson('/api/v1/favorites/songs', $headers)->assertOk()->assertJsonPath('data.0.id', (string) $song->getKey());
         $this->getJson('/api/v1/me/library?visitor_id='.$visitor, $otherHeaders)->assertOk()->assertJsonPath('data.favorite_song_count', 0);
         $this->postJson('/api/v1/me/library/import', ['visitor_id' => (string) $alice->getKey()], $otherHeaders)->assertStatus(422);
@@ -110,13 +116,114 @@ class LibraryAndFollowTest extends TestCase
     {
         [, $headers] = $this->account('Playlist Owner');
         [, $otherHeaders] = $this->account('Playlist Stranger');
-        $song = Song::query()->create(['title' => 'Playlist Song', 'slug' => 'playlist-song', 'status' => 'published']);
-        $playlist = $this->postJson('/api/v1/me/playlists', ['name' => 'Private Test'], $headers)->assertCreated()->json('data');
+        $firstSong = Song::query()->create(['title' => 'First Playlist Song', 'slug' => 'first-playlist-song', 'status' => 'published', 'cover_url' => 'https://cdn.example.test/first-song.jpg']);
+        $secondSong = Song::query()->create(['title' => 'Second Playlist Song', 'slug' => 'second-playlist-song', 'status' => 'published', 'cover_url' => 'https://cdn.example.test/second-song.jpg']);
+        $createResponse = $this->postJson('/api/v1/me/playlists', ['name' => 'Private Test'], $headers)->assertCreated()->assertJsonPath('data.visibility', 'private');
+        $playlist = $createResponse->json('data');
         $this->getJson('/api/v1/playlists/'.$playlist['slug'], $headers)->assertOk()->assertJsonPath('data.song_count', 0);
         $this->getJson('/api/v1/playlists/'.$playlist['slug'], $otherHeaders)->assertNotFound();
-        $this->postJson('/api/v1/me/playlists/'.$playlist['id'].'/songs', ['song_ids' => [(string) $song->getKey()]], $headers)->assertOk();
-        $this->getJson('/api/v1/playlists/'.$playlist['slug'], $headers)->assertOk()->assertJsonPath('data.song_count', 1);
-        $this->getJson('/api/v1/me/library', $headers)->assertJsonPath('data.created_playlists.0.song_count', 1);
+        $this->postJson('/api/v1/playlists/'.$playlist['slug'].'/favorite', [], $headers)->assertNotFound();
+        $this->postJson('/api/v1/playlists/'.$playlist['slug'].'/favorite', [], $otherHeaders)->assertNotFound();
+        $this->getJson('/api/v1/search?q=Private%20Test&type=playlist')->assertJsonCount(0, 'data.playlist');
+        $this->postJson('/api/v1/me/playlists/'.$playlist['id'].'/songs', ['song_ids' => [(string) $firstSong->getKey(), (string) $secondSong->getKey()]], $headers)->assertOk();
+        $this->getJson('/api/v1/playlists/'.$playlist['slug'], $headers)
+            ->assertOk()
+            ->assertJsonPath('data.song_count', 2)
+            ->assertJsonPath('data.cover_url', 'https://cdn.example.test/first-song.jpg')
+            ->assertJsonPath('data.songs.0.id', (string) $firstSong->getKey());
+        $playlistModel = Playlist::query()->findOrFail($playlist['id']);
+        $playlistModel->update(['cover_url' => 'https://cdn.example.test/stale-cover.jpg']);
+        $this->postJson('/api/v1/me/playlists/'.$playlist['id'], ['name' => 'Private Test Edited'], $headers)
+            ->assertOk()
+            ->assertJsonPath('data.cover_url', 'https://cdn.example.test/first-song.jpg');
+        $this->getJson('/api/v1/me/library', $headers)->assertJsonPath('data.created_playlists.0.song_count', 2)->assertJsonPath('data.created_playlists.0.visibility', 'private');
+        $this->getJson('/api/v1/playlists/'.$playlist['slug'], $headers)
+            ->assertJsonPath('data.can_edit', true)
+            ->assertJsonPath('data.favorite_count', 0)
+            ->assertJsonPath('data.share_count', 0);
+        $this->getJson('/api/v1/playlists/'.$playlist['slug'], $otherHeaders)->assertNotFound();
+    }
+
+    public function test_playlist_owner_can_edit_visibility_and_upload_cover_only_for_their_playlist(): void
+    {
+        [, $ownerHeaders] = $this->account('Playlist Edit Owner');
+        [, $otherHeaders] = $this->account('Playlist Edit Stranger');
+        $playlist = $this->postJson('/api/v1/me/playlists', ['name' => 'Editable Mix'], $ownerHeaders)->assertCreated()->json('data');
+        $cover = UploadedFile::fake()->image('playlist-cover.png', 640, 640);
+        $this->mock(CloudinaryService::class, function ($cloudinary): void {
+            $cloudinary->shouldReceive('uploadImage')->once()->with(
+                Mockery::type(UploadedFile::class),
+                Mockery::any(),
+                Mockery::type('string'),
+            )->andReturn([
+                'secure_url' => 'https://res.cloudinary.com/example/image/upload/playlist-cover.png',
+                'public_id' => 'playlist-cover',
+            ]);
+        });
+
+        $this->post('/api/v1/me/playlists/'.$playlist['id'], [
+            'name' => 'Updated Mix',
+            'visibility' => 'public',
+            'cover_image_file' => $cover,
+        ], $ownerHeaders + ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Updated Mix')
+            ->assertJsonPath('data.visibility', 'public')
+            ->assertJsonPath('data.cover_url', 'https://res.cloudinary.com/example/image/upload/playlist-cover.png');
+
+        $this->getJson('/api/v1/playlists/'.$playlist['slug'], $ownerHeaders)->assertOk()->assertJsonPath('data.can_edit', true);
+        $this->getJson('/api/v1/playlists/'.$playlist['slug'], $otherHeaders)->assertOk()->assertJsonPath('data.can_edit', false);
+        $this->postJson('/api/v1/me/playlists/'.$playlist['id'], ['name' => 'Not Yours'], $otherHeaders)->assertNotFound();
+    }
+
+    public function test_only_playlist_owner_can_delete_and_deletion_cleans_playlist_relations(): void
+    {
+        [$owner, $ownerHeaders] = $this->account('Playlist Delete Owner');
+        [, $otherHeaders] = $this->account('Playlist Delete Stranger');
+        $song = Song::query()->create(['title' => 'Delete Playlist Track', 'slug' => 'delete-playlist-track', 'status' => 'published']);
+        $playlist = Playlist::query()->create([
+            'user_id' => (string) $owner->getKey(),
+            'name' => 'Playlist To Delete',
+            'slug' => 'playlist-to-delete',
+            'type' => 'personal',
+            'visibility' => 'public',
+            'is_system' => false,
+            'status' => 'active',
+        ]);
+        $playlistId = (string) $playlist->getKey();
+        PlaylistSong::query()->create(['playlist_id' => $playlistId, 'song_id' => (string) $song->getKey(), 'position' => 0]);
+        PlaylistFavorite::query()->create(['playlist_id' => $playlistId, 'user_id' => 'delete-test-user']);
+        PlaylistShare::query()->create(['playlist_id' => $playlistId, 'visitor_id' => 'delete-test-visitor', 'source' => 'copy_link']);
+
+        $this->deleteJson('/api/v1/me/playlists/'.$playlistId, [], $otherHeaders)->assertNotFound();
+        $this->assertNotNull(Playlist::query()->find($playlistId));
+        $this->deleteJson('/api/v1/me/playlists/'.$playlistId, [], $ownerHeaders)->assertOk()->assertJsonPath('message', 'Đã xóa playlist.');
+
+        $this->assertNull(Playlist::query()->find($playlistId));
+        $this->assertSame(0, PlaylistSong::query()->where('playlist_id', $playlistId)->count());
+        $this->assertSame(0, PlaylistFavorite::query()->where('playlist_id', $playlistId)->count());
+        $this->assertSame(0, PlaylistShare::query()->where('playlist_id', $playlistId)->count());
+    }
+
+    public function test_playlist_creation_accepts_public_visibility_and_100_character_names(): void
+    {
+        [, $ownerHeaders] = $this->account('Public Playlist Owner');
+        [, $visitorHeaders] = $this->account('Public Playlist Visitor');
+        $name = str_repeat('A', 100);
+
+        $playlist = $this->postJson('/api/v1/me/playlists', [
+            'name' => $name,
+            'visibility' => 'public',
+        ], $ownerHeaders)->assertCreated()->assertJsonPath('data.visibility', 'public')->json('data');
+
+        $this->getJson('/api/v1/playlists/'.$playlist['slug'], $visitorHeaders)->assertOk();
+        $this->getJson('/api/v1/playlists?q='.urlencode($name))->assertOk()->assertJsonPath('data.0.slug', $playlist['slug']);
+        $this->getJson('/api/v1/search?q='.urlencode($name).'&type=playlist')->assertOk()->assertJsonPath('data.playlist.0.slug', $playlist['slug']);
+        $this->postJson('/api/v1/playlists/'.$playlist['slug'].'/favorite', [], $visitorHeaders)->assertOk()->assertJsonPath('favorited', true);
+        $this->postJson('/api/v1/me/playlists', [
+            'name' => str_repeat('B', 101),
+            'visibility' => 'public',
+        ], $ownerHeaders)->assertUnprocessable()->assertJsonValidationErrors('name');
     }
 
     public function test_search_normalizes_names_filters_private_records_and_projects_safe_user_fields(): void
@@ -177,12 +284,48 @@ class LibraryAndFollowTest extends TestCase
             ->assertJsonPath('meta.totals.song', 1);
     }
 
+    public function test_search_finds_song_by_artist_and_includes_its_related_catalog_items(): void
+    {
+        $artist = Artist::query()->create(['name' => 'JustaTee', 'slug' => 'justatee', 'status' => 'active']);
+        $album = Album::query()->create(['title' => 'Unrelated Album Name', 'slug' => 'unrelated-album-name', 'artist_id' => (string) $artist->getKey(), 'status' => 'published']);
+        $song = Song::query()->create([
+            'title' => 'Xin Anh Dừng',
+            'slug' => 'xin-anh-dung-justatee',
+            'artist_name' => 'JustaTee',
+            'album_id' => (string) $album->getKey(),
+            'status' => 'published',
+        ]);
+        SongArtist::query()->create(['song_id' => (string) $song->getKey(), 'artist_id' => (string) $artist->getKey(), 'artist_role' => 'primary']);
+        $playlist = Playlist::query()->create(['name' => 'My Love Songs', 'slug' => 'my-love-songs', 'status' => 'active', 'visibility' => 'public']);
+        PlaylistSong::query()->create(['playlist_id' => (string) $playlist->getKey(), 'song_id' => (string) $song->getKey(), 'position' => 1]);
+        SongVideo::query()->create([
+            'title' => 'Official Music Video',
+            'slug' => 'official-music-video',
+            'song_id' => (string) $song->getKey(),
+            'source' => 'youtube',
+            'external_id' => 'video123',
+            'status' => 'active',
+        ]);
+
+        $this->getJson('/api/v1/search?q=xin%20anh%20dung&type=all')->assertOk()
+            ->assertJsonPath('data.song.0.title', 'Xin Anh Dừng')
+            ->assertJsonPath('data.artist.0.name', 'JustaTee')
+            ->assertJsonPath('data.album.0.title', 'Unrelated Album Name')
+            ->assertJsonPath('data.playlist.0.name', 'My Love Songs')
+            ->assertJsonPath('data.video.0.title', 'Official Music Video');
+
+        $this->getJson('/api/v1/search?q=justatee&type=song')->assertOk()
+            ->assertJsonPath('data.song.0.title', 'Xin Anh Dừng');
+        $this->getJson('/api/v1/search?q=xin%20anh&type=playlist')->assertOk()
+            ->assertJsonPath('data.playlist.0.name', 'My Love Songs');
+    }
+
     public function test_song_play_records_immediately_without_evicting_short_lived_catalog_rollups(): void
     {
         $this->freezeTime();
         $song = Song::query()->create(['title' => 'Cached Play', 'slug' => 'cached-play', 'status' => 'published']);
         $suffix = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.Cache::store('file')->get('api:catalog-content-revision:v1');
-        $keys = ['api:home-discovery:v2:', 'api:home-bootstrap:v14:', 'api:trending-artists:v8:', 'api:charts:v2:full:'];
+        $keys = ['api:home-discovery:v2:', 'api:home-bootstrap:v19:', 'api:trending-artists:v8:', 'api:charts:v7:full:'];
         foreach ($keys as $key) {
             Cache::store('file')->put($key.$suffix, ['cached' => true], now()->addMinute());
         }
@@ -240,7 +383,7 @@ class LibraryAndFollowTest extends TestCase
         }
 
         $revision = (string) Cache::store('file')->get('api:catalog-content-revision:v1', 'initial');
-        $cacheKey = 'api:home-bootstrap:v14:'.now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.$revision;
+        $cacheKey = 'api:home-bootstrap:v19:'.now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.$revision;
         $trendingCacheKey = 'api:trending-artists:v8:'.now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.$revision;
         Cache::store('file')->forget($cacheKey);
         Cache::store('file')->forget($trendingCacheKey);

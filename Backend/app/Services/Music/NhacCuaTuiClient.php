@@ -464,8 +464,19 @@ class NhacCuaTuiClient
                 });
                 $metadata = is_array($metadata) ? $metadata : [];
                 $tier = array_merge($metadata, $stream);
+                $qualityHint = implode(' ', array_filter([
+                    (string) ($tier['format'] ?? ''),
+                    (string) ($tier['quality'] ?? ''),
+                    (string) ($tier['label'] ?? ''),
+                    (string) ($tier['name'] ?? ''),
+                    (string) ($tier['key'] ?? ''),
+                    (string) ($tier['typeUI'] ?? ''),
+                    (string) ($tier['type'] ?? ''),
+                ]));
+                $isLossless = preg_match('/lossless|flac|alac/i', $qualityHint) === 1;
                 $premiumOnly = filter_var($stream['onlyVIP'] ?? $stream['only_vip'] ?? false, FILTER_VALIDATE_BOOLEAN)
-                    || filter_var($metadata['onlyVIP'] ?? $metadata['only_vip'] ?? false, FILTER_VALIDATE_BOOLEAN);
+                    || filter_var($metadata['onlyVIP'] ?? $metadata['only_vip'] ?? false, FILTER_VALIDATE_BOOLEAN)
+                    || $isLossless;
                 // NCT can return a valid FLAC URL on a VIP tier with status=0.
                 // Retain that supplied URL; the authenticated audio proxy checks
                 // Melodify VIP/admin access and handles upstream authorization errors.

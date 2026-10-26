@@ -7,9 +7,11 @@ import { useEffect, useRef, useState } from 'react';
 import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
+import { AddSongsToPlaylistDialog } from '@/components/playlists/AddSongsToPlaylistDialog';
 import FollowButton from '@/components/follow/FollowButton';
 import {
   getArtist,
+  getVisitorId,
   recordArtistView,
   type AlbumRecord,
   type ArtistDetail,
@@ -17,6 +19,7 @@ import {
   type Song,
   type SongVideo,
 } from '@/lib/api';
+import { downloadSongFiles, setSongFavorites } from '@/lib/song-actions';
 
 import styles from '@/components/albums/AlbumDetailPage.module.css';
 import { ArtistNames, type ArtistReference } from './ArtistLink';
@@ -30,6 +33,27 @@ function PauseIcon() {
 
 function ClockIcon() {
   return <span aria-hidden="true" className="grid size-5 place-items-center text-[18px] leading-none">◷</span>;
+}
+
+function SelectionCheckbox({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
+  return (
+    <label className="grid size-6 shrink-0 cursor-pointer place-items-center">
+      <input type="checkbox" checked={checked} onChange={onChange} aria-label={label} className="peer sr-only" />
+      <span aria-hidden="true" className="grid size-5 place-items-center rounded-[4px] border border-white/45 text-[13px] font-bold text-transparent transition-colors peer-checked:border-white peer-checked:bg-white peer-checked:text-[#202020] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-cyan-300 peer-focus-visible:outline-offset-2">✓</span>
+    </label>
+  );
+}
+
+function PlaylistAddIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[18px] shrink-0 fill-none stroke-current stroke-[1.8]"><path d="M4 6h11M4 11h11M4 16h7m8-4v8m-4-4h8" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+function HeartIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[18px] shrink-0 fill-current"><path d="M12 21.1 3.4 12.7a5.8 5.8 0 0 1 8.2-8.2l.4.4.4-.4a5.8 5.8 0 0 1 8.2 8.2L12 21.1Z" /></svg>;
+}
+
+function DownloadIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[18px] shrink-0 fill-none stroke-current stroke-[1.8]"><path d="M12 3v11m0 0 4-4m-4 4-4-4M4 20h16" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
 function ChevronIcon() {
@@ -66,13 +90,19 @@ function SectionHeading({ title, href }: { title: string; href?: string }) {
   );
 }
 
-function ArtistSongRow({ song, index, artist, onPlay, isCurrentTrack, isPlaying }: { song: Song; index: number; artist: ArtistDetail; onPlay: () => void; isCurrentTrack: boolean; isPlaying: boolean }) {
+function ArtistSongRow({ song, index, artist, checked, onToggle, onPlay, onStatus, isCurrentTrack, isPlaying }: { song: Song; index: number; artist: ArtistDetail; checked: boolean; onToggle: () => void; onPlay: () => void; onStatus: (message: string) => void; isCurrentTrack: boolean; isPlaying: boolean }) {
   const imageUrl = song.cover_url || artist.avatar_url || fallbackCover;
   const artists = songArtists(song);
+  const checkboxVisibility = checked ? 'opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100';
 
   return (
-    <li className={`${styles.songRow} group grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 rounded-lg px-2 py-2.5 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px_32px] sm:gap-4`}>
-      <span className="grid size-6 place-items-center text-[13px] text-white/70">{index + 1}</span>
+    <li className={`${styles.songRow} song-row-menu-host group grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 rounded-lg px-2 py-2.5 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px_32px] sm:gap-4`}>
+      <div className="relative grid size-6 place-items-center justify-self-center">
+        <span className={`text-[13px] text-white/70 ${checked ? 'hidden' : 'group-hover:hidden'}`}>{index + 1}</span>
+        <div className={`absolute inset-0 grid place-items-center ${checkboxVisibility}`}>
+          <SelectionCheckbox checked={checked} label={`Chọn ${song.title}`} onChange={onToggle} />
+        </div>
+      </div>
       <div className="flex min-w-0 items-center gap-3">
         <div className="group/cover relative size-11 shrink-0 overflow-hidden rounded-[4px]">
           <div role="img" aria-label={`Ảnh bìa ${song.title}`} className="size-full bg-cover" style={{ backgroundImage: `url("${imageUrl}")`, backgroundPosition: 'center 25%' }} />
@@ -84,7 +114,7 @@ function ArtistSongRow({ song, index, artist, onPlay, isCurrentTrack, isPlaying 
       </div>
       <ArtistNames artists={artists} className="hidden truncate text-[13px] text-white/65 sm:block" />
       <span className="text-right text-[13px] text-white/75">{formatDuration(song.duration_seconds)}</span>
-      <SongRowActionMenu song={song} buttonClassName="pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100" />
+      <SongRowActionMenu song={song} onStatus={onStatus} buttonClassName="pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100" />
     </li>
   );
 }
@@ -176,12 +206,15 @@ function ArtistBioModal({ artist, onClose }: { artist: ArtistDetail; onClose: ()
 
 export default function ArtistDetailPage({ slug }: { slug: string }) {
   const router = useRouter();
-  const { track, isPlaying, playSong, togglePlay } = usePlayerControls();
+  const { track, isPlaying, isPremium, requestVipAccess, playSong, togglePlay } = usePlayerControls();
   const artistHeroRef = useRef<HTMLElement | null>(null);
   const [request, setRequest] = useState({ slug: '', artist: null as ArtistDetail | null, isLoading: true, error: '' });
   const [updatedFollowers, setUpdatedFollowers] = useState<number | null>(null);
   const [isBioOpen, setIsBioOpen] = useState(false);
   const [showCompactSongsHeader, setShowCompactSongsHeader] = useState(false);
+  const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
+  const [isPlaylistDialogOpen, setIsPlaylistDialogOpen] = useState(false);
+  const [songActionStatus, setSongActionStatus] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -200,6 +233,8 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
           setRequest({ slug, artist, isLoading: false, error: '' });
           setUpdatedFollowers(null);
           setIsBioOpen(false);
+          setSelectedSongIds([]);
+          setSongActionStatus('');
           void recordArtistView(artist.id).catch(() => {
             // Analytics must not prevent the artist page from loading.
           });
@@ -249,6 +284,8 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
   }
 
   const songs = artist.songs ?? artist.featured_songs ?? [];
+  const selectedSongs = songs.filter((song) => selectedSongIds.includes(song.id));
+  const allSongsSelected = songs.length > 0 && selectedSongs.length === songs.length;
   const albums = artist.albums ?? [];
   const playlists = artist.playlists ?? [];
   const videos = artist.videos ?? [];
@@ -274,6 +311,32 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
     }
 
     playSong(song, songs);
+  };
+
+  const toggleSongSelection = (songId: string) => {
+    setSelectedSongIds((current) => current.includes(songId) ? current.filter((id) => id !== songId) : [...current, songId]);
+  };
+
+  const toggleAllSongs = () => {
+    setSelectedSongIds(allSongsSelected ? [] : songs.map((song) => song.id));
+  };
+
+  const handleAddSelectedToFavorites = async () => {
+    const results = await setSongFavorites(selectedSongs, true, getVisitorId());
+    const addedCount = results.filter((result) => result.status === 'fulfilled').length;
+    const failedCount = results.length - addedCount;
+    setSongActionStatus(failedCount === 0
+      ? `Đã thêm ${addedCount} bài vào Yêu thích.`
+      : `Đã thêm ${addedCount} bài; ${failedCount} bài chưa cập nhật được.`);
+  };
+
+  const handleDownloadSelected = () => {
+    if (!isPremium && selectedSongs.some((song) => song.premium_only)) {
+      requestVipAccess();
+      return;
+    }
+    downloadSongFiles(selectedSongs);
+    setSongActionStatus(`Đang tải ${selectedSongs.length} bài hát.`);
   };
 
   return (
@@ -309,20 +372,33 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
 
       <section className="mx-auto w-full max-w-[1582px] px-5 pt-8 sm:px-8 lg:px-7" aria-label={`Bài hát của ${artist.name}`}>
         <h2 className="mb-4 text-[26px] font-bold text-white sm:text-[30px]">Bài hát</h2>
-        <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px_32px] sm:gap-4">
-          <span>#</span>
-          <span>Tiêu đề</span>
-          <span className="hidden sm:block">Nghệ sĩ</span>
-          <span className="justify-self-end"><ClockIcon /></span>
-          <span aria-hidden="true" />
-        </div>
+        {selectedSongIds.length > 0 ? (
+          <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 border-b border-white/10 px-2 pb-2 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px_32px] sm:gap-4" aria-label="Thao tác với bài hát đã chọn">
+            <SelectionCheckbox checked={allSongsSelected} onChange={toggleAllSongs} label="Chọn tất cả bài hát" />
+            <div className="col-span-3 flex min-w-0 flex-wrap items-center gap-2 sm:col-span-4">
+              <button type="button" onClick={() => setIsPlaylistDialogOpen(true)} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><PlaylistAddIcon />Thêm vào playlist</button>
+              <button type="button" onClick={() => void handleAddSelectedToFavorites()} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><HeartIcon />Thêm vào Yêu thích</button>
+              <button type="button" onClick={handleDownloadSelected} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><DownloadIcon />Tải về</button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px_32px] sm:gap-4">
+            <span>#</span>
+            <span>Tiêu đề</span>
+            <span className="hidden sm:block">Nghệ sĩ</span>
+            <span className="justify-self-end"><ClockIcon /></span>
+            <span aria-hidden="true" />
+          </div>
+        )}
         {songs.length > 0 ? (
           <ol className="mt-2 space-y-0.5">
-            {songs.map((song, index) => <ArtistSongRow key={song.id} song={song} index={index} artist={artist} onPlay={() => handlePlaySong(song)} isCurrentTrack={track?.id === song.id} isPlaying={isPlaying && track?.id === song.id} />)}
+            {songs.map((song, index) => <ArtistSongRow key={song.id} song={song} index={index} artist={artist} checked={selectedSongIds.includes(song.id)} onToggle={() => toggleSongSelection(song.id)} onStatus={setSongActionStatus} onPlay={() => handlePlaySong(song)} isCurrentTrack={track?.id === song.id} isPlaying={isPlaying && track?.id === song.id} />)}
           </ol>
         ) : (
           <p className="mt-8 rounded-lg bg-[#30443f] px-4 py-5 text-sm text-white/70">Nghệ sĩ chưa có bài hát nào.</p>
         )}
+        <span className="sr-only" aria-live="polite">{songActionStatus}</span>
+        <AddSongsToPlaylistDialog songs={selectedSongs} open={isPlaylistDialogOpen} onClose={() => setIsPlaylistDialogOpen(false)} onAdded={setSongActionStatus} />
       </section>
 
       <section className="mx-auto w-full max-w-[1582px] px-5 pt-12 sm:px-8 lg:px-7" aria-labelledby="artist-albums-heading">

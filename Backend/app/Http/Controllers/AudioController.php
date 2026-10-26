@@ -29,7 +29,7 @@ class AudioController extends Controller
 
         abort_if(
             (bool) ($audio?->premium_only ?? false)
-                && ! (bool) ($request->user()?->is_premium ?? false)
+                && ! ($request->user()?->hasPremiumAccess() ?? false)
                 && ! $request->user('admin'),
             403,
             'Bài hát này dành cho tài khoản VIP đã nạp.',
@@ -112,9 +112,20 @@ class AudioController extends Controller
 
     private function authorizeQuality(array $option, Request $request): void
     {
+        $qualityHint = implode(' ', array_filter([
+            (string) ($option['format'] ?? ''),
+            (string) ($option['quality'] ?? ''),
+            (string) ($option['label'] ?? ''),
+            (string) ($option['name'] ?? ''),
+            (string) ($option['key'] ?? ''),
+            (string) ($option['typeUI'] ?? ''),
+            (string) ($option['type'] ?? ''),
+        ]));
+        $isLossless = preg_match('/lossless|flac|alac/i', $qualityHint) === 1;
+
         abort_if(
-            (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false)
-                && ! (bool) ($request->user()?->is_premium ?? false)
+            ((bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false) || $isLossless)
+                && ! ($request->user()?->hasPremiumAccess() ?? false)
                 && ! $request->user('admin'),
             403,
             'Chất lượng này dành cho tài khoản VIP.',

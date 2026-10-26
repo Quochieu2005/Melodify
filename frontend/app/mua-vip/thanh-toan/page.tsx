@@ -3,15 +3,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useLoginModal } from "@/components/auth/LoginModalProvider";
 import {
   ApiError,
   createVipCheckout,
+  getVipPaymentMethods,
   getSubscriptionPlans,
   type SubscriptionPlanRecord,
   type VipCheckoutOrder,
+  type VipPaymentGatewayOption,
   type VipPaymentMethod,
 } from "@/lib/api";
 
@@ -20,29 +22,13 @@ const paymentMethods: {
   label: string;
   logos: string[];
 }[] = [
-  {
-    id: "card",
-    label: "Thẻ tín dụng / Thẻ ghi nợ",
-    logos: ["f_visa.png", "f_master.png"],
-  },
-  { id: "shopeepay", label: "Ví ShopeePay", logos: ["f_shopeepay.png"] },
-  {
-    id: "atm",
-    label: "Thẻ ATM đã đăng ký Internet Banking",
-    logos: ["f_atm.png"],
-  },
   { id: "momo", label: "Ví MoMo", logos: ["f_momo.png"] },
-  { id: "zalopay", label: "Ví ZaloPay", logos: ["f_zalopay.png"] },
   {
     id: "vnpay",
-    label: "Thanh toán qua VNPAY QR Code",
+    label: "VNPAY QR Code",
     logos: ["f_vnpay.png"],
   },
-  {
-    id: "viettelpay",
-    label: "Ví Viettel Money – VietQR",
-    logos: ["f_viettelpay_20210927.png"],
-  },
+  { id: "zalopay", label: "Ví ZaloPay", logos: ["f_zalopay.png"] },
 ];
 
 function formatMoney(amount: number) {
@@ -70,8 +56,9 @@ export default function VipCheckoutPage() {
   const router = useRouter();
   const { user, openLogin } = useLoginModal();
   const [plans, setPlans] = useState<SubscriptionPlanRecord[]>([]);
+  const [gateways, setGateways] = useState<VipPaymentGatewayOption[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
-  const [method, setMethod] = useState<VipPaymentMethod>("card");
+  const [method, setMethod] = useState<VipPaymentMethod>("momo");
   const [planSelectOpen, setPlanSelectOpen] = useState(false);
   const [activePlanIndex, setActivePlanIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -87,12 +74,22 @@ export default function VipCheckoutPage() {
     [plans, selectedPlanId],
   );
 
-  async function loadPlans() {
+  const loadPlans = useCallback(async (isActive: () => boolean = () => true) => {
     setLoading(true);
     setError("");
     try {
-      const response = await getSubscriptionPlans();
+      const [response, gatewayResponse] = await Promise.all([
+        getSubscriptionPlans(),
+        getVipPaymentMethods(),
+      ]);
+      if (!isActive()) return;
       setPlans(response.data);
+      setGateways(gatewayResponse.data);
+      setMethod((current) =>
+        gatewayResponse.data.some((gateway) => gateway.id === current && gateway.enabled)
+          ? current
+          : (gatewayResponse.data.find((gateway) => gateway.enabled)?.id ?? "momo"),
+      );
       const requestedPlan = new URLSearchParams(window.location.search).get(
         "plan",
       );
@@ -104,38 +101,21 @@ export default function VipCheckoutPage() {
             : (response.data[0]?.id ?? ""),
       );
     } catch {
-      setError("Chưa tải được thông tin gói VIP. Vui lòng thử lại.");
+      if (isActive()) {
+        setError("Chưa tải được thông tin gói hoặc phương thức thanh toán. Vui lòng thử lại.");
+      }
     } finally {
-      setLoading(false);
+      if (isActive()) setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    getSubscriptionPlans()
-      .then((response) => {
-        if (cancelled) return;
-        setPlans(response.data);
-        const requestedPlan = new URLSearchParams(window.location.search).get(
-          "plan",
-        );
-        setSelectedPlanId(
-          response.data.some((plan) => plan.id === requestedPlan)
-            ? requestedPlan!
-            : (response.data[0]?.id ?? ""),
-        );
-      })
-      .catch(() => {
-        if (!cancelled)
-          setError("Chưa tải được thông tin gói VIP. Vui lòng thử lại.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void Promise.resolve().then(() => loadPlans(() => !cancelled));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadPlans]);
 
   useEffect(() => {
     if (planSelectOpen) planOptionRefs.current[activePlanIndex]?.focus();
@@ -162,12 +142,17 @@ export default function VipCheckoutPage() {
 
   async function submitCheckout() {
     if (!selectedPlan) return;
+    if (!gateways.some((gateway) => gateway.id === method && gateway.enabled)) {
+      setError("Cổng thanh toán đang chọn chưa được cấu hình. Vui lòng chọn cổng khác hoặc thử lại sau.");
+      return;
+    }
     setError("");
     setSubmitting(true);
     setOrder(null);
     try {
       const response = await createVipCheckout(selectedPlan.id, method);
       setOrder(response.data);
+      window.location.assign(response.data.checkout_url);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) {
         setError("Đăng nhập để tạo yêu cầu thanh toán.");
@@ -267,39 +252,64 @@ export default function VipCheckoutPage() {
               </h2>
               <fieldset className="p-3 sm:p-5">
                 <legend className="sr-only">Phương thức thanh toán</legend>
-                {paymentMethods.map((item) => (
-                  <label
-                    key={item.id}
-                    className={`flex min-h-[58px] cursor-pointer items-center gap-3 rounded-lg px-3 transition-colors hover:bg-[#f4f8fa] ${method === item.id ? "bg-[#f4f9fc]" : ""}`}
-                  >
-                    <input
-                      type="radio"
-                      name="vip-payment-method"
-                      value={item.id}
-                      checked={method === item.id}
-                      onChange={() => {
-                        setMethod(item.id);
-                        setOrder(null);
-                      }}
-                      className="size-4 accent-[#249be8]"
-                    />
-                    <span className="flex w-[54px] shrink-0 items-center gap-1">
-                      {item.logos.map((file) => (
-                        <Image
-                          key={file}
-                          src={`/vip/${file}`}
-                          alt=""
-                          width={45}
-                          height={26}
-                          className="max-h-7 w-auto max-w-[52px] object-contain"
-                        />
-                      ))}
-                    </span>
-                    <span className="text-[13px] text-[#526574] sm:text-sm">
-                      {item.label}
-                    </span>
-                  </label>
-                ))}
+                {paymentMethods.map((item) => {
+                  const enabled = gateways.some(
+                    (gateway) => gateway.id === item.id && gateway.enabled,
+                  );
+
+                  return (
+                    <label
+                      key={item.id}
+                      className={`flex min-h-[58px] items-center gap-3 rounded-lg px-3 transition-colors ${enabled ? "cursor-pointer hover:bg-[#f4f8fa]" : "cursor-not-allowed opacity-50"} ${method === item.id ? "bg-[#f4f9fc]" : ""}`}
+                    >
+                      <input
+                        type="radio"
+                        name="vip-payment-method"
+                        value={item.id}
+                        checked={method === item.id}
+                        disabled={!enabled}
+                        onChange={() => {
+                          setMethod(item.id);
+                          setOrder(null);
+                        }}
+                        className="size-4 accent-[#249be8]"
+                      />
+                      <span className="flex w-[54px] shrink-0 items-center gap-1">
+                        {item.logos.map((file) => (
+                          <Image
+                            key={file}
+                            src={`/vip/${file}`}
+                            alt=""
+                            width={45}
+                            height={26}
+                            className="max-h-7 w-auto max-w-[52px] object-contain"
+                          />
+                        ))}
+                      </span>
+                      <span className="min-w-0 flex-1 text-[13px] text-[#526574] sm:text-sm">
+                        {item.label}
+                        <span className={`mt-0.5 block text-xs ${enabled ? "text-[#17804c]" : "text-[#87949c]"}`}>
+                          {enabled ? "Sẵn sàng thanh toán" : "Chưa cấu hình thông tin merchant"}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+                {!gateways.some((gateway) => gateway.enabled) ? (
+                  <p className="px-3 pb-2 text-xs leading-5 text-amber-700" role="status">
+                    Chưa có cổng thanh toán khả dụng. Quản trị viên cần cấu hình thông tin sandbox/live trong Backend trước khi nhận thanh toán.
+                  </p>
+                ) : null}
+                {method === "vnpay" ? (
+                  <p className="mx-3 mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-900" role="note">
+                    VNPAY sẽ mở mã QR. Hãy quét bằng ứng dụng ngân hàng có hỗ trợ VNPAY-QR; không phải ứng dụng ví nào cũng quét được. Backend cũng cần HTTPS công khai để VNPAY gửi kết quả xác nhận.
+                  </p>
+                ) : null}
+                {method === "zalopay" ? (
+                  <p className="mx-3 mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-900" role="note">
+                    ZaloPay sẽ mở cổng thanh toán với phương thức ví ZaloPay. VIP chỉ được kích hoạt sau khi Backend nhận và xác minh callback từ ZaloPay.
+                  </p>
+                ) : null}
               </fieldset>
             </section>
 
@@ -483,14 +493,15 @@ export default function VipCheckoutPage() {
                 <button
                   type="button"
                   onClick={() => void submitCheckout()}
-                  disabled={!selectedPlan || submitting}
+                  disabled={!selectedPlan || submitting || !gateways.some((gateway) => gateway.id === method && gateway.enabled)}
                   className="h-12 w-full rounded-lg bg-gradient-to-r from-[#f4b20d] to-[#ffd20a] text-sm font-bold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-55"
                 >
-                  {submitting ? "Đang tạo yêu cầu…" : "Tạo yêu cầu thanh toán"}
+                  {submitting
+                    ? "Đang kết nối cổng thanh toán…"
+                    : `Thanh toán qua ${paymentMethods.find((item) => item.id === method)?.label ?? "cổng thanh toán"}`}
                 </button>
                 <p className="mt-3 text-[11px] leading-5 text-[#77858d]">
-                  Yêu cầu sẽ được ghi nhận ở trạng thái chờ xác nhận. Tài khoản
-                  VIP chỉ được kích hoạt sau khi thanh toán được xác nhận.
+                  Bạn sẽ được chuyển sang cổng thanh toán bảo mật. VIP chỉ được kích hoạt sau khi Backend xác minh IPN/chữ ký từ nhà cung cấp.
                 </p>
               </div>
             </aside>
@@ -515,9 +526,11 @@ export default function VipCheckoutPage() {
             </p>
             <p className="mt-1">
               Mã giao dịch: <strong>{order.payment_code}</strong> ·{" "}
-              {formatMoney(order.amount)}. Hệ thống chưa kích hoạt VIP cho đến
-              khi cổng thanh toán xác nhận giao dịch.
+              {formatMoney(order.amount)}. Nếu trang thanh toán chưa tự mở, dùng nút bên dưới.
             </p>
+            <a className="mt-3 inline-flex rounded-md bg-emerald-800 px-4 py-2 font-semibold text-white" href={order.checkout_url}>
+              Mở trang thanh toán
+            </a>
           </div>
         ) : null}
       </div>
@@ -525,14 +538,9 @@ export default function VipCheckoutPage() {
       <footer className="border-t border-black/5 bg-white px-4 py-5">
         <div className="mx-auto flex max-w-[970px] flex-wrap items-center justify-center gap-x-6 gap-y-3">
           {[
-            "f_visa.png",
-            "f_master.png",
+            "f_momo.png",
             "f_vnpay.png",
             "f_zalopay.png",
-            "f_momo.png",
-            "f_shopeepay.png",
-            "f_atm.png",
-            "f_vcoin.png",
           ].map((file) => (
             <Image
               key={file}

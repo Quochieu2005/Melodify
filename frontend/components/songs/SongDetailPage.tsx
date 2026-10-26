@@ -7,9 +7,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArtistLink, ArtistNames } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { usePlayer } from '@/components/player';
-import { ApiError, getArtist, getSong, getSongDownloadUrl, getVisitorId, recordSongShare, toggleSongFavorite, type AlbumRecord, type Lyric, type Song, type SongArtistCredit } from '@/lib/api';
+import { ApiError, getArtist, getSong, getSongLyrics, getSongDownloadUrl, getVisitorId, recordSongShare, toggleSongFavorite, type AlbumRecord, type Lyric, type Song, type SongArtistCredit } from '@/lib/api';
 import { recentAlbumItem, recentSongItem, recordRecentItem } from '@/lib/recent-history';
-import { parseSyncedLyrics } from '@/lib/lyrics';
+import { activeLyricIndex, getPlainLyrics, parseSyncedLyrics } from '@/lib/lyrics';
+import { LyricText } from '@/components/player/LyricText';
 
 const fallbackCover = '/images/cover-placeholder.svg';
 const sidebarSurfaceStyle = {
@@ -45,55 +46,29 @@ function formatCount(count: number | undefined) {
 }
 
 function LyricBlock({ lyrics, elapsed, isActiveTrack, onSeek }: { lyrics: Lyric[]; elapsed: number; isActiveTrack: boolean; onSeek: (seconds: number) => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const lyricScrollRef = useRef<HTMLDivElement | null>(null);
-  const activeLineRef = useRef<HTMLButtonElement | null>(null);
   const syncedLines = useMemo(() => parseSyncedLyrics(lyrics), [lyrics]);
-  const activeIndex = useMemo(() => {
-    if (syncedLines.length === 0) return -1;
-    const currentIndex = syncedLines.reduce((active, line, index) => line.time <= elapsed ? index : active, -1);
-    return currentIndex >= 0 || !isActiveTrack ? currentIndex : 0;
-  }, [elapsed, isActiveTrack, syncedLines]);
-  const content = lyrics.map((lyric) => (lyric.content || lyric.plain_lyrics || '').trim()).filter(Boolean).join('\n\n');
-  const lines = content.split('\n');
-  const shouldCollapse = lines.length > 9;
-  const visibleContent = shouldCollapse && !expanded ? lines.slice(0, 9).join('\n') : content;
+  const activeIndex = isActiveTrack ? activeLyricIndex(syncedLines, elapsed) : -1;
+  const content = useMemo(() => getPlainLyrics(lyrics), [lyrics]);
+  const hasPlainText = lyrics.some((lyric) => lyric.plain_lyrics?.trim() || (!lyric.is_synced && lyric.content?.trim()));
 
-  useEffect(() => {
-    const container = lyricScrollRef.current;
-    const activeLine = activeLineRef.current;
-    if (!isActiveTrack || activeIndex < 0 || !container || !activeLine) return;
-
-    const lineTop = activeLine.offsetTop;
-    const lineBottom = lineTop + activeLine.offsetHeight;
-    const visibleTop = container.scrollTop;
-    const visibleBottom = visibleTop + container.clientHeight;
-
-    if (lineTop < visibleTop || lineBottom > visibleBottom) {
-      container.scrollTo({
-        top: Math.max(0, lineTop - (container.clientHeight - activeLine.offsetHeight) / 2),
-        behavior: 'smooth',
-      });
-    }
-  }, [activeIndex, isActiveTrack]);
-
-  if (syncedLines.length > 0) {
+  // Read the complete plain transcript when browsing. During playback use the
+  // complete saved timed version, just like admin; never align the two by guess.
+  if (syncedLines.length > 0 && (isActiveTrack || !hasPlainText)) {
     return (
-      <div ref={lyricScrollRef} className="lyric-scroll max-h-[430px] overflow-x-hidden overflow-y-auto pr-2">
+      <div role="region" aria-label="Lời bài hát đồng bộ">
         <div className="space-y-2">
           {syncedLines.map((line, index) => (
             <button
               type="button"
               key={`${line.time}-${index}`}
               onClick={() => onSeek(line.time)}
-              ref={(element) => {
-                if (index === activeIndex) activeLineRef.current = element;
-              }}
+              data-lyric-time={line.time}
+              aria-label={line.text}
               aria-current={index === activeIndex ? 'true' : undefined}
               title="Phát từ câu này"
               className={`block w-full origin-left text-left text-[15px] font-semibold leading-6 transition-all duration-500 hover:text-cyan-200 ${index === activeIndex ? 'scale-[1.02] text-cyan-300 drop-shadow-[0_0_12px_rgba(34,211,238,0.25)]' : 'text-white/65'}`}
             >
-              {line.text}
+              <LyricText line={line} elapsed={elapsed} active={index === activeIndex} />
             </button>
           ))}
         </div>
@@ -104,10 +79,7 @@ function LyricBlock({ lyrics, elapsed, isActiveTrack, onSeek }: { lyrics: Lyric[
   if (!content) return <p className="text-sm text-white/60">Bài hát chưa có lời.</p>;
 
   return (
-    <>
-      <p className="whitespace-pre-line text-[15px] font-semibold leading-6 text-white/90">{visibleContent}</p>
-      {shouldCollapse ? <button type="button" onClick={() => setExpanded((value) => !value)} className="mt-5 inline-flex items-center gap-3 font-bold text-white transition-colors hover:text-cyan-300">{expanded ? 'Thu gọn' : 'Xem thêm'} <span aria-hidden="true" className={`size-2 rotate-45 border-r-2 border-b-2 transition-transform ${expanded ? '-translate-y-0.5 rotate-[225deg]' : ''}`} /></button> : null}
-    </>
+    <p data-plain-lyrics className="whitespace-pre-line text-[15px] font-semibold leading-6 text-white/90">{content}</p>
   );
 }
 
@@ -134,7 +106,7 @@ function ArtistPanel({ artists }: { artists: SongArtistCredit[] }) {
 }
 
 export default function SongDetailPage({ slug }: { slug: string }) {
-  const { track, isPlaying, elapsed, playSong, togglePlay, seek, refreshTrackMetadata } = usePlayer();
+  const { track, isPlaying, isPremium, elapsed, requestVipAccess, playSong, togglePlay, seek, refreshTrackMetadata } = usePlayer();
   const [song, setSong] = useState<(Song & { lyrics: Lyric[] }) | null>(null);
   const [featuredAlbumState, setFeaturedAlbumState] = useState<{ artistKey: string; albums: AlbumRecord[] }>({ artistKey: '', albums: [] });
   const [error, setError] = useState('');
@@ -152,7 +124,11 @@ export default function SongDetailPage({ slug }: { slug: string }) {
       setIsLoading(true);
       setError('');
       try {
-        const songResponse = (await getSong(slug, getVisitorId())).data;
+        const [response, lyricsResponse] = await Promise.all([
+          getSong(slug, getVisitorId()),
+          getSongLyrics(slug),
+        ]);
+        const songResponse = { ...response.data, lyrics: lyricsResponse.data };
         if (cancelled) return;
         setSong(songResponse);
         recordRecentItem(recentSongItem(songResponse));
@@ -206,9 +182,7 @@ export default function SongDetailPage({ slug }: { slug: string }) {
 
     const target = pendingLyricSeekRef.current;
     pendingLyricSeekRef.current = null;
-    const timer = window.setTimeout(() => seek(target), 0);
-
-    return () => window.clearTimeout(timer);
+    seek(target);
   }, [currentTrack, seek]);
 
   if (isLoading) return <main style={sidebarSurfaceStyle} className="min-h-[calc(100vh-80px)] px-5 pb-20 pt-8 sm:px-8 lg:px-10"><div className="h-[620px] animate-pulse rounded-2xl bg-[#30443f]" /></main>;
@@ -320,7 +294,15 @@ export default function SongDetailPage({ slug }: { slug: string }) {
               <p role="status" aria-live="polite" className="sr-only">{engagementStatus}</p>
               <div className="mt-6 flex flex-wrap gap-4">
                 <button type="button" onClick={handlePlay} className="inline-flex h-11 items-center gap-3 rounded-full bg-[#00cfe3] px-8 text-sm font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">{currentTrack && isPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}{currentTrack && isPlaying ? 'Tạm dừng' : 'Phát'}</button>
-                <a href={currentTrack && track?.downloadUrl ? track.downloadUrl : getSongDownloadUrl(song, currentTrack ? track?.selectedQualityId : null)} download className="inline-flex h-11 items-center gap-3 rounded-full bg-white/15 px-8 text-sm font-bold transition-colors hover:bg-white/25"><DownloadIcon />Tải về</a>
+                <a href={currentTrack && track?.downloadUrl ? track.downloadUrl : getSongDownloadUrl(song, currentTrack ? track?.selectedQualityId : null)} onClick={(event) => {
+                  const selectedQuality = currentTrack
+                    ? track?.audioQualities?.find((quality) => quality.quality_id === track.selectedQualityId)
+                    : undefined;
+                  if ((song.premium_only || selectedQuality?.premium_only) && !isPremium) {
+                    event.preventDefault();
+                    requestVipAccess();
+                  }
+                }} download className="inline-flex h-11 items-center gap-3 rounded-full bg-white/15 px-8 text-sm font-bold transition-colors hover:bg-white/25"><DownloadIcon />Tải về</a>
               </div>
             </div>
         </div>

@@ -67,7 +67,7 @@ function TrendingSong({ artist }: { artist: HomeTrendingArtist }) {
   }
 
   return (
-    <article className={`${rowStyles.songRow} group/song grid min-w-0 grid-cols-[minmax(0,1fr)_32px] items-center gap-2 rounded-lg px-2 py-2.5 sm:gap-3`}>
+    <article className={`${rowStyles.songRow} song-row-menu-host group/song grid min-w-0 grid-cols-[minmax(0,1fr)_32px] items-center gap-2 rounded-lg px-2 py-2.5 sm:gap-3`}>
       <div className="flex min-w-0 items-center gap-3">
         <div className="group/cover relative size-[76px] shrink-0 overflow-hidden rounded-md sm:size-[92px]">
           <span aria-hidden="true" className="block size-full bg-cover bg-center" style={imageStyle(cover)} />

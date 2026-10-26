@@ -14,6 +14,10 @@ $groups = [
         'label' => 'Nội dung âm nhạc',
         'description' => 'Bài hát, album, chủ đề, thể loại, playlist và nghệ sĩ.',
     ],
+    'uploads.review' => [
+        'label' => 'Duyệt bài hát tải lên',
+        'description' => 'Xem, nghe thử và duyệt hoặc từ chối bài hát do người dùng gửi.',
+    ],
     'users.manage' => [
         'label' => 'Người dùng',
         'description' => 'Xem, sửa và khóa tài khoản người dùng đã đăng ký.',

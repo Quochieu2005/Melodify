@@ -25,6 +25,11 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+.song-row-menu-host:has(button[aria-label^="Tùy chọn bài"][aria-expanded="true"]) {
+  position: relative;
+  z-index: 50 !important;
+}
+
 /* Banner images are clipped at the rendered image layer, not only at the carousel track. */
 .banner-clip {
   border-radius: 16px !important;
@@ -45,6 +50,28 @@ body {
 }
 
 .lyric-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.sidebar-scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.playlist-dialog-scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.playlist-dialog-scrollbar-hidden::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;

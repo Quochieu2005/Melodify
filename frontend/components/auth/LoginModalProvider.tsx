@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
-import { apiFetch, clearAuthSession, type AuthResponse, type AuthUser } from '@/lib/api';
+import { apiFetch, clearAuthSession, getCurrentUser, type AuthResponse, type AuthUser } from '@/lib/api';
 const LoginModal = dynamic(() => import('./LoginModal'));
 
 type LoginModalContextValue = {
@@ -12,6 +12,7 @@ type LoginModalContextValue = {
   user: AuthUser | null;
   authReady: boolean;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const LoginModalContext = createContext<LoginModalContextValue | null>(null);
@@ -87,7 +88,18 @@ export function LoginModalProvider({ children, variant = 'default' }: { children
     }
   }, []);
 
-  const value = useMemo(() => ({ openLogin, user, authReady, logout }), [authReady, logout, openLogin, user]);
+  const refreshUser = useCallback(async () => {
+    try {
+      const response = await getCurrentUser();
+      setUser(response.user);
+      window.localStorage.setItem('melodify_auth_user', JSON.stringify(response.user));
+      window.dispatchEvent(new Event('melodify-auth-changed'));
+    } catch {
+      // Keep the local session intact if refreshing profile data is temporarily unavailable.
+    }
+  }, []);
+
+  const value = useMemo(() => ({ openLogin, user, authReady, logout, refreshUser }), [authReady, logout, openLogin, refreshUser, user]);
 
   return (
     <LoginModalContext.Provider value={value}>
