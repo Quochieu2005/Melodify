@@ -2,17 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { usePlayerControls } from '@/components/player/PlayerProvider';
+import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
+import { usePlayer, usePlayerControls } from '@/components/player/PlayerProvider';
+import { copyTextToClipboard } from '@/lib/clipboard';
 import {
   getForYouArtists,
   getForYouSong,
   getSong,
+  getSongLyrics,
+  getVisitorId,
   listAllGenres,
+  recordSongShare,
+  toggleSongFavorite,
   type Artist,
   type GenreRecord,
+  type Lyric,
   type Song,
 } from '@/lib/api';
-import { recentItemsByCategory } from '@/lib/recent-history';
+import { LyricText } from '@/components/player/LyricText';
+import { activeLyricIndex, formatPlaybackTime, getPlainLyrics, parseSyncedLyrics } from '@/lib/lyrics';
+import { recentItemsByCategory, songPath } from '@/lib/recent-history';
 
 type Step = 1 | 2 | 3;
 
@@ -33,6 +42,103 @@ function toggleSelection(current: string[], id: string) {
   return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
 }
 
+function HeartIcon({ filled }: { filled: boolean }) {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-current"><path d="M12 21.1 3.4 12.7a5.8 5.8 0 0 1 8.2-8.2l.4.4.4-.4a5.8 5.8 0 0 1 8.2 8.2L12 21.1Z" className={filled ? 'text-[#ff3b66]' : 'text-white'} /></svg>;
+}
+
+function ShareIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-current"><path d="M14 3 23 11l-9 8v-5C8.2 14 4.4 15.5 1 21c.7-8 4.3-12.1 13-12.8V3Z" /></svg>;
+}
+
+function formatCount(count: number | undefined) {
+  return new Intl.NumberFormat('vi-VN').format(count ?? 0);
+}
+
+type ForYouSong = Song & {
+  lyrics?: Lyric[];
+  lyricsStatus?: 'loading' | 'ready' | 'error';
+};
+
+async function loadForYouLyrics(song: Song): Promise<ForYouSong> {
+  try {
+    const { data } = await getSongLyrics(song.slug || song.id);
+    return { ...song, lyrics: data, lyricsStatus: 'ready' };
+  } catch {
+    return { ...song, lyrics: [], lyricsStatus: 'error' };
+  }
+}
+
+function ForYouLyrics({ song, onRetry }: { song: ForYouSong; onRetry: () => void }) {
+  const { track, elapsed, isPlaying, playSong, seek, togglePlay } = usePlayer();
+  const pendingSeekRef = useRef<number | null>(null);
+  const currentResult = { status: song.lyricsStatus ?? 'loading', lyrics: song.lyrics ?? [] };
+  const syncedLines = useMemo(() => parseSyncedLyrics(currentResult.lyrics), [currentResult.lyrics]);
+  const isActiveTrack = track?.id === song.id;
+  const plainLyrics = useMemo(() => getPlainLyrics(currentResult.lyrics), [currentResult.lyrics]);
+  const activeIndex = isActiveTrack ? activeLyricIndex(syncedLines, elapsed) : -1;
+
+  useEffect(() => {
+    const target = pendingSeekRef.current;
+    if (track?.id !== song.id || target === null) return;
+
+    pendingSeekRef.current = null;
+    seek(target);
+  }, [seek, song.id, track?.id]);
+
+  const seekToLyric = (seconds: number) => {
+    if (isActiveTrack) {
+      seek(seconds);
+      if (!isPlaying) togglePlay();
+      return;
+    }
+
+    pendingSeekRef.current = seconds;
+    playSong(song, [song], 'for_you');
+  };
+
+  if (!currentResult || currentResult.status === 'loading') {
+    return <p role="status" className="mt-5 text-sm text-white/55">Đang tải lời bài hát…</p>;
+  }
+  if (currentResult.status === 'error') {
+    return <div role="alert" className="mt-5 flex items-center gap-3 text-sm text-white/55">
+      <span>Không tải được lời bài hát.</span>
+      <button type="button" onClick={onRetry} className="font-semibold text-cyan-200 hover:text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Thử lại</button>
+    </div>;
+  }
+  if (!syncedLines.length && !plainLyrics.trim()) {
+    return <p className="mt-5 text-sm text-white/55">Lời bài hát sẽ sớm được cập nhật...</p>;
+  }
+
+  if (syncedLines.length > 0) {
+    return <div className="mt-5 w-full max-w-[620px]">
+      <div
+        role="region"
+        aria-label={`Lời bài hát ${song.title}; chọn câu để phát từ đó`}
+        className="w-full px-3 text-center"
+      >
+        <div className="space-y-3 py-3">
+          {syncedLines.map((line, index) => <button
+              type="button"
+              key={`${song.id}-${line.time}-${index}`}
+              onClick={() => seekToLyric(line.time)}
+              data-lyric-time={line.time}
+              aria-label={line.text}
+              aria-current={index === activeIndex ? 'true' : undefined}
+              title={`Phát từ ${formatPlaybackTime(line.time)}`}
+              className={`block w-full rounded px-2 py-1 text-center text-sm font-semibold leading-7 transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 sm:text-base ${index === activeIndex ? 'text-cyan-300 drop-shadow-[0_0_12px_rgba(34,211,238,0.25)]' : index < activeIndex ? 'text-white/35 hover:text-white/75' : 'text-white/60 hover:text-white/90'}`}
+            ><LyricText line={line} elapsed={elapsed} active={index === activeIndex} /></button>)}
+        </div>
+      </div>
+    </div>;
+  }
+
+  return <div role="region" aria-label={`Lời bài hát ${song.title}`} className="mt-5 w-full max-w-[620px] px-3 text-center">
+    <div className="space-y-5 py-1">
+      <p className="whitespace-pre-line text-sm font-semibold leading-[3] text-white/65 sm:text-base">{plainLyrics}</p>
+    </div>
+  </div>;
+}
+
 export default function ForYouPage() {
   const router = useRouter();
   const { track, isPlaying, playSong, togglePlay } = usePlayerControls();
@@ -41,13 +147,20 @@ export default function ForYouPage() {
   const [selectedGenreIds, setSelectedGenreIds] = useState<string[]>([]);
   const [selectedArtistIds, setSelectedArtistIds] = useState<string[]>([]);
   const [step, setStep] = useState<Step>(1);
-  const [song, setSong] = useState<Song | null>(null);
+  const [song, setSong] = useState<ForYouSong | null>(null);
   const [isLoadingGenres, setIsLoadingGenres] = useState(true);
   const [isLoadingArtists, setIsLoadingArtists] = useState(false);
   const [isFindingSong, setIsFindingSong] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noMatch, setNoMatch] = useState(false);
   const requestId = useRef(0);
+  const recommendationHistory = useRef<ForYouSong[]>([]);
+  const recommendationIndex = useRef(-1);
+  const [hasPreviousRecommendation, setHasPreviousRecommendation] = useState(false);
+  const [isFavoritePending, setIsFavoritePending] = useState(false);
+  const [isSharePending, setIsSharePending] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [actionStatus, setActionStatus] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -94,25 +207,55 @@ export default function ForYouPage() {
     if (!selectedGenreIds.length || !selectedArtistIds.length) return;
     const currentRequest = ++requestId.current;
     setStep(3);
-    setSong(null);
     setIsFindingSong(true);
     setNoMatch(false);
     setError(null);
+    setActionStatus('');
     try {
-      const response = await getForYouSong(selectedGenreIds, selectedArtistIds, excludeSongIds);
+      const response = await getForYouSong(selectedGenreIds, selectedArtistIds, excludeSongIds, getVisitorId());
       if (currentRequest !== requestId.current) return;
       if (!response.data) {
-        setNoMatch(true);
+        if (recommendationIndex.current >= 0) {
+          setActionStatus('Chưa tìm thấy bài đề xuất tiếp theo. Bạn có thể thử lại sau.');
+        } else {
+          setSong(null);
+          setNoMatch(true);
+        }
         return;
       }
-      setSong(response.data);
-      playSong(response.data, [response.data]);
+      // Read lyrics before starting audio: a long-lived local audio stream can
+      // otherwise block the lyrics request on single-worker PHP dev servers.
+      const recommendedSong = await loadForYouLyrics(response.data);
+      if (currentRequest !== requestId.current) return;
+      setSong(recommendedSong);
+      const nextHistory = [...recommendationHistory.current.slice(0, recommendationIndex.current + 1), recommendedSong];
+      recommendationHistory.current = nextHistory;
+      recommendationIndex.current = nextHistory.length - 1;
+      setHasPreviousRecommendation(recommendationIndex.current > 0);
+      setIsShareOpen(false);
+      playSong(recommendedSong, [recommendedSong], 'for_you');
     } catch {
-      if (currentRequest === requestId.current) setError('Có lỗi khi tìm bài hát. Hãy thử lại.');
+      if (currentRequest === requestId.current) {
+        if (recommendationIndex.current >= 0) setActionStatus('Không tìm được bài tiếp theo. Hãy thử lại.');
+        else setError('Có lỗi khi tìm bài hát. Hãy thử lại.');
+      }
     } finally {
       if (currentRequest === requestId.current) setIsFindingSong(false);
     }
   }, [playSong, selectedArtistIds, selectedGenreIds]);
+
+  const retryLyrics = async (songId: string) => {
+    const target = recommendationHistory.current.find((item) => item.id === songId)
+      ?? (song?.id === songId ? song : null);
+    if (!target) return;
+
+    const loadingSong: ForYouSong = { ...target, lyrics: [], lyricsStatus: 'loading' };
+    recommendationHistory.current = recommendationHistory.current.map((item) => item.id === songId ? loadingSong : item);
+    setSong((current) => current?.id === songId ? loadingSong : current);
+    const updatedSong = await loadForYouLyrics(target);
+    recommendationHistory.current = recommendationHistory.current.map((item) => item.id === songId ? updatedSong : item);
+    setSong((current) => current?.id === songId ? updatedSong : current);
+  };
 
   const closeFlow = useCallback(async () => {
     requestId.current += 1;
@@ -134,6 +277,88 @@ export default function ForYouPage() {
     router.replace('/home');
   }, [isPlaying, playSong, router, togglePlay, track]);
 
+  const handlePreviousSong = () => {
+    const previousIndex = recommendationIndex.current - 1;
+    const previousSong = recommendationHistory.current[previousIndex];
+    if (!previousSong) return;
+    recommendationIndex.current = previousIndex;
+    setHasPreviousRecommendation(previousIndex > 0);
+    setSong(previousSong);
+    setIsShareOpen(false);
+    setActionStatus('');
+    playSong(previousSong, [previousSong], 'for_you');
+  };
+
+  const handleNextSong = () => {
+    const nextIndex = recommendationIndex.current + 1;
+    const nextSong = recommendationHistory.current[nextIndex];
+    if (nextSong) {
+      recommendationIndex.current = nextIndex;
+      setHasPreviousRecommendation(nextIndex > 0);
+      setSong(nextSong);
+      setIsShareOpen(false);
+      setActionStatus('');
+      playSong(nextSong, [nextSong], 'for_you');
+      return;
+    }
+
+    void findSong(recommendationHistory.current.map((item) => item.id));
+  };
+
+  const handleFavorite = async () => {
+    if (!song || isFavoritePending) return;
+    const targetSongId = song.id;
+    const wasFavorited = Boolean(song.is_favorite);
+    const previousCount = song.favorite_count ?? song.favorites ?? 0;
+    setIsFavoritePending(true);
+    setActionStatus('');
+    setSong((current) => current?.id === targetSongId ? {
+      ...current,
+      is_favorite: !wasFavorited,
+      favorite_count: Math.max(0, previousCount + (wasFavorited ? -1 : 1)),
+    } : current);
+
+    try {
+      const result = await toggleSongFavorite(targetSongId, getVisitorId());
+      setSong((current) => current?.id === targetSongId ? { ...current, is_favorite: result.favorited, favorite_count: result.favorites } : current);
+    } catch {
+      setSong((current) => current?.id === targetSongId ? { ...current, is_favorite: wasFavorited, favorite_count: previousCount } : current);
+      setActionStatus('Chưa thể cập nhật lượt yêu thích. Vui lòng thử lại.');
+    } finally {
+      setIsFavoritePending(false);
+    }
+  };
+
+  const handleShare = async (target: 'facebook' | 'copy_link') => {
+    if (!song || isSharePending) return;
+    const targetSong = song;
+    const url = new URL(songPath(targetSong), window.location.origin).toString();
+    if (target === 'facebook') {
+      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank', 'noopener,noreferrer');
+    } else {
+      try {
+        await copyTextToClipboard(url);
+      } catch {
+        setActionStatus('Không thể sao chép liên kết. Hãy thử lại.');
+        setIsShareOpen(false);
+        return;
+      }
+    }
+
+    setIsShareOpen(false);
+    setIsSharePending(true);
+    setActionStatus('');
+    try {
+      const result = await recordSongShare(targetSong.id, target, getVisitorId());
+      setSong((current) => current?.id === targetSong.id ? { ...current, share_count: result.shares, shares: result.shares } : current);
+      setActionStatus(target === 'facebook' ? 'Đã mở chia sẻ trên Facebook.' : 'Đã sao chép liên kết bài hát.');
+    } catch {
+      setActionStatus(target === 'copy_link' ? 'Đã sao chép liên kết nhưng chưa ghi nhận lượt chia sẻ.' : 'Đã mở Facebook nhưng chưa ghi nhận lượt chia sẻ.');
+    } finally {
+      setIsSharePending(false);
+    }
+  };
+
   const title = step === 1
     ? 'Chọn thể loại bạn yêu thích'
     : step === 2
@@ -143,45 +368,66 @@ export default function ForYouPage() {
         : 'Đang tìm nhạc cho bạn!';
 
   return (
-    <main className="relative min-h-[calc(100vh-90px)] overflow-hidden bg-[radial-gradient(ellipse_at_52%_45%,rgba(87,45,139,0.28),transparent_48%),linear-gradient(145deg,#111315,#17151d_55%,#111315)] px-3 py-5 text-white sm:px-6 sm:py-8">
+    <main className="relative min-h-[calc(100dvh-154px)] overflow-hidden bg-[#202a28] px-3 py-0 text-white sm:px-6">
       {song ? (
-        <section className="mx-auto flex min-h-[calc(100vh-145px)] max-w-5xl flex-col justify-center py-5">
-          <div className="mb-8 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">Melodify · Dành cho bạn</p>
-              <h1 className="mt-2 text-2xl font-extrabold sm:text-3xl">Gợi ý dành riêng cho bạn</h1>
+        <section className="relative mx-auto flex min-h-[calc(100dvh-202px)] max-w-[1320px] flex-col items-center justify-start px-2 pb-8 pt-5 sm:px-12">
+          <div className="flex w-full flex-col items-center">
+            <div className="mb-5 max-w-[min(90vw,620px)] text-center">
+              <h1 className="break-words text-lg font-extrabold leading-snug sm:text-xl">{song.title}</h1>
+              <p className="mt-1 text-sm font-medium text-white/65">{song.artists?.map((artist) => artist.name).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật'}</p>
             </div>
-            <button type="button" onClick={() => void closeFlow()} className="rounded-full border border-white/20 px-5 py-2.5 text-sm font-bold text-white/85 transition hover:border-cyan-300 hover:text-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
-              Tắt đề xuất
-            </button>
+
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div
+                role="img"
+                aria-label={`Ảnh bìa ${song.title}`}
+                className="grid size-[min(68vw,248px)] shrink-0 place-items-center overflow-hidden rounded-[9px] bg-[#30443f] bg-cover bg-center"
+                style={{ backgroundImage: song.cover_url ? `url("${song.cover_url}")` : undefined }}
+              >
+                {!song.cover_url && <span aria-hidden="true" className="text-6xl text-white/35">♫</span>}
+              </div>
+
+              <aside aria-label={`Tương tác với ${song.title}`} className="song-row-menu-host flex w-10 shrink-0 flex-col items-center gap-3 text-white">
+                <button type="button" aria-label={song.is_favorite ? `Bỏ yêu thích ${song.title}` : `Yêu thích ${song.title}`} aria-pressed={Boolean(song.is_favorite)} disabled={isFavoritePending} onClick={() => void handleFavorite()} className="flex min-h-11 w-10 flex-col items-center justify-center gap-0.5 rounded-lg outline-none transition disabled:opacity-55 focus-visible:ring-2 focus-visible:ring-cyan-300">
+                  <HeartIcon filled={Boolean(song.is_favorite)} />
+                  <span className="text-[10px] font-bold leading-3 text-white/70">{formatCount(song.favorite_count ?? song.favorites)}</span>
+                </button>
+                <div className="relative">
+                  <button type="button" aria-label={`Chia sẻ ${song.title}`} aria-expanded={isShareOpen} disabled={isSharePending} onClick={() => setIsShareOpen((open) => !open)} className="flex min-h-11 w-10 flex-col items-center justify-center gap-0.5 rounded-lg outline-none transition disabled:opacity-55 focus-visible:ring-2 focus-visible:ring-cyan-300">
+                    <ShareIcon />
+                    <span className="text-[10px] font-bold leading-3 text-white/70">{formatCount(song.share_count ?? song.shares)}</span>
+                  </button>
+                  {isShareOpen ? <div role="menu" aria-label="Chia sẻ bài hát" className="absolute left-full top-1/2 z-30 ml-2 w-48 -translate-y-1/2 overflow-hidden rounded-lg border border-white/10 bg-[#303c39] p-1 text-left text-sm font-semibold shadow-xl">
+                    <button type="button" role="menuitem" onClick={() => void handleShare('facebook')} className="block w-full rounded-md px-3 py-2.5 text-left hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Facebook</button>
+                    <button type="button" role="menuitem" onClick={() => void handleShare('copy_link')} className="block w-full rounded-md px-3 py-2.5 text-left hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Sao chép liên kết</button>
+                  </div> : null}
+                </div>
+                <SongRowActionMenu
+                  song={song}
+                  placement="up"
+                  buttonClassName="!size-9"
+                  iconClassName="size-5"
+                  onStatus={setActionStatus}
+                  onShareRecorded={(shares) => setSong((current) => current?.id === song.id ? { ...current, share_count: shares, shares } : current)}
+                  downloadUrl={song.download_url}
+                />
+                <span role="img" aria-label={`Nhà phát hành ${song.publisher || 'Melodify'}`} title={song.publisher || 'Melodify'} className="grid size-8 place-items-center overflow-hidden rounded-full bg-white text-[10px] font-extrabold uppercase text-[#202a28]">
+                  {(song.publisher || 'Melodify').trim().slice(0, 2) || 'M'}
+                </span>
+              </aside>
+            </div>
+
+            <ForYouLyrics key={song.id} song={song} onRetry={() => void retryLyrics(song.id)} />
+            <p role="status" aria-live="polite" className="mt-2 min-h-5 text-xs text-white/45">{actionStatus}</p>
+            <div className="mt-3 flex items-center gap-3 sm:hidden">
+              <button type="button" aria-label="Bài đề xuất trước" disabled={!hasPreviousRecommendation || isFindingSong} onClick={handlePreviousSong} className="grid size-11 place-items-center rounded-full bg-white/[0.06] text-xl transition hover:bg-white/15 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">↑</button>
+              <button type="button" aria-label="Bài đề xuất tiếp theo" disabled={isFindingSong} onClick={handleNextSong} className="grid size-11 place-items-center rounded-full bg-white/15 text-xl transition hover:bg-white/25 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">↓</button>
+            </div>
           </div>
 
-          <div className="grid items-center gap-8 rounded-3xl border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_100px_rgba(0,0,0,0.3)] sm:p-8 md:grid-cols-[minmax(260px,390px)_1fr]">
-            <div
-              role="img"
-              aria-label={`Ảnh bìa ${song.title}`}
-              className="mx-auto aspect-square w-full max-w-[390px] rounded-2xl bg-white/5 bg-cover bg-center shadow-[0_18px_65px_rgba(0,0,0,0.48)]"
-              style={{ backgroundImage: song.cover_url ? `url("${song.cover_url}")` : undefined }}
-            >
-              {!song.cover_url && <span className="grid h-full place-items-center text-7xl text-white/20">♫</span>}
-            </div>
-            <div className="min-w-0 text-center md:text-left">
-              <p className="text-sm font-semibold text-cyan-200">Đề xuất ngẫu nhiên từ sở thích của bạn</p>
-              <h2 className="mt-3 break-words text-3xl font-extrabold leading-tight sm:text-4xl">{song.title}</h2>
-              <p className="mt-3 text-lg text-white/65">{song.artists?.map((artist) => artist.name).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật'}</p>
-              <div className="mt-6 flex flex-wrap justify-center gap-2 md:justify-start">
-                {selectedGenres.map((genre) => <span key={genre.id} className="rounded-full border border-cyan-200/20 bg-cyan-300/10 px-3 py-1.5 text-sm text-cyan-100">{genre.name}</span>)}
-              </div>
-              <div className="mt-9 flex flex-wrap justify-center gap-3 md:justify-start">
-                <button type="button" disabled={isFindingSong} onClick={() => void findSong(song ? [song.id] : [])} className="rounded-full bg-cyan-400 px-6 py-3 text-sm font-bold text-[#102023] transition hover:bg-cyan-300 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
-                  {isFindingSong ? 'Đang tìm…' : 'Bài tiếp theo'}
-                </button>
-                <button type="button" onClick={() => void closeFlow()} className="rounded-full border border-white/25 px-6 py-3 text-sm font-bold text-white/85 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
-                  Tắt đề xuất
-                </button>
-              </div>
-              {track?.id === song.id && <p className="mt-5 text-sm text-white/50">{isPlaying ? 'Đang phát tự động' : 'Bài hát đã sẵn sàng trong trình phát.'}</p>}
-            </div>
+          <div className="absolute right-1 top-1/2 hidden -translate-y-1/2 flex-col gap-5 sm:flex">
+            <button type="button" aria-label="Bài đề xuất trước" disabled={!hasPreviousRecommendation || isFindingSong} onClick={handlePreviousSong} className="grid size-12 place-items-center rounded-full bg-white/[0.06] text-xl transition hover:bg-white/15 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">↑</button>
+            <button type="button" aria-label={isFindingSong ? 'Đang tìm bài tiếp theo' : 'Bài đề xuất tiếp theo'} disabled={isFindingSong} onClick={handleNextSong} className="grid size-12 place-items-center rounded-full bg-white/15 text-xl transition hover:bg-white/25 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">↓</button>
           </div>
         </section>
       ) : (

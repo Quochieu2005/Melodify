@@ -27,6 +27,7 @@ function SearchInput({ initialQuery }: { initialQuery: string }) {
           ...(data.song || []).map((item) => ({ title: item.title, category: 'Bài hát', href: songPath(item), image: item.cover_url })),
           ...(data.playlist || []).slice(0, 1).map((item) => ({ title: item.name, category: 'Playlist', href: `/playlist/${encodeURIComponent(item.slug || item.id)}`, image: item.cover_url })),
           ...(data.album || []).slice(0, 1).map((item) => ({ title: item.title, category: 'Album', href: `/album/${encodeURIComponent(item.slug || item.id)}`, image: item.cover_url })),
+          ...(data.video || []).slice(0, 1).map((item) => ({ title: item.title, category: 'Video', href: `/search?key=${encodeURIComponent(term)}&t=video`, image: item.thumbnail_url })),
           ...(data.user || []).slice(0, 1).map((item) => ({ title: item.name, category: 'Người dùng', href: `/user/${encodeURIComponent(item.id)}`, image: item.avatar_url })),
         ];
         setResult({ query: term, items: suggestions, error: '' });

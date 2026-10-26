@@ -55,6 +55,20 @@ export function recordRecentItem(item: Omit<RecentItem, 'updatedAt'>) {
   window.dispatchEvent(new Event(HISTORY_EVENT));
 }
 
+export function removeRecentSongs(songIds: string[]) {
+  if (!canUseStorage() || songIds.length === 0) return 0;
+
+  const idsToRemove = new Set(songIds);
+  const currentItems = readRecentItems();
+  const nextItems = currentItems.filter((item) => item.category !== 'song' || !idsToRemove.has(item.id));
+  const removedCount = currentItems.length - nextItems.length;
+  if (removedCount === 0) return 0;
+
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextItems));
+  window.dispatchEvent(new Event(HISTORY_EVENT));
+  return removedCount;
+}
+
 export function subscribeRecentHistory(listener: () => void) {
   if (!canUseStorage()) return () => undefined;
   window.addEventListener(HISTORY_EVENT, listener);

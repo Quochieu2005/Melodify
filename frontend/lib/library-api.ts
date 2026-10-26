@@ -6,7 +6,7 @@ export type LibraryData = {
   favorite_song_count: number;
   created_playlists: UserPlaylistSummary[];
   favorite_playlists: UserPlaylistSummary[];
-  favorite_albums: Pick<AlbumRecord, 'id' | 'title' | 'slug' | 'cover_url'>[];
+  favorite_albums: (Pick<AlbumRecord, 'id' | 'title' | 'slug' | 'cover_url'> & { song_count: number })[];
   following_artists: FollowedArtist[];
   following_users: PublicUser[];
   followers: PublicUser[];

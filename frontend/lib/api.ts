@@ -84,6 +84,7 @@ export type Playlist = {
   favorite_count?: number;
   share_count?: number;
   is_favorite?: boolean;
+  can_edit?: boolean;
 };
 
 export type UserPlaylistSummary = {
@@ -92,6 +93,27 @@ export type UserPlaylistSummary = {
   slug: string;
   cover_url: string | null;
   song_count: number;
+  visibility: "public" | "private" | "unlisted";
+};
+
+export type UserUploadSummary = {
+  id: string;
+  title: string;
+  slug: string;
+  status: string;
+  artist_name: string | null;
+  cover_url: string | null;
+  audio_url: string | null;
+  duration_seconds: number | null;
+  created_at: string | null;
+  moderation_note?: string | null;
+};
+
+export type StagedUserAudio = {
+  upload_token: string;
+  file_name: string;
+  file_size: number;
+  duration_seconds: number | null;
 };
 
 export type SongReportReason =
@@ -139,8 +161,13 @@ export type SubscriptionPlanRecord = {
   unlimited_skip: boolean;
 };
 
-export type VipPaymentMethod =
-  "card" | "shopeepay" | "atm" | "momo" | "zalopay" | "vnpay" | "viettelpay";
+export type VipPaymentMethod = "momo" | "vnpay" | "zalopay";
+
+export type VipPaymentGatewayOption = {
+  id: VipPaymentMethod;
+  label: string;
+  enabled: boolean;
+};
 
 export type VipCheckoutOrder = {
   payment_id: string;
@@ -149,8 +176,19 @@ export type VipCheckoutOrder = {
   currency: string;
   method: VipPaymentMethod;
   status: "pending";
+  checkout_url: string;
   plan: { id: string; name: string };
-  requires_gateway_confirmation: boolean;
+};
+
+export type VipPaymentStatus = {
+  payment_code: string;
+  status: "pending" | "processing" | "success" | "failed" | "cancelled" | string;
+  amount: number;
+  currency: string;
+  method: VipPaymentMethod;
+  plan_name: string;
+  paid_at: string | null;
+  vip_expires_at: string | null;
 };
 
 export type VipTransactionRecord = {
@@ -563,7 +601,12 @@ export async function apiFetch<T>(
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new ApiError(response.status, body.message ?? "API request failed");
+      const validationMessage = response.status === 422 && body.errors && typeof body.errors === "object"
+        ? Object.values(body.errors as Record<string, unknown>)
+          .flatMap((messages) => Array.isArray(messages) ? messages : [messages])
+          .find((message): message is string => typeof message === "string")
+        : undefined;
+      throw new ApiError(response.status, validationMessage ?? body.message ?? "API request failed");
     }
 
     const payload = await response.json() as T;
@@ -592,6 +635,10 @@ export function getSubscriptionPlans() {
   return apiFetch<{ data: SubscriptionPlanRecord[] }>("/v1/subscription-plans");
 }
 
+export function getVipPaymentMethods() {
+  return apiFetch<{ data: VipPaymentGatewayOption[] }>("/v1/vip/payment-methods");
+}
+
 export function createVipCheckout(planId: string, method: VipPaymentMethod) {
   return apiFetch<{ message: string; data: VipCheckoutOrder }>(
     "/v1/vip/checkout",
@@ -601,6 +648,16 @@ export function createVipCheckout(planId: string, method: VipPaymentMethod) {
 
 export function getVipTransactionHistory(page = 1) {
   return apiFetch<VipTransactionHistory>(`/v1/vip/transactions?page=${page}`);
+}
+
+export function getCurrentUser() {
+  return apiFetch<{ user: AuthUser }>("/v1/auth/me", { cache: "no-store" });
+}
+
+export function getVipPaymentStatus(paymentCode: string) {
+  return apiFetch<{ data: VipPaymentStatus }>(
+    `/v1/vip/transactions/${encodeURIComponent(paymentCode)}`,
+  );
 }
 
 export function getHomeBootstrap() {
@@ -663,12 +720,130 @@ export function listUserPlaylists() {
   return apiFetch<{ data: UserPlaylistSummary[] }>("/v1/me/playlists");
 }
 
-export function createUserPlaylist(name: string) {
+export function getMyUploads() {
+  return apiFetch<{ data: UserUploadSummary[]; meta: { total: number; limit: number } }>("/v1/me/uploads");
+}
+
+export function stageMySongAudio(
+  file: File,
+  onProgress: (percent: number) => void,
+  signal?: AbortSignal,
+): Promise<{ message: string; data: StagedUserAudio }> {
+  const form = new FormData();
+  form.append("audio_file", file);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const storedToken = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    const cleanupSignal = () => {
+      if (signal && abortHandler) signal.removeEventListener("abort", abortHandler);
+    };
+    let abortHandler: (() => void) | null = null;
+    xhr.open("POST", `${API_URL}/v1/me/uploads/stage`);
+    xhr.setRequestHeader("Accept", "application/json");
+    if (storedToken) xhr.setRequestHeader("Authorization", `Bearer ${storedToken}`);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress(Math.min(95, Math.floor((event.loaded / event.total) * 95)));
+      }
+    };
+    xhr.onload = () => {
+      cleanupSignal();
+      let body: {
+        message?: string;
+        data?: StagedUserAudio;
+        errors?: Record<string, string[]>;
+      };
+      try {
+        body = JSON.parse(xhr.responseText || "{}") as typeof body;
+      } catch {
+        reject(new ApiError(xhr.status, "Máy chủ trả về phản hồi không hợp lệ khi tải file."));
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && body.data) {
+        onProgress(100);
+        resolve(body as { message: string; data: StagedUserAudio });
+        return;
+      }
+      const validationMessage = body.errors
+        ? Object.values(body.errors).flat().find((message) => typeof message === "string")
+        : undefined;
+      reject(new ApiError(xhr.status, validationMessage ?? body.message ?? "Không thể tải file nhạc lên."));
+    };
+    xhr.onerror = () => {
+      cleanupSignal();
+      reject(new Error("Mất kết nối khi tải file nhạc lên. Vui lòng thử lại."));
+    };
+    xhr.onabort = () => {
+      cleanupSignal();
+      reject(new DOMException("Đã hủy tải file nhạc.", "AbortError"));
+    };
+    if (signal) {
+      if (signal.aborted) {
+        xhr.abort();
+        return;
+      }
+      abortHandler = () => xhr.abort();
+      signal.addEventListener("abort", abortHandler, { once: true });
+    }
+    xhr.send(form);
+  });
+}
+
+export function deleteStagedUserAudio(uploadToken: string) {
+  return apiFetch<{ message: string }>(`/v1/me/uploads/stage/${encodeURIComponent(uploadToken)}`, {
+    method: "DELETE",
+  });
+}
+
+export function uploadMySong(
+  uploadToken: string,
+  details: { title: string; artistName: string; artistId: string | null; genreId: string; coverFile: File },
+) {
+  const form = new FormData();
+  form.append("title", details.title);
+  form.append("artist_name", details.artistName);
+  if (details.artistId) form.append("artist_id", details.artistId);
+  form.append("genre_id", details.genreId);
+  form.append("terms_accepted", "1");
+  form.append("moderation_requested", "1");
+  form.append("audio_upload_token", uploadToken);
+  form.append("cover_image_file", details.coverFile);
+  return apiFetch<{ message: string; data: UserUploadSummary }>("/v1/me/uploads", {
+    method: "POST",
+    body: form,
+  });
+}
+
+export function createUserPlaylist(name: string, visibility: 'public' | 'private' = 'private') {
   return apiFetch<{ data: UserPlaylistSummary }>("/v1/me/playlists", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, visibility }),
   });
+}
+
+export function updateUserPlaylist(
+  playlistId: string,
+  details: { name: string; visibility: 'public' | 'private'; coverFile?: File | null },
+) {
+  const form = new FormData();
+  form.append('name', details.name);
+  form.append('visibility', details.visibility);
+  if (details.coverFile) form.append('cover_image_file', details.coverFile);
+
+  return apiFetch<{ message: string; data: UserPlaylistSummary }>(
+    `/v1/me/playlists/${encodeURIComponent(playlistId)}`,
+    { method: 'POST', body: form },
+  );
+}
+
+export function deleteUserPlaylist(playlistId: string) {
+  return apiFetch<{ message: string }>(
+    `/v1/me/playlists/${encodeURIComponent(playlistId)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export function addSongsToUserPlaylist(playlistId: string, songIds: string[]) {
@@ -1095,11 +1270,12 @@ export function getForYouArtists(genreIds: string[]) {
   return apiFetch<{ data: Artist[] }>(`/v1/for-you/artists?${params.toString()}`);
 }
 
-export function getForYouSong(genreIds: string[], artistIds: string[], excludeSongIds: string[] = []) {
+export function getForYouSong(genreIds: string[], artistIds: string[], excludeSongIds: string[] = [], visitorId?: string) {
   const params = new URLSearchParams();
   genreIds.forEach((id) => params.append("genre_ids[]", id));
   artistIds.forEach((id) => params.append("artist_ids[]", id));
   excludeSongIds.forEach((id) => params.append("exclude_song_ids[]", id));
+  if (visitorId) params.set("visitor_id", visitorId);
   return apiFetch<{ data: Song | null }>(`/v1/for-you/song?${params.toString()}`);
 }
 

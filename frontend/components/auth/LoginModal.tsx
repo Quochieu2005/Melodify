@@ -153,24 +153,30 @@ function getErrorMessage(error: unknown): string {
   return 'Đã xảy ra lỗi. Vui lòng thử lại.';
 }
 
+const darkCheckboxClass = "relative size-[18px] shrink-0 appearance-none rounded-[4px] border border-white/35 bg-[#353535] transition-colors checked:border-cyan-400 checked:bg-cyan-400 after:absolute after:left-[5px] after:top-[2px] after:h-[8px] after:w-[4px] after:rotate-45 after:border-b-2 after:border-r-2 after:border-[#07363a] after:opacity-0 after:content-[''] checked:after:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#242424]";
+
 function CloseIcon() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-7 fill-none stroke-current stroke-2">
-      <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-[1.8]">
+      <path d="m6.5 6.5 11 11m0-11-11 11" strokeLinecap="round" />
     </svg>
   );
 }
 
 function EyeIcon({ visible }: { visible: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-2">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[21px] fill-none stroke-current stroke-[1.8]">
       {visible ? (
         <>
-          <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
-          <circle cx="12" cy="12" r="2.5" />
+          <path d="M2.5 12s3.35-5.5 9.5-5.5 9.5 5.5 9.5 5.5-3.35 5.5-9.5 5.5-9.5-5.5-9.5-5.5Z" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="12" cy="12" r="2.4" />
         </>
       ) : (
-        <path d="m3 3 18 18M10.6 6.2A10.5 10.5 0 0 1 12 6c6.1 0 9.5 6 9.5 6a16 16 0 0 1-3.1 3.6M6.1 6.7C3.8 8.2 2.5 12 2.5 12s3.4 6 9.5 6c1.5 0 2.8-.3 4-.8" strokeLinecap="round" strokeLinejoin="round" />
+        <>
+          <path d="M10.6 6.7A10.6 10.6 0 0 1 12 6.5c6.15 0 9.5 5.5 9.5 5.5a15.2 15.2 0 0 1-2.35 3.05M6.3 7.55C3.75 9.2 2.5 12 2.5 12s3.35 5.5 9.5 5.5c1.15 0 2.2-.2 3.15-.52" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="m4 4 16 16" strokeLinecap="round" />
+          <path d="M10.15 10.15a2.6 2.6 0 0 0 3.7 3.7" strokeLinecap="round" />
+        </>
       )}
     </svg>
   );
@@ -178,18 +184,41 @@ function EyeIcon({ visible }: { visible: boolean }) {
 
 function SocialIcon({ type }: { type: 'facebook' | 'google' | 'phone' | 'qr' }) {
   if (type === 'facebook') {
-    return <span className="grid size-7 place-items-center rounded-full bg-[#2d83ed] text-lg font-bold text-white">f</span>;
+    return (
+      <svg viewBox="0 0 28 28" aria-hidden="true" className="size-7 shrink-0">
+        <circle cx="14" cy="14" r="14" fill="#1877F2" />
+        <path fill="white" d="M15.7 23v-8h2.7l.4-3.1h-3.1v-2c0-.9.25-1.5 1.55-1.5h1.65V5.6a21 21 0 0 0-2.4-.13c-2.4 0-4.05 1.47-4.05 4.17v2.26h-2.72V15h2.72v8h3.25Z" />
+      </svg>
+    );
   }
 
   if (type === 'google') {
-    return <span className="text-[22px] font-bold leading-none text-[#4285f4]">G</span>;
+    return (
+      <svg viewBox="0 0 48 48" aria-hidden="true" className="size-[25px] shrink-0">
+        <path fill="#4285F4" d="M43.6 24.5c0-1.4-.12-2.8-.36-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5.1h6.6c3.9-3.6 6.1-8.8 6.1-15Z" />
+        <path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.9l-6.6-5.1c-1.8 1.2-4.1 1.9-6.9 1.9-5.3 0-9.8-3.6-11.4-8.4H5.8v5.3A20 20 0 0 0 24 44Z" />
+        <path fill="#FBBC05" d="M12.6 27.5a12 12 0 0 1 0-7v-5.3H5.8a20 20 0 0 0 0 17.6l6.8-5.3Z" />
+        <path fill="#EA4335" d="M24 12.1c3 0 5.7 1 7.8 3.1l5.9-5.9C34.1 6.1 29.5 4 24 4A20 20 0 0 0 5.8 15.2l6.8 5.3c1.6-4.8 6.1-8.4 11.4-8.4Z" />
+      </svg>
+    );
   }
 
   if (type === 'phone') {
-    return <span className="grid size-7 place-items-center rounded-md border-2 border-cyan-400 text-sm text-cyan-400">▯</span>;
+    return (
+      <svg viewBox="0 0 28 28" aria-hidden="true" className="size-7 shrink-0 fill-none stroke-cyan-300 stroke-[1.8]">
+        <rect x="7.5" y="2.75" width="13" height="22.5" rx="3" />
+        <path d="M11.5 6h5M12.5 21h3" strokeLinecap="round" />
+      </svg>
+    );
   }
 
-  return <span className="grid size-7 place-items-center text-2xl leading-none text-cyan-400">⌗</span>;
+  return (
+    <svg viewBox="0 0 28 28" aria-hidden="true" className="size-7 shrink-0 stroke-cyan-300 text-cyan-300">
+      <path d="M3.5 3.5h7v7h-7zM17.5 3.5h7v7h-7zM3.5 17.5h7v7h-7z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M6 6h2v2H6zM20 6h2v2h-2zM6 20h2v2H6z" fill="currentColor" stroke="none" />
+      <path d="M15 14h3v3h-3zM21 14h3v3h-3zM15 20h3v3h-3zM21 20h3v3h-3zM18 17h3v3h-3z" fill="currentColor" stroke="none" />
+    </svg>
+  );
 }
 
 export default function LoginModal({ onClose, onLoginSuccess, variant = 'default' }: LoginModalProps) {
@@ -370,7 +399,7 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
   if (forgotPassword) {
     return <div className="fixed inset-0 z-[100] grid place-items-center bg-black/75 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section role="dialog" aria-modal="true" aria-label="Khôi phục mật khẩu" className={`relative max-h-[90vh] w-full max-w-[480px] overflow-y-auto rounded-2xl p-6 shadow-2xl sm:p-8 ${variant === 'vip' ? 'bg-white' : 'bg-[#242424]'}`}>
-        <button type="button" aria-label="Đóng" onClick={onClose} className={`absolute right-3 top-3 grid size-8 place-items-center rounded-full ${variant === 'vip' ? 'text-slate-500 hover:bg-slate-100' : 'text-white/60 hover:bg-white/10'}`}>×</button>
+        <button type="button" aria-label="Đóng" onClick={onClose} className={`absolute right-3 top-3 grid size-8 place-items-center rounded-full ${variant === 'vip' ? 'text-slate-500 hover:bg-slate-100' : 'text-white/60 hover:bg-white/10'}`}><CloseIcon /></button>
         <PasswordResetForm initialEmail={identifier} light={variant === 'vip'} onBack={() => setForgotPassword(false)} />
       </section>
     </div>;
@@ -633,14 +662,14 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
 
               <div className="mt-4 flex items-center justify-between text-xs">
                 <label className="flex cursor-pointer items-center gap-2 text-white/85">
-                  <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="size-4 accent-cyan-400" />
+                  <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className={darkCheckboxClass} />
                   Ghi nhớ đăng nhập
                 </label>
                 {method === 'username' ? <button type="button" onClick={() => setForgotPassword(true)} className="font-bold text-cyan-400 hover:text-cyan-300">Quên mật khẩu?</button> : null}
               </div>
 
               <label className="mt-4 flex cursor-pointer items-start gap-2 text-[11px] leading-[1.45] text-white/85">
-                <input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-cyan-400" />
+                <input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className={`${darkCheckboxClass} mt-0.5`} />
                 <span>
                   Tôi đã đọc, hiểu và đồng ý với <button type="button" className="text-cyan-400 hover:underline">Chính sách bảo mật</button> và <button type="button" className="text-cyan-400 hover:underline">Điều khoản sử dụng</button> của Melodify.
                 </span>

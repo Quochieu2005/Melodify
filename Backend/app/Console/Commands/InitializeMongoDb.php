@@ -21,12 +21,50 @@ class InitializeMongoDb extends Command
         );
 
         $collections = [
-            'admins', 'admin_notifications', 'banners', 'users', 'artists', 'artist_followers', 'artist_view_events', 'genres', 'albums', 'songs',
-            'song_artists', 'song_genres', 'song_audio_files', 'song_videos', 'lyrics', 'playlists',
-            'playlist_songs', 'playlist_favorites', 'playlist_shares', 'album_favorites', 'album_shares', 'chart_shares', 'favorites', 'song_shares', 'listening_history', 'devices', 'song_play_events',
-            'comments', 'comment_likes', 'notifications', 'subscription_plans', 'subscriptions',
-            'payments', 'transactions', 'payment_details', 'user_api_tokens', 'phone_login_challenges', 'logs', 'reports', 'recommendations',
-            'topics', 'topic_songs', 'media_assets',
+            'admins',
+            'admin_notifications',
+            'banners',
+            'users',
+            'artists',
+            'artist_followers',
+            'artist_view_events',
+            'genres',
+            'albums',
+            'songs',
+            'song_artists',
+            'song_genres',
+            'song_audio_files',
+            'song_videos',
+            'lyrics',
+            'playlists',
+            'playlist_songs',
+            'playlist_favorites',
+            'playlist_shares',
+            'album_favorites',
+            'album_shares',
+            'chart_shares',
+            'favorites',
+            'song_shares',
+            'listening_history',
+            'devices',
+            'song_play_events',
+            'comments',
+            'comment_likes',
+            'notifications',
+            'subscription_plans',
+            'subscriptions',
+            'payments',
+            'transactions',
+            'payment_details',
+            'user_api_tokens',
+            'phone_login_challenges',
+            'logs',
+            'reports',
+            'recommendations',
+            'topics',
+            'topic_songs',
+            'media_assets',
+            'user_upload_stages',
         ];
 
         $existing = [];
@@ -61,6 +99,7 @@ class InitializeMongoDb extends Command
             'song_videos' => [[['slug' => 1], ['unique' => true, 'sparse' => true]], [['song_id' => 1, 'status' => 1, 'sort_order' => 1], []], [['artist_ids' => 1, 'status' => 1], []], [['created_at' => -1], []]],
             'playlists' => [[['slug' => 1], ['unique' => true]], [['user_id' => 1], []], [['sort_order' => 1], []], [['status' => 1], []], [['artist_ids' => 1, 'status' => 1, 'visibility' => 1], []]],
             'media_assets' => [[['public_id' => 1], ['unique' => true]], [['folder' => 1], []], [['created_at' => -1], []]],
+            'user_upload_stages' => [[['user_id' => 1, 'created_at' => -1], []], [['expires_at' => 1], []]],
             'playlist_songs' => [[['playlist_id' => 1, 'song_id' => 1], ['unique' => true]], [['playlist_id' => 1, 'position' => 1], []], [['song_id' => 1, 'position' => 1], []]],
             'playlist_favorites' => [[['playlist_id' => 1, 'user_id' => 1], ['unique' => true]], [['user_id' => 1, 'created_at' => -1], []]],
             'playlist_shares' => [[['playlist_id' => 1, 'created_at' => -1], []], [['visitor_id' => 1, 'created_at' => -1], []]],
@@ -97,12 +136,12 @@ class InitializeMongoDb extends Command
         }
 
         $this->info('Melodify MongoDB initialized successfully.');
-        $this->info('Database: '.$database->getDatabaseName());
+        $this->info('Database: ' . $database->getDatabaseName());
         $collectionCount = 0;
         foreach ($database->listCollections() as $_) {
             $collectionCount++;
         }
-        $this->info('Collections: '.$collectionCount);
+        $this->info('Collections: ' . $collectionCount);
 
         return self::SUCCESS;
     }

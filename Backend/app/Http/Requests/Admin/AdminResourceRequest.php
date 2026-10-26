@@ -10,6 +10,7 @@ use App\Models\Song;
 use App\Models\Topic;
 use App\Models\User;
 use App\Rules\PlainText;
+use App\Support\AudioUploadRules;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -18,13 +19,7 @@ class AdminResourceRequest extends FormRequest
 {
     public static function audioFileRules(): array
     {
-        return [
-            'nullable',
-            'file',
-            'extensions:mp3,wav,ogg,m4a,aac,webm',
-            'mimetypes:audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave,audio/vnd.wave,audio/ogg,application/ogg,audio/x-ogg,audio/vorbis,audio/mp4,audio/x-m4a,audio/m4a,video/mp4,audio/aac,audio/x-aac,audio/aacp,audio/webm,video/webm',
-            'max:102400',
-        ];
+        return AudioUploadRules::rules();
     }
 
     public function authorize(): bool
@@ -228,7 +223,7 @@ class AdminResourceRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'audio_file.extensions' => 'File âm thanh phải có định dạng MP3, WAV, OGG, M4A, AAC hoặc WEBM.',
+            'audio_file.extensions' => 'File âm thanh phải có định dạng '.AudioUploadRules::formatLabel().'.',
             'audio_file.mimetypes' => 'Nội dung file không đúng định dạng âm thanh được hỗ trợ.',
             'audio_file.max' => 'File âm thanh không được lớn hơn 100 MB.',
         ];

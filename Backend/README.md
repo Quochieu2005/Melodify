@@ -556,12 +556,21 @@ Backend hiện mới hoàn thiện nền tảng và model layer. Các phần sau
 - Upload image controller route public.
 - Upload audio và streaming protection.
 - Search/filter/pagination API.
-- Payment gateway callback/webhook.
+- Đối soát/gia hạn subscription tự động và hoàn tiền.
 - Subscription renewal/cancellation.
 - Notification delivery.
 - Recommendation generation.
 - Request validation classes và API Resources.
 - Automated feature tests cho các resource.
+
+### Checkout VIP qua MoMo và VNPAY
+
+- Frontend lấy phương thức khả dụng từ `GET /api/v1/vip/payment-methods`, tạo đơn qua `POST /api/v1/vip/checkout` và chuyển người dùng tới `checkout_url` do Backend trả về.
+- Backend chỉ kích hoạt VIP sau IPN có chữ ký hợp lệ, đúng mã đơn và đúng số tiền. URL Return chỉ đưa người dùng về trang kết quả; không dùng tham số trình duyệt để xác nhận đã trả tiền.
+- MoMo cần `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY`, `MOMO_API_URL`, `MOMO_REDIRECT_URL` và `MOMO_IPN_URL`.
+- VNPAY cần `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `VNPAY_PAYMENT_URL`, `VNPAY_RETURN_URL` và `VNPAY_IPN_URL`. Đăng ký URL IPN với VNPAY trong cấu hình merchant; đặt `PAYMENT_RETURN_URL` thành trang kết quả frontend.
+- Dùng credentials/endpoint sandbox để kiểm thử; trước khi production, thay bằng endpoint/credentials live và dùng callback HTTPS công khai. Không commit merchant secrets; chỉ thêm vào biến môi trường của Backend.
+- VNPAY là luồng checkout ngân hàng/thẻ/QR qua merchant gateway, không phải tích hợp API trực tiếp từng ngân hàng. Các phương thức chưa được cấu hình sẽ trả `enabled: false` và không cho checkout.
 
 ## 17. Bảo mật bắt buộc
 

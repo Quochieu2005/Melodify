@@ -2,7 +2,7 @@
 import FollowButton from '@/components/follow/FollowButton';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
@@ -14,19 +14,32 @@ import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { AddSongsToPlaylistDialog } from '@/components/playlists/AddSongsToPlaylistDialog';
 import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 import { downloadSongFiles, setSongFavorites } from '@/lib/song-actions';
+import { copyTextToClipboard } from '@/lib/clipboard';
 
 const fallbackCover = '/images/cover-placeholder.svg';
 
-function HeartIcon({ filled }: { filled: boolean }) {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className={`size-6 fill-current ${filled ? 'text-[#ff3b66]' : 'text-white'}`}><path d="M12 21.1 3.4 12.7a5.8 5.8 0 0 1 8.2-8.2l.4.4.4-.4a5.8 5.8 0 0 1 8.2 8.2L12 21.1Z" /></svg>;
+function HeartIcon({ filled, className = 'size-6' }: { filled: boolean; className?: string }) {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className={`${className} shrink-0 fill-current ${filled ? 'text-[#ff3b66]' : 'text-white'}`}><path d="M12 21.1 3.4 12.7a5.8 5.8 0 0 1 8.2-8.2l.4.4.4-.4a5.8 5.8 0 0 1 8.2 8.2L12 21.1Z" /></svg>;
 }
 
 function ShareIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-current"><path d="M14 3 23 11l-9 8v-5C8.2 14 4.4 15.5 1 21c.7-8 4.3-12.1 13-12.8V3Z" /></svg>;
 }
 
-function DownloadIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-none stroke-current stroke-[1.8]"><path d="M12 3v11m0 0 4-4m-4 4-4-4M4 20h16" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+function FacebookIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 shrink-0"><circle cx="12" cy="12" r="11" fill="#1877f2" /><path d="M13.25 20v-7.3h2.45l.37-2.85h-2.82V8.03c0-.82.23-1.38 1.41-1.38h1.51V4.1c-.26-.04-1.15-.11-2.19-.11-2.16 0-3.64 1.32-3.64 3.75v2.1H7.9v2.85h2.44V20h2.91Z" fill="white" /></svg>;
+}
+
+function CopyLinkIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 shrink-0 fill-none stroke-current stroke-[1.8]"><path d="m9.6 14.4 4.8-4.8m-7.2 7.2-1.2 1.2a3.4 3.4 0 0 1-4.8-4.8l4-4a3.4 3.4 0 0 1 4.8 0m2.4-2.4 1.2-1.2a3.4 3.4 0 0 1 4.8 4.8l-4 4a3.4 3.4 0 0 1-4.8 0" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+function DownloadIcon({ className = 'size-5' }: { className?: string }) {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className={`${className} shrink-0 fill-none stroke-current stroke-[1.8]`}><path d="M12 3v11m0 0 4-4m-4 4-4-4M4 20h16" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+function PlaylistAddIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[18px] shrink-0 fill-none stroke-current stroke-[1.8]"><path d="M4 6h11M4 11h11M4 16h7m8-4v8m-4-4h8" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
 function PauseIcon() {
@@ -97,11 +110,11 @@ function AlbumSongRow({ song, index, coverUrl, checked, onToggle, onPlay, isCurr
     ? 'opacity-100'
     : isCurrentTrack
       ? 'pointer-events-none opacity-0'
-      : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100';
+      : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100';
   const indexVisibility = checked ? 'hidden' : 'group-hover:hidden';
 
   return (
-    <li className={`${styles.songRow} group grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 rounded-lg px-2 py-2.5 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4`}>
+    <li className={`${styles.songRow} song-row-menu-host group grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 rounded-lg px-2 py-2.5 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4`}>
       <div className="relative grid size-6 place-items-center">
         <span className={`text-[13px] text-white/70 ${indexVisibility}`}>{index + 1}</span>
         <div className={`absolute inset-0 grid place-items-center ${checkboxVisibility}`}>
@@ -125,7 +138,7 @@ function AlbumSongRow({ song, index, coverUrl, checked, onToggle, onPlay, isCurr
 }
 
 export default function AlbumDetailPage({ slug }: { slug: string }) {
-  const { track, isPlaying, playSong, togglePlay } = usePlayerControls();
+  const { track, isPlaying, isPremium, requestVipAccess, playSong, togglePlay } = usePlayerControls();
   const [request, setRequest] = useState({
     slug: '',
     album: null as AlbumDetail | null,
@@ -141,7 +154,9 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
   const [shareStatus, setShareStatus] = useState('');
   const [isFavoritePending, setIsFavoritePending] = useState(false);
   const [isSharePending, setIsSharePending] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
   const [isPlaylistDialogOpen, setIsPlaylistDialogOpen] = useState(false);
+  const actionMenusRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,6 +170,7 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
           setFavoriteCount(response.data.favorite_count ?? 0);
           setShareCount(response.data.share_count ?? 0);
           setIsMoreOpen(false);
+          setIsShareOpen(false);
         }
       })
       .catch(() => {
@@ -163,6 +179,28 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
 
     return () => { cancelled = true; };
   }, [slug]);
+
+  useEffect(() => {
+    if (!isMoreOpen && !isShareOpen) return;
+    const closeMenusOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !actionMenusRef.current?.contains(event.target)) {
+        setIsMoreOpen(false);
+        setIsShareOpen(false);
+      }
+    };
+    const closeMenusOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMoreOpen(false);
+        setIsShareOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', closeMenusOutside);
+    window.addEventListener('keydown', closeMenusOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeMenusOutside);
+      window.removeEventListener('keydown', closeMenusOnEscape);
+    };
+  }, [isMoreOpen, isShareOpen]);
 
   const isCurrentRequest = request.slug === slug;
   const album = isCurrentRequest ? request.album : null;
@@ -211,8 +249,20 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
   };
 
   const handleDownloadSelected = () => {
+    if (!isPremium && selectedSongs.some((song) => song.premium_only)) {
+      requestVipAccess();
+      return;
+    }
     downloadSongFiles(selectedSongs);
     setShareStatus(`Đang tải ${selectedSongs.length} bài đã chọn.`);
+  };
+
+  const handleDownloadAlbum = () => {
+    if (!isPremium && album?.songs.some((song) => song.premium_only)) {
+      requestVipAccess();
+      return;
+    }
+    if (album) downloadSongFiles(album.songs);
   };
 
   const handlePlayAll = () => {
@@ -249,29 +299,28 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
     }
   };
 
-  const handleShare = async () => {
+  const handleShare = async (target: 'facebook' | 'copy_link') => {
     if (isSharePending) return;
     const url = window.location.href;
     setIsSharePending(true);
     setShareStatus('');
 
     try {
-      let source: 'web' | 'copy_link' = 'web';
-      if (navigator.share) {
-        await navigator.share({ title: album.title, url });
+      if (target === 'facebook') {
+        window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank', 'noopener,noreferrer');
       } else {
-        await navigator.clipboard.writeText(url);
-        source = 'copy_link';
+        await copyTextToClipboard(url);
       }
-      const response = await recordAlbumShare(album.id, source, getVisitorId());
+      const response = await recordAlbumShare(album.id, target, getVisitorId());
       setShareCount(response.shares);
-      setShareStatus(source === 'web' ? 'Đã chia sẻ album.' : 'Đã sao chép đường dẫn album.');
+      setShareStatus(target === 'facebook' ? 'Đã mở chia sẻ album trên Facebook.' : 'Đã sao chép đường dẫn album.');
     } catch {
-      setShareStatus('Không thể chia sẻ album. Vui lòng thử lại.');
+      setShareStatus(target === 'copy_link' ? 'Không thể sao chép đường dẫn album. Vui lòng thử lại.' : 'Không thể mở chia sẻ album trên Facebook.');
     } finally {
       setIsSharePending(false);
+      setIsShareOpen(false);
+      setIsMoreOpen(false);
     }
-    setIsMoreOpen(false);
   };
 
   const handleReport = () => {
@@ -298,20 +347,23 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
             ) : null}
 
             <div className="mt-auto">
-              <div className="flex items-start gap-3">
+              <div ref={actionMenusRef} className="flex items-start gap-3">
                 <button type="button" aria-label={isFavorite ? 'Bỏ yêu thích album' : 'Thêm album vào yêu thích'} aria-pressed={isFavorite} disabled={isFavoritePending} onClick={() => void handleFavorite()} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-60">
                   <span className="grid size-8 place-items-center"><HeartIcon filled={isFavorite} /></span>
                   <span className="text-[11px] font-bold text-white">{favoriteCount}</span>
                 </button>
-                <button type="button" aria-label="Chia sẻ album" disabled={isSharePending} onClick={() => void handleShare()} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-60">
-                  <span className="grid size-8 place-items-center text-white"><ShareIcon /></span>
-                  <span className="text-[11px] font-bold text-white">{shareCount}</span>
-                </button>
                 <div className="relative">
-                  <button type="button" aria-label="Thêm tùy chọn" aria-expanded={isMoreOpen} onClick={() => setIsMoreOpen((current) => !current)} className="grid size-8 place-items-center rounded-full bg-[#303c39] text-[13px] tracking-[0.08em] text-white outline-none transition-colors hover:bg-[#40504b] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">•••</button>
+                  <button type="button" aria-label="Chia sẻ album" aria-haspopup="menu" aria-controls="album-share-menu" aria-expanded={isShareOpen} disabled={isSharePending} onClick={() => { setIsMoreOpen(false); setIsShareOpen((open) => !open); }} className="flex min-w-8 flex-col items-center gap-1 text-white outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-60">
+                    <span className="grid size-8 place-items-center text-white"><ShareIcon /></span>
+                    <span className="text-[11px] font-bold text-white">{shareCount}</span>
+                  </button>
+                  {isShareOpen ? <div id="album-share-menu" role="menu" aria-label="Chia sẻ album" className="absolute left-0 top-full z-30 mt-2 w-56 overflow-hidden rounded-xl border border-white/[0.06] bg-[#292c2b] p-1.5 text-[13px] font-bold text-white shadow-2xl"><button type="button" role="menuitem" disabled={isSharePending} onClick={() => void handleShare('facebook')} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5] disabled:opacity-60"><FacebookIcon />Facebook</button><button type="button" role="menuitem" disabled={isSharePending} onClick={() => void handleShare('copy_link')} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5] disabled:opacity-60"><CopyLinkIcon />Sao chép đường dẫn</button></div> : null}
+                </div>
+                <div className="relative">
+                  <button type="button" aria-label="Thêm tùy chọn" aria-haspopup="menu" aria-expanded={isMoreOpen} onClick={() => { setIsShareOpen(false); setIsMoreOpen((current) => !current); }} className="grid size-8 place-items-center rounded-full bg-[#303c39] text-[13px] tracking-[0.08em] text-white outline-none transition-colors hover:bg-[#40504b] focus-visible:ring-2 focus-visible:ring-[#00d3e5]">•••</button>
                   {isMoreOpen ? (
                     <div role="menu" className="absolute left-0 top-10 z-20 w-32 overflow-hidden rounded-lg bg-[#2b2b2b] p-1.5 text-[13px] font-bold text-white shadow-xl">
-                      <button type="button" role="menuitem" onClick={handleShare} className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left hover:bg-white/10">Chia sẻ <span aria-hidden="true">›</span></button>
+                      <button type="button" role="menuitem" onClick={() => { setIsMoreOpen(false); setIsShareOpen(true); }} className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left hover:bg-white/10">Chia sẻ <span aria-hidden="true">›</span></button>
                       <button type="button" role="menuitem" onClick={handleReport} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-white/10"><span aria-hidden="true">⚑</span>Báo cáo</button>
                     </div>
                   ) : null}
@@ -323,7 +375,7 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
                   {albumIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}
                   {albumIsPlaying ? 'Tạm dừng' : 'Phát tất cả'}
                 </button>
-                <button type="button" onClick={() => downloadSongFiles(album.songs)} disabled={album.songs.length === 0} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3c4140] px-7 text-[14px] font-bold text-white transition-colors hover:bg-[#4a504e] disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" onClick={handleDownloadAlbum} disabled={album.songs.length === 0} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3c4140] px-7 text-[14px] font-bold text-white transition-colors hover:bg-[#4a504e] disabled:cursor-not-allowed disabled:opacity-50">
                   <DownloadIcon />
                   Tải về
                 </button>
@@ -338,9 +390,9 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
           {selectedIds.length > 0 ? (
             <div className="mb-3 flex min-h-8 flex-wrap items-center gap-2">
               <SelectionCheckbox checked={allSongsSelected} label="Chọn tất cả bài hát" onChange={toggleAllSongs} />
-              <button type="button" onClick={() => setIsPlaylistDialogOpen(true)} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><span aria-hidden="true">☷</span>Thêm vào playlist</button>
-              <button type="button" onClick={() => void handleAddSelectedToFavorites()} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><span aria-hidden="true">♡</span>Thêm vào Yêu thích</button>
-              <button type="button" onClick={handleDownloadSelected} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"><DownloadIcon />Tải về</button>
+              <button type="button" onClick={() => setIsPlaylistDialogOpen(true)} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><PlaylistAddIcon />Thêm vào playlist</button>
+              <button type="button" onClick={() => void handleAddSelectedToFavorites()} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><HeartIcon filled={false} className="size-[18px]" />Thêm vào Yêu thích</button>
+              <button type="button" onClick={handleDownloadSelected} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><DownloadIcon className="size-[18px]" />Tải về</button>
             </div>
           ) : (
             <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4">

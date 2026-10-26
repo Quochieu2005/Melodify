@@ -27,9 +27,9 @@ class UserLibraryController extends Controller
         $playlistIds = PlaylistFavorite::query()->where('user_id', $actorId)->orderByDesc('created_at')->pluck('playlist_id')->all();
         $albumIds = AlbumFavorite::query()->where('user_id', $actorId)->orderByDesc('created_at')->pluck('album_id')->all();
         $created = $request->user()
-            ? Playlist::query()->where('user_id', $actorId)->where('status', 'active')->orderByDesc('updated_at')->get(['_id', 'name', 'slug', 'cover_url'])
+            ? Playlist::query()->where('user_id', $actorId)->where('status', 'active')->orderByDesc('updated_at')->get(['_id', 'name', 'slug', 'cover_url', 'visibility'])
             : collect();
-        $playlists = $playlistIds === [] ? collect() : Playlist::query()->whereIn('_id', $playlistIds)->where('status', 'active')->whereIn('visibility', ['public', 'unlisted'])->get(['_id', 'name', 'slug', 'cover_url']);
+        $playlists = $playlistIds === [] ? collect() : Playlist::query()->whereIn('_id', $playlistIds)->where('status', 'active')->whereIn('visibility', ['public', 'unlisted'])->get(['_id', 'name', 'slug', 'cover_url', 'visibility']);
         $allPlaylistIds = $created->merge($playlists)->map(fn (Playlist $playlist): string => (string) $playlist->getKey())->unique()->values()->all();
         $counts = [];
         if ($allPlaylistIds !== []) {
@@ -44,6 +44,7 @@ class UserLibraryController extends Controller
         $summary = fn (Playlist $playlist): array => [
             'id' => (string) $playlist->getKey(), 'name' => $playlist->name, 'slug' => $playlist->slug,
             'cover_url' => $playlist->cover_url, 'song_count' => $counts[(string) $playlist->getKey()] ?? 0,
+            'visibility' => (string) $playlist->visibility,
         ];
         $artistIds = ArtistFollower::query()->where('user_id', $actorId)->pluck('artist_id')->all();
         $followingArtists = $artistIds === [] ? collect() : Artist::query()->where('status', 'active')->whereIn('_id', $artistIds)->get(['_id', 'name', 'slug', 'avatar_url']);
@@ -59,6 +60,13 @@ class UserLibraryController extends Controller
         $followingUsers = $users->filter(fn (User $user): bool => in_array((string) $user->getKey(), $followingIds, true));
         $followers = $users->filter(fn (User $user): bool => in_array((string) $user->getKey(), $followerIds, true));
         $albums = $albumIds === [] ? collect() : Album::query()->whereIn('_id', $albumIds)->where('status', 'published')->get(['_id', 'title', 'slug', 'cover_url']);
+        $favoriteAlbumIds = $albums->map(fn (Album $album): string => (string) $album->getKey())->all();
+        $albumSongCounts = $favoriteAlbumIds === [] ? [] : Song::query()
+            ->whereIn('album_id', $favoriteAlbumIds)
+            ->get(['album_id'])
+            ->groupBy(fn (Song $song): string => (string) $song->album_id)
+            ->map(fn ($songs): int => $songs->count())
+            ->all();
 
         return response()->json(['data' => [
             'favorite_song_count' => $songIds === [] ? 0 : Song::query()->whereIn('_id', $songIds)->whereIn('status', ['published', 'draft'])->count(),
@@ -66,7 +74,10 @@ class UserLibraryController extends Controller
             'favorite_playlists' => $playlists->sortBy(fn (Playlist $playlist): int => (int) array_search((string) $playlist->getKey(), $playlistIds))->map($summary)->values(),
             'favorite_albums' => $albums
                 ->sortBy(fn (Album $album): int => (int) array_search((string) $album->getKey(), $albumIds))
-                ->map(fn (Album $album): array => ['id' => (string) $album->getKey(), 'title' => $album->title, 'slug' => $album->slug, 'cover_url' => $album->cover_url])->values(),
+                ->map(fn (Album $album): array => [
+                    'id' => (string) $album->getKey(), 'title' => $album->title, 'slug' => $album->slug,
+                    'cover_url' => $album->cover_url, 'song_count' => $albumSongCounts[(string) $album->getKey()] ?? 0,
+                ])->values(),
             'following_artists' => $followingArtists->map(fn (Artist $artist): array => ['id' => (string) $artist->getKey(), 'name' => $artist->name, 'slug' => $artist->slug, 'avatar_url' => $artist->avatar_url])->values(),
             'following_users' => $followingUsers->map(fn (User $user): array => FollowController::userSummary($user))->values(),
             'followers' => $followers->map(fn (User $user): array => FollowController::userSummary($user))->values(),

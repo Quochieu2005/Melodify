@@ -22,6 +22,7 @@ use App\Http\Controllers\AdminController\SongViewController;
 use App\Http\Controllers\AdminController\SubscriptionController;
 use App\Http\Controllers\AdminController\TopicController;
 use App\Http\Controllers\AdminController\UserController;
+use App\Http\Controllers\AdminController\UserUploadReviewController;
 use App\Http\Controllers\Api\BrowserSocialAuthController;
 use App\Http\Controllers\Api\MobileSocialAuthController;
 use App\Http\Controllers\AudioController;
@@ -114,6 +115,12 @@ Route::prefix('admin')->name('admin.')->middleware('admin.timing')->group(functi
             Route::delete('/videos/bulk', [SongVideoController::class, 'destroyBulk'])->name('videos.bulk-destroy');
             Route::delete('/videos/all', [SongVideoController::class, 'destroyAll'])->name('videos.destroy-all');
             Route::resource('videos', SongVideoController::class)->except('create');
+        });
+
+        Route::middleware('admin.permission:uploads.review')->group(function () {
+            Route::get('/uploads/review', [UserUploadReviewController::class, 'index'])->name('uploads.review.index');
+            Route::post('/uploads/review/{songId}/approve', [UserUploadReviewController::class, 'approve'])->name('uploads.review.approve');
+            Route::post('/uploads/review/{songId}/reject', [UserUploadReviewController::class, 'reject'])->name('uploads.review.reject');
         });
 
         Route::middleware('admin.permission:users.manage')->group(function () {

@@ -42,6 +42,12 @@
   z-index: 20;
 }
 
+.songRowMenuOpen,
+.songRowMenuOpen:hover,
+.songRowMenuOpen:focus-within {
+  z-index: 50;
+}
+
 .songRow::before {
   position: absolute;
   inset: 0;

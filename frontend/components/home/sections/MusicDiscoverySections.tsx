@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
+import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { artistPath, type ArtistReference } from '@/components/artists/ArtistLink';
 import { getHomeBootstrap, type HomeDiscovery, type HomeTrendingArtist, type Playlist, type Song } from '@/lib/api';
 import FollowButton from '@/components/follow/FollowButton';
@@ -37,7 +38,7 @@ function SectionHeader({ id, title, href }: { id: string; title: string; href?: 
 
 function PlaylistCard({ playlist }: { playlist: Playlist }) {
   const coverUrl = playlist.cover_url || '/images/cover-placeholder.svg';
-  const subtitle = playlist.type_custom || playlist.type || `${playlist.song_count} bài hát`;
+  const subtitle = `${playlist.song_count} bài hát`;
   const href = `/playlist/${encodeURIComponent(playlist.slug || playlist.id)}`;
 
   return (
@@ -71,13 +72,14 @@ function PlayingBars() {
 }
 
 function SongCard({ song, onPlay, isActive, isPlaying }: { song: Song; onPlay: () => void; isActive: boolean; isPlaying: boolean }) {
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const coverUrl = song.cover_url || '/images/cover-placeholder.svg';
   const artistCredits: ArtistReference[] = (song.artists?.length ? song.artists : song.artist ? [song.artist] : []).filter((artist) => artist.name.trim());
   const artistNames = artistCredits.map((artist) => artist.name).join(', ') || song.artist?.name || 'Nghệ sĩ chưa cập nhật';
   const publisher = song.publisher || 'Melodify';
 
   return (
-    <article className={`${styles.songCard} group flex min-w-0 items-center gap-3 rounded-[8px] p-2 text-left transition-colors hover:bg-white/[0.05] ${isActive ? 'bg-white/[0.08]' : ''}`}>
+    <article className={`${styles.songCard} song-row-menu-host group relative ${actionMenuOpen ? 'z-50' : 'z-0'} flex min-w-0 items-center gap-3 rounded-[8px] p-2 pr-10 text-left transition-colors hover:bg-white/[0.05] ${isActive ? 'bg-white/[0.08]' : ''}`}>
       <button type="button" onClick={onPlay} aria-label={`Phát ${song.title}`} className="relative size-[72px] shrink-0 overflow-hidden rounded-[4px] bg-[#18211f] outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5]">
         <Image aria-hidden="true" src={coverUrl} alt="" fill sizes="72px" unoptimized className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.06]" />
         <span aria-hidden="true" className="absolute inset-0 bg-black/10" />
@@ -101,6 +103,9 @@ function SongCard({ song, onPlay, isActive, isPlaying }: { song: Song; onPlay: (
           <span aria-hidden="true" className="size-3 shrink-0 rounded-full bg-white/90 shadow-[inset_0_0_0_2px_rgba(0,0,0,0.2)]" />
           <span className="truncate">{publisher}</span>
         </span>
+      </span>
+      <span className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <SongRowActionMenu song={song} onMenuOpenChange={setActionMenuOpen} buttonClassName="pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto" />
       </span>
     </article>
   );

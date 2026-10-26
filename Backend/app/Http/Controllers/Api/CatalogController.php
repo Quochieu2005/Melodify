@@ -258,6 +258,9 @@ class CatalogController extends Controller
 
     public function forYouSong(Request $request): JsonResponse
     {
+        $filters = $request->validate([
+            'visitor_id' => ['nullable', 'string', 'max:120'],
+        ]);
         $requestedGenreIds = collect($request->input('genre_ids', []))
             ->filter(fn ($id): bool => is_string($id) || is_numeric($id))
             ->map(fn ($id): string => trim((string) $id))
@@ -354,9 +357,16 @@ class CatalogController extends Controller
                 && (empty($song['premium_only']) || filled($song['preview_url'] ?? null)))
             ->values();
 
-        return response()->json([
-            'data' => $candidatePayloads->isEmpty() ? null : $candidatePayloads->random(),
-        ]);
+        $song = $candidatePayloads->isEmpty() ? null : $candidatePayloads->random();
+        if ($song !== null) {
+            $actorId = $this->engagementActorId($request, $filters['visitor_id'] ?? null);
+            $song['is_favorite'] = Favorite::query()
+                ->where('song_id', (string) $song['id'])
+                ->where('user_id', $actorId)
+                ->exists();
+        }
+
+        return response()->json(['data' => $song]);
     }
 
     public function trendingArtists(): JsonResponse
@@ -432,7 +442,7 @@ class CatalogController extends Controller
 
         $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
         $revision = $this->catalogContentRevision();
-        Cache::store('file')->forget('api:home-bootstrap:v14:'.$dateKey.':'.$revision);
+        Cache::store('file')->forget('api:home-bootstrap:v19:'.$dateKey.':'.$revision);
         Cache::store('file')->forget('api:trending-artists:v8:'.$dateKey.':'.$revision);
 
         return response()->json(['recorded' => true]);
@@ -464,6 +474,42 @@ class CatalogController extends Controller
         $literal = new Regex(preg_quote($term, '/'), 'i');
         $normalized = preg_replace('/[^a-z0-9]/', '', Str::slug($term));
         $slugPattern = new Regex($normalized !== '' ? implode('[^a-z0-9]*', str_split($normalized)) : '(?!)', 'i');
+        $matchedArtistIds = Artist::query()
+            ->where('status', 'active')
+            ->where(fn ($query) => $query->where('name', 'regex', $literal)->orWhere('slug', 'regex', $slugPattern))
+            ->pluck((new Artist)->getKeyName())
+            ->map(fn ($id): string => (string) $id)
+            ->all();
+        $songsByArtist = $matchedArtistIds === []
+            ? []
+            : SongArtist::query()->whereIn('artist_id', $matchedArtistIds)->pluck('song_id')
+                ->map(fn ($id): string => (string) $id)->all();
+        $artistMatchedSongs = array_values(array_unique($songsByArtist));
+        $relatedSongs = Song::query()->where('status', 'published')->where(function ($query) use ($literal, $slugPattern, $artistMatchedSongs): void {
+            $query->where('title', 'regex', $literal)
+                ->orWhere('slug', 'regex', $slugPattern)
+                ->orWhere('artist_name', 'regex', $literal);
+            if ($artistMatchedSongs !== []) {
+                $query->orWhereIn((new Song)->getKeyName(), $artistMatchedSongs);
+            }
+        })->orderBy('title')->take(100)->get(['_id', 'album_id']);
+        $relatedSongIds = $relatedSongs->map(fn (Song $song): string => (string) $song->getKey())->all();
+        $relatedAlbumIds = $relatedSongs->pluck('album_id')->map(fn ($id): string => (string) $id)->filter()->unique()->values()->all();
+        $relatedArtistIds = $matchedArtistIds;
+        $relatedPlaylistIds = [];
+        $relatedVideoIds = [];
+        if ($relatedSongIds !== []) {
+            $relatedArtistIds = array_values(array_unique([...$relatedArtistIds, ...SongArtist::query()->whereIn('song_id', $relatedSongIds)->pluck('artist_id')->map(fn ($id): string => (string) $id)->all()]));
+            $relatedPlaylistIds = PlaylistSong::query()->whereIn('song_id', $relatedSongIds)->pluck('playlist_id')->map(fn ($id): string => (string) $id)->unique()->values()->all();
+            $relatedVideoIds = SongVideo::query()->where('status', 'active')->whereIn('song_id', $relatedSongIds)->pluck((new SongVideo)->getKeyName())->map(fn ($id): string => (string) $id)->all();
+        }
+        $relatedIds = [
+            'song' => array_values(array_unique($artistMatchedSongs)),
+            'playlist' => $relatedPlaylistIds,
+            'artist' => $relatedArtistIds,
+            'album' => $relatedAlbumIds,
+            'video' => $relatedVideoIds,
+        ];
         $specs = [
             'song' => [Song::class, 'title', 'published'], 'playlist' => [Playlist::class, 'name', 'active'],
             'artist' => [Artist::class, 'name', 'active'], 'album' => [Album::class, 'title', 'published'],
@@ -475,8 +521,17 @@ class CatalogController extends Controller
             if ($type !== 'all' && $type !== $kind) {
                 continue;
             }
-            $query = $model::query()->where('status', $status)->where(function ($query) use ($field, $literal, $slugPattern, $kind): void {
-                $query->where($field, 'regex', $literal)->orWhere($kind === 'user' ? 'username' : 'slug', 'regex', $slugPattern);
+            $keyName = (new $model)->getKeyName();
+            $query = $model::query()->where('status', $status)->where(function ($query) use ($field, $literal, $slugPattern, $kind, $relatedIds, $keyName): void {
+                $query->where(function ($textQuery) use ($field, $literal, $slugPattern, $kind): void {
+                    $textQuery->where($field, 'regex', $literal)->orWhere($kind === 'user' ? 'username' : 'slug', 'regex', $slugPattern);
+                    if ($kind === 'song') {
+                        $textQuery->orWhere('artist_name', 'regex', $literal);
+                    }
+                });
+                if (! empty($relatedIds[$kind] ?? [])) {
+                    $query->orWhereIn($keyName, $relatedIds[$kind]);
+                }
             });
             if ($kind === 'playlist') {
                 $query->where('visibility', 'public');
@@ -615,12 +670,16 @@ class CatalogController extends Controller
             return $playlistData;
         });
 
-        $data['favorite_count'] = PlaylistFavorite::query()->where('playlist_id', $playlistId)->count();
-        $data['share_count'] = PlaylistShare::query()->where('playlist_id', $playlistId)->count();
-        $data['is_favorite'] = PlaylistFavorite::query()
+        $canEngage = in_array((string) $playlist->visibility, ['public', 'unlisted'], true);
+        $data['favorite_count'] = $canEngage ? PlaylistFavorite::query()->where('playlist_id', $playlistId)->count() : 0;
+        $data['share_count'] = $canEngage ? PlaylistShare::query()->where('playlist_id', $playlistId)->count() : 0;
+        $data['is_favorite'] = $canEngage && PlaylistFavorite::query()
             ->where('playlist_id', $playlistId)
             ->where('user_id', $actorId)
             ->exists();
+        $data['can_edit'] = $request->user()
+            ? (string) $playlist->user_id === (string) $request->user()->getKey()
+            : false;
 
         return response()->json(['data' => $data]);
     }
@@ -855,7 +914,7 @@ class CatalogController extends Controller
     {
         $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
         $revision = $this->catalogContentRevision();
-        $payload = Cache::store('file')->flexible('api:home-bootstrap:v14:'.$dateKey.':'.$revision, [60, 300], function () use ($dateKey): array {
+        $payload = Cache::store('file')->flexible('api:home-bootstrap:v19:'.$dateKey.':'.$revision, [60, 300], function () use ($dateKey): array {
             $banners = $this->responsePayload($this->banners(Request::create('/api/v1/banners', 'GET', [
                 'daily' => 1,
                 'limit' => 5,
@@ -2507,17 +2566,14 @@ class CatalogController extends Controller
     }
 
     /**
-     * Build the public chart feed from published songs and daily play events.
-     * The same daily seed keeps ties stable for the whole day while the play
-     * counters and trend arrows still reflect the current database state.
+     * Build chart lists from the published catalog, ordered by most recently added.
      */
     private function chartPayloads(string $dateKey): array
     {
         $songs = Song::query()
             ->where('status', 'published')
-            ->orderByDesc('release_date')
             ->orderByDesc('created_at')
-            ->limit(500)
+            ->orderByDesc('release_date')
             ->get();
         $songIds = $songs->map(fn (Song $song): string => (string) $song->getKey())->filter()->values()->all();
         $audioBySong = SongAudioFile::query()
@@ -2527,80 +2583,32 @@ class CatalogController extends Controller
             ->get()
             ->keyBy(fn (SongAudioFile $audio): string => (string) $audio->song_id);
         $artistCredits = $this->songArtistsForCollection($songs);
-        $todayStart = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->startOfDay();
-        $yesterdayStart = $todayStart->copy()->subDay();
-        $todayStartUtc = new UTCDateTime($todayStart->getTimestamp() * 1000);
-        $yesterdayStartUtc = new UTCDateTime($yesterdayStart->getTimestamp() * 1000);
-        $playRows = $songIds === [] ? [] : SongPlayEvent::query()->raw(
-            fn ($collection) => $collection->aggregate([
-                ['$match' => [
-                    'song_id' => ['$in' => $songIds],
-                    'started_at' => ['$gte' => $yesterdayStartUtc],
-                ]],
-                ['$group' => [
-                    '_id' => '$song_id',
-                    'today' => ['$sum' => ['$cond' => [['$gte' => ['$started_at', $todayStartUtc]], 1, 0]]],
-                    'yesterday' => ['$sum' => ['$cond' => [['$lt' => ['$started_at', $todayStartUtc]], 1, 0]]],
-                ]],
-            ], ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']])->toArray(),
-        );
-        $todayCounts = collect();
-        $yesterdayCounts = collect();
-        foreach ($playRows as $row) {
-            $songId = (string) data_get($row, '_id', '');
-            if ($songId === '') {
-                continue;
-            }
-
-            $todayCounts->put($songId, (int) data_get($row, 'today', 0));
-            $yesterdayCounts->put($songId, (int) data_get($row, 'yesterday', 0));
-        }
-        $favoriteCounts = Favorite::query()
-            ->whereIn('song_id', $songIds)
-            ->get(['song_id'])
-            ->groupBy(fn (Favorite $favorite): string => (string) $favorite->song_id)
-            ->map(fn (Collection $favorites): int => $favorites->count());
-        $shareCounts = SongShare::query()
-            ->whereIn('song_id', $songIds)
-            ->get(['song_id'])
-            ->groupBy(fn (SongShare $share): string => (string) $share->song_id)
-            ->map(fn (Collection $shares): int => $shares->count());
-
+        $genreNamesBySong = $this->songGenresForCollection($songs);
         $charts = [];
         foreach ($this->chartDefinitions() as $definition) {
-            $filtered = $songs->filter($definition['filter'])->values();
-            if ($filtered->count() < 5) {
+            $filtered = $songs->filter(function (Song $song) use ($definition, $genreNamesBySong): bool {
+                return $definition['filter']($song, $genreNamesBySong[(string) $song->getKey()] ?? []);
+            })->values();
+            $ranking = $definition['ranking'] ?? 'recent';
+            if (in_array($ranking, ['favorites', 'trending'], true)) {
+                $songIdsInChart = $filtered->map(fn (Song $song): string => (string) $song->getKey())->all();
+                $counts = $this->songEventCounts(
+                    $ranking === 'favorites' ? Favorite::class : SongPlayEvent::class,
+                    $songIdsInChart,
+                    $ranking === 'favorites' ? 'created_at' : 'started_at',
+                    $ranking === 'trending' ? now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->subDays(7)->startOfDay() : null,
+                );
                 $filtered = $filtered
-                    ->concat($songs->reject(fn (Song $song): bool => $filtered->contains(fn (Song $item): bool => (string) $item->getKey() === (string) $song->getKey())))
-                    ->unique(fn (Song $song): string => (string) $song->getKey())
+                    ->sortByDesc(fn (Song $song): int => $counts[(string) $song->getKey()] ?? 0)
                     ->values();
             }
 
-            $ranked = $filtered
-                ->sort(function (Song $left, Song $right) use ($todayCounts, $dateKey): int {
-                    $countOrder = ((int) $todayCounts->get((string) $right->getKey(), 0)) <=> ((int) $todayCounts->get((string) $left->getKey(), 0));
-                    if ($countOrder !== 0) {
-                        return $countOrder;
-                    }
-
-                    return strcmp(
-                        sha1($dateKey.'|'.(string) $left->getKey()),
-                        sha1($dateKey.'|'.(string) $right->getKey()),
-                    );
-                })
-                ->take(50)
-                ->values();
-            $chartSongs = $ranked->map(function (Song $song, int $index) use ($audioBySong, $artistCredits, $todayCounts, $yesterdayCounts, $favoriteCounts, $shareCounts): array {
+            $chartSongs = $filtered->take(50)->map(function (Song $song, int $index) use ($audioBySong, $artistCredits): array {
                 $data = $this->compactSongData($song, $audioBySong->get((string) $song->getKey()), $artistCredits[(string) $song->getKey()] ?? []);
-                $today = (int) $todayCounts->get((string) $song->getKey(), 0);
-                $yesterday = (int) $yesterdayCounts->get((string) $song->getKey(), 0);
 
                 return array_merge($data, [
                     'rank' => $index + 1,
-                    'trend' => $today > $yesterday ? 'up' : ($today < $yesterday ? 'down' : 'same'),
-                    'views' => $today,
-                    'favorites' => (int) $favoriteCounts->get((string) $song->getKey(), 0),
-                    'shares' => (int) $shareCounts->get((string) $song->getKey(), 0),
+                    'trend' => 'same',
                 ]);
             })->values()->all();
             $firstSong = $chartSongs[0] ?? null;
@@ -2624,7 +2632,7 @@ class CatalogController extends Controller
 
     private function cachedChartPayloads(string $dateKey): array
     {
-        return Cache::store('file')->remember('api:charts:v2:full:'.$dateKey.':'.$this->catalogContentRevision(), now()->addMinute(), fn (): array => $this->chartPayloads($dateKey));
+        return Cache::store('file')->remember('api:charts:v7:full:'.$dateKey.':'.$this->catalogContentRevision(), now()->addMinute(), fn (): array => $this->chartPayloads($dateKey));
     }
 
     private function catalogContentRevision(): string
@@ -2637,65 +2645,157 @@ class CatalogController extends Controller
         return [
             [
                 'slug' => 'top-50-bai-hat-thinh-hanh',
-                'title' => 'Top 50 Bài Hát Thịnh Hành',
+                'title' => 'Bài Hát Mới Cập Nhật',
                 'tone' => 'rose',
-                'description' => 'Những ca khúc được nghe nhiều nhất hôm nay trên Melodify.',
-                'filter' => fn (Song $song): bool => true,
+                'description' => 'Bài hát đã xuất bản, xếp theo thời gian mới được thêm vào kho nhạc.',
+                'filter' => fn (Song $song, array $genreNames = []): bool => true,
             ],
             [
                 'slug' => 'top-50-nhac-viet',
                 'title' => 'Top 50 Nhạc Việt',
                 'tone' => 'olive',
-                'description' => 'Bảng xếp hạng các ca khúc Việt Nam đang được yêu thích.',
-                'filter' => fn (Song $song): bool => $this->isVietnameseSong($song),
+                'description' => 'Bài hát được phân loại là nhạc Việt theo quốc gia hoặc nội dung metadata.',
+                'filter' => fn (Song $song, array $genreNames = []): bool => $this->isVietnameseSong($song),
+            ],
+            [
+                'slug' => 'top-50-rap-viet',
+                'title' => 'Top 50 Nhạc Rap Việt',
+                'tone' => 'purple',
+                'description' => 'Bài hát có thể loại Rap hoặc Hip-Hop và được nhận diện là nhạc Việt theo metadata; xếp theo thời gian thêm vào kho nhạc.',
+                'filter' => fn (Song $song, array $genreNames = []): bool => $this->isVietnameseSong($song) && $this->isRapSong($genreNames),
             ],
             [
                 'slug' => 'top-50-nhac-hoa',
                 'title' => 'Top 50 Nhạc Hoa',
                 'tone' => 'purple',
-                'description' => 'Những ca khúc Hoa ngữ nổi bật trong ngày.',
-                'filter' => fn (Song $song): bool => $this->isChineseSong($song),
+                'description' => 'Bài hát được phân loại là nhạc Hoa theo quốc gia hoặc ký tự trong metadata.',
+                'filter' => fn (Song $song, array $genreNames = []): bool => $this->isChineseSong($song),
+            ],
+            [
+                'slug' => 'top-50-nhac-han',
+                'title' => 'Top 50 Nhạc Hàn',
+                'tone' => 'olive',
+                'description' => 'Bài hát được nhận diện là nhạc Hàn theo mã quốc gia hoặc ký tự Hangul; xếp theo thời gian thêm vào kho nhạc.',
+                'filter' => fn (Song $song, array $genreNames = []): bool => $this->isKoreanSong($song, $genreNames),
             ],
             [
                 'slug' => 'top-50-nhac-remix-viet',
                 'title' => 'Top 50 Nhạc Remix Việt',
                 'tone' => 'olive',
-                'description' => 'Các bản remix Việt được nghe nhiều nhất hôm nay.',
-                'filter' => fn (Song $song): bool => $this->isRemixSong($song) && $this->isVietnameseSong($song),
+                'description' => 'Bài remix được phân loại là nhạc Việt theo metadata.',
+                'filter' => fn (Song $song, array $genreNames = []): bool => $this->isRemixSong($song) && $this->isVietnameseSong($song),
             ],
             [
                 'slug' => 'top-50-youtube',
-                'title' => 'Top 50 YouTube',
+                'title' => 'Top 50 Nhạc Âu Mỹ',
                 'tone' => 'rose',
-                'description' => 'Những bài hát có sức hút nổi bật trên các kênh video.',
-                'filter' => fn (Song $song): bool => str_contains(mb_strtolower((string) ($song->external_source ?? '')), 'youtube') || str_contains(mb_strtolower((string) ($song->external_url ?? '')), 'youtu'),
+                'description' => 'Bài hát được phân loại theo quốc gia Âu Mỹ trong metadata.',
+                'filter' => fn (Song $song, array $genreNames = []): bool => $this->isWesternSong($song),
             ],
             [
                 'slug' => 'top-50-nhac-remix',
                 'title' => 'Top 50 Nhạc Remix',
                 'tone' => 'purple',
-                'description' => 'Các ca khúc remix đang được nghe nhiều trên Melodify.',
-                'filter' => fn (Song $song): bool => $this->isRemixSong($song),
+                'description' => 'Bài hát có từ “remix” trong tiêu đề hoặc tên nghệ sĩ.',
+                'filter' => fn (Song $song, array $genreNames = []): bool => $this->isRemixSong($song),
+            ],
+            [
+                'slug' => 'top-50-bai-hat-yeu-thich-nhat',
+                'title' => 'Top 50 Bài Hát Được Yêu Thích Nhất',
+                'tone' => 'rose',
+                'description' => 'Xếp theo tổng lượt yêu thích đã ghi nhận trong database.',
+                'filter' => fn (Song $song, array $genreNames = []): bool => true,
+                'ranking' => 'favorites',
+            ],
+            [
+                'slug' => 'top-50-thinh-hanh',
+                'title' => 'Top 50 Bài Hát Thịnh Hành',
+                'tone' => 'olive',
+                'description' => 'Xếp theo lượt nghe trong 7 ngày gần nhất; bài mới hơn đứng trước khi bằng lượt nghe.',
+                'filter' => fn (Song $song, array $genreNames = []): bool => true,
+                'ranking' => 'trending',
             ],
         ];
+    }
+
+    private function isWesternSong(Song $song): bool
+    {
+        $country = strtoupper(trim((string) ($song->country_code ?? '')));
+
+        return in_array($country, [
+            'US', 'GB', 'UK', 'CA', 'AU', 'NZ', 'IE', 'FR', 'DE', 'ES', 'IT',
+            'NL', 'BE', 'CH', 'AT', 'SE', 'NO', 'DK', 'FI', 'PT',
+        ], true);
     }
 
     private function isVietnameseSong(Song $song): bool
     {
         $country = strtoupper(trim((string) ($song->country_code ?? '')));
+        if ($country !== '') {
+            return in_array($country, ['VN', 'VNM', 'VIE', 'VIETNAM', 'VIETNAMESE'], true);
+        }
+
         $text = mb_strtolower((string) $song->title.' '.(string) $song->artist_name);
 
-        return in_array($country, ['VN', 'VNM', 'VIETNAM'], true)
-            || preg_match('/[ăâđêôơư]/u', $text) === 1;
+        return preg_match('/[àáạảãăằắặẳẵâầấậẩẫđèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹ]/iu', $text) === 1;
+    }
+
+    private function isKoreanSong(Song $song, array $genreNames): bool
+    {
+        $country = strtoupper(trim((string) ($song->country_code ?? '')));
+        if ($country !== '') {
+            return in_array($country, ['KR', 'KOR', 'KOREA', 'SOUTH KOREA', 'REPUBLIC OF KOREA'], true);
+        }
+
+        $text = (string) $song->title.' '.(string) $song->artist_name;
+
+        return preg_match('/\p{Hangul}/u', $text) === 1
+            || preg_match('/(?:k[\s-]?pop|korean|nhạc\s*hàn)/iu', implode(' ', $genreNames)) === 1;
+    }
+
+    private function isRapSong(array $genreNames): bool
+    {
+        return preg_match('/(?:^|[^\p{L}])(?:rap|hip[\s-]*hop)(?=$|[^\p{L}])/iu', implode(' ', $genreNames)) === 1;
+    }
+
+    /** @return array<string, list<string>> */
+    private function songGenresForCollection(Collection $songs): array
+    {
+        $songIds = $songs->map(fn (Song $song): string => (string) $song->getKey())->filter()->values()->all();
+        if ($songIds === []) {
+            return [];
+        }
+
+        $links = SongGenre::query()
+            ->whereIn('song_id', $songIds)
+            ->get();
+        $linksBySong = $links->groupBy(fn (SongGenre $link): string => (string) $link->song_id);
+        $genreIds = $links->pluck('genre_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all();
+        $genres = $genreIds === []
+            ? collect()
+            : Genre::query()
+                ->whereIn((new Genre)->getKeyName(), $genreIds)
+                ->get()
+                ->keyBy(fn (Genre $genre): string => (string) $genre->getKey());
+
+        return $linksBySong->map(fn (Collection $links): array => $links
+            ->map(fn (SongGenre $link): ?string => $genres->get((string) $link->genre_id)?->name)
+            ->filter()
+            ->values()
+            ->all())
+            ->all();
     }
 
     private function isChineseSong(Song $song): bool
     {
         $country = strtoupper(trim((string) ($song->country_code ?? '')));
+        if ($country !== '') {
+            return in_array($country, ['CN', 'CHN', 'ZH', 'CHINA'], true);
+        }
+
         $text = (string) $song->title.' '.(string) $song->artist_name;
 
-        return in_array($country, ['CN', 'CHN', 'ZH', 'CHINA'], true)
-            || preg_match('/\p{Han}/u', $text) === 1;
+        return preg_match('/\p{Han}/u', $text) === 1;
     }
 
     private function isRemixSong(Song $song): bool

@@ -107,7 +107,7 @@ function Navigation({ items, onLogin, isAuthenticated, isLibrary = false }: { it
 
 export default function Sidebar() {
   const { openLogin, user, logout } = useLoginModal();
-  const { data, error, refresh } = useLibrary();
+  const { data, error, loading, refresh } = useLibrary();
   const [creating, setCreating] = useState(false);
   const pathname = usePathname();
   const hasCollections = Boolean(data && (data.created_playlists.length || data.favorite_playlists.length || data.favorite_albums.length));
@@ -118,7 +118,7 @@ export default function Sidebar() {
   ] : [];
   return (
     <>
-    <aside className="relative z-20 sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-[#151329] text-[#f7f5ff] lg:flex">
+    <aside className="sidebar-scrollbar-hidden relative z-20 sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-[#151329] text-[#f7f5ff] lg:flex">
       <Link href="/home" className="flex items-center gap-3 px-5 pb-7 pt-6 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-300">
         <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-violet-400 to-fuchsia-500 text-xl shadow-[0_8px_22px_rgba(124,92,255,0.32)]">♫</span>
         <span className="text-xl font-bold tracking-[-0.04em]">Melodify</span>
@@ -133,11 +133,16 @@ export default function Sidebar() {
         <div className="mt-3"><Navigation items={library} onLogin={openLogin} isAuthenticated={Boolean(user)} isLibrary /></div>
       </section>
 
-      {hasCollections ? <div className="sidebar-collections mt-8 space-y-8 px-6 pb-28">
+      {loading && !data ? <div aria-label="Đang tải thư viện" aria-busy="true" className="mt-8 space-y-8 px-6 pb-28">
+        {['Playlist đã tạo', 'Playlist yêu thích', 'Album yêu thích'].map((title) => <section key={title}>
+          <div className="mb-4 h-3 w-32 animate-pulse rounded bg-white/10 motion-reduce:animate-none" />
+          <div className="flex items-center gap-3"><span className="size-10 animate-pulse rounded bg-white/10 motion-reduce:animate-none" /><span className="h-3 w-28 animate-pulse rounded bg-white/10 motion-reduce:animate-none" /></div>
+        </section>)}
+      </div> : hasCollections ? <div className="sidebar-collections mt-8 space-y-8 px-6 pb-28">
         {groups.map((group) => <section key={group.title} aria-label={group.title}>
-          <div className="mb-4 flex items-center justify-between gap-2"><h2 className="text-xs font-bold uppercase text-white/50">{group.title}</h2>{group.create && <button type="button" aria-label="Tạo playlist" onClick={() => user ? setCreating(true) : openLogin()} className="grid size-5 place-items-center rounded-full border border-white/50 text-white/60 hover:border-cyan-300 hover:text-cyan-300">+</button>}</div>
+          <div className="mb-4 flex items-center justify-between gap-2"><h2 className="text-xs font-bold uppercase text-white/50">{group.title}</h2>{group.create && <button type="button" aria-label="Tạo playlist" onClick={() => user ? setCreating(true) : openLogin()} className="grid size-6 shrink-0 place-items-center rounded-full border border-white/50 leading-none text-white/60 transition-colors hover:border-cyan-300 hover:text-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><svg aria-hidden="true" viewBox="0 0 20 20" className="size-3.5" fill="none"><path d="M10 3.5v13M3.5 10h13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg></button>}</div>
           <ul className="space-y-2">{group.items.map((item) => <li key={item.id}><Link href={item.href} aria-current={pathname === item.href ? 'page' : undefined} className={`group flex items-center gap-3 rounded-lg p-1.5 text-sm text-white/75 transition-colors hover:bg-white/10 hover:text-cyan-300 focus-visible:outline-2 focus-visible:outline-cyan-300 ${pathname === item.href ? 'bg-white/10 text-cyan-300' : ''}`}>
-            <span role="img" aria-label={item.name} className="relative size-10 shrink-0 overflow-hidden rounded bg-white/10 bg-cover bg-center" style={{ backgroundImage: `url("${item.cover_url || '/sidebar-favorites.png'}")` }}><span className="absolute inset-0 grid place-items-center bg-black/35 text-white opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">▶</span></span><span className="line-clamp-2 leading-5">{item.name}</span>
+            <span role="img" aria-label={item.name} className="relative size-10 shrink-0 overflow-hidden rounded bg-white/10 bg-cover bg-center" style={{ backgroundImage: `url("${item.cover_url || (group.title === 'Playlist đã tạo' ? '/images/cover-placeholder.svg' : '/sidebar-favorites.png')}")` }}><span className="absolute inset-0 grid place-items-center bg-black/35 text-white opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">▶</span></span><span className="line-clamp-2 leading-5">{item.name}</span>
           </Link></li>)}</ul>
           {!group.items.length && <p className="text-xs text-white/40">Chưa có {group.title.toLowerCase()}.</p>}
         </section>)}

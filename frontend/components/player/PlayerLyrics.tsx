@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { getSongLyrics, type Lyric } from '@/lib/api';
-import { activeLyricIndex, formatPlaybackTime, parseSyncedLyrics } from '@/lib/lyrics';
+import { activeLyricIndex, formatPlaybackTime, getPlainLyrics, parseSyncedLyrics } from '@/lib/lyrics';
 
 import type { PlayerTrack } from './PlayerProvider';
+import { LyricText } from './LyricText';
 
-// Reopening the same song should not wait behind another media request. Keep a
-// short, bounded in-memory cache only; never reuse lyrics from a different song.
+// Reopening a song must not wait behind its media stream on the dev server.
+// Cache only briefly and by song; never share lyrics across different tracks.
 const lyricCache = new Map<string, { lyrics: Lyric[]; expiresAt: number }>();
 const pendingLyrics = new Map<string, Promise<Lyric[]>>();
 
@@ -45,10 +46,10 @@ function LyricLines({ songId, elapsed, seekLimit, onSeek }: {
   const [attempt, setAttempt] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef(new Map<number, HTMLButtonElement>());
-  const manualScrollUntil = useRef(0);
+  const manualScroll = useRef(false);
   const lines = useMemo(() => parseSyncedLyrics(result?.lyrics ?? []), [result]);
   const activeIndex = activeLyricIndex(lines, elapsed);
-  const plainLyrics = (result?.lyrics ?? []).map((lyric) => (lyric.plain_lyrics || lyric.content || '').trim()).filter(Boolean).join('\n\n');
+  const plainLyrics = getPlainLyrics(result?.lyrics ?? []);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,7 +64,7 @@ function LyricLines({ songId, elapsed, seekLimit, onSeek }: {
   useEffect(() => {
     const container = scrollRef.current;
     const line = lineRefs.current.get(activeIndex);
-    if (!container || !line || Date.now() < manualScrollUntil.current) return;
+    if (!container || !line || manualScroll.current) return;
     const top = container.scrollTop + line.getBoundingClientRect().top - container.getBoundingClientRect().top;
     container.scrollTo({
       top: Math.max(0, top - (container.clientHeight - line.clientHeight) / 2),
@@ -80,10 +81,11 @@ function LyricLines({ songId, elapsed, seekLimit, onSeek }: {
     role="region"
     aria-label="Nội dung lời bài hát"
     tabIndex={0}
-    onWheel={() => { manualScrollUntil.current = Date.now() + 4000; }}
-    onTouchMove={() => { manualScrollUntil.current = Date.now() + 4000; }}
+    onWheel={() => { manualScroll.current = true; }}
+    onTouchMove={() => { manualScroll.current = true; }}
+    onPointerDown={() => { manualScroll.current = true; }}
     onKeyDown={(event) => {
-      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) manualScrollUntil.current = Date.now() + 4000;
+      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) manualScroll.current = true;
     }}
     className="lyric-scroll h-full min-h-0 overflow-y-auto overscroll-contain rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-white/40"
   >
@@ -96,11 +98,12 @@ function LyricLines({ songId, elapsed, seekLimit, onSeek }: {
           ref={(element) => { if (element) lineRefs.current.set(index, element); else lineRefs.current.delete(index); }}
           aria-current={index === activeIndex ? 'true' : undefined}
           data-lyric-time={line.time}
+          aria-label={line.text}
           disabled={unavailable}
           title={unavailable ? 'Câu này nằm ngoài đoạn âm thanh có thể nghe' : `Tua đến ${formatPlaybackTime(line.time)}`}
-          onClick={() => { manualScrollUntil.current = 0; onSeek(line.time); }}
+          onClick={() => { manualScroll.current = false; onSeek(line.time); }}
           className={`block w-full rounded-md text-left text-[clamp(22px,2.5vw,40px)] font-bold leading-[1.5] tracking-[-0.01em] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-white/60 disabled:cursor-not-allowed disabled:opacity-30 motion-reduce:transition-none ${index === activeIndex ? 'text-white' : 'text-white/55 hover:text-white/85'}`}
-        >{line.text}</button>;
+        ><LyricText line={line} elapsed={elapsed} active={index === activeIndex} /></button>;
       })}
     </div> : <div className="py-8 sm:py-16"><p className="mb-6 text-sm text-white/60">Lời chưa có mốc thời gian nên chưa thể bấm để tua.</p><p className="whitespace-pre-line text-[clamp(22px,2.5vw,40px)] font-bold leading-[1.8] text-white/80">{plainLyrics}</p></div>}
   </div>;

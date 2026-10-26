@@ -60,6 +60,37 @@ return [
         'graph_version' => env('FACEBOOK_GRAPH_VERSION', 'v23.0'),
     ],
 
+    'payments' => [
+        'return_url' => env('PAYMENT_RETURN_URL', 'http://localhost:3000/mua-vip/ket-qua'),
+    ],
+
+    'momo' => [
+        'partner_code' => env('MOMO_PARTNER_CODE'),
+        'access_key' => env('MOMO_ACCESS_KEY'),
+        'secret_key' => env('MOMO_SECRET_KEY'),
+        'api_url' => env('MOMO_API_URL', 'https://test-payment.momo.vn/v2/gateway/api/create'),
+        'request_type' => env('MOMO_REQUEST_TYPE', 'captureWallet'),
+        'redirect_url' => env('MOMO_REDIRECT_URL') ?: rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/v1/vip/payments/momo/return',
+        'ipn_url' => env('MOMO_IPN_URL') ?: rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/v1/vip/payments/momo/ipn',
+        'pay_url_hosts' => env('MOMO_PAY_URL_HOSTS', 'test-payment.momo.vn,payment.momo.vn'),
+    ],
+
+    'vnpay' => [
+        'tmn_code' => env('VNPAY_TMN_CODE'),
+        'hash_secret' => env('VNPAY_HASH_SECRET'),
+        'payment_url' => env('VNPAY_PAYMENT_URL', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html'),
+        'return_url' => env('VNPAY_RETURN_URL') ?: rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/v1/vip/payments/vnpay/return',
+        'ipn_url' => env('VNPAY_IPN_URL') ?: rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/v1/vip/payments/vnpay/ipn',
+    ],
+
+    'zalopay' => [
+        'app_id' => env('ZALOPAY_APP_ID'),
+        'key1' => env('ZALOPAY_KEY1'),
+        'key2' => env('ZALOPAY_KEY2'),
+        'create_url' => env('ZALOPAY_CREATE_URL', 'https://sb-openapi.zalopay.vn/v2/create'),
+        'callback_url' => env('ZALOPAY_CALLBACK_URL') ?: rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/v1/vip/payments/zalopay/callback',
+    ],
+
     'twilio' => [
         'account_sid' => env('TWILIO_ACCOUNT_SID'),
         'auth_token' => env('TWILIO_AUTH_TOKEN'),
