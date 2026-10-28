@@ -101,7 +101,7 @@ class VipPaymentGatewayTest extends TestCase
             ->assertJsonPath('data.0.id', 'momo')
             ->assertJsonPath('data.0.enabled', true)
             ->assertJsonPath('data.1.id', 'vnpay')
-            ->assertJsonPath('data.1.label', 'VNPAY QR')
+            ->assertJsonPath('data.1.label', 'VNPAY')
             ->assertJsonPath('data.1.enabled', true)
             ->assertJsonPath('data.2.id', 'zalopay')
             ->assertJsonPath('data.2.enabled', true);
@@ -223,7 +223,7 @@ class VipPaymentGatewayTest extends TestCase
         $this->assertTrue($this->user->fresh()->hasPremiumAccess());
     }
 
-    public function test_vnpay_checkout_forces_the_qr_payment_method(): void
+    public function test_vnpay_checkout_leaves_method_selection_to_the_gateway_by_default(): void
     {
         $response = $this->withHeaders($this->headers)->postJson('/api/v1/vip/checkout', [
             'plan_id' => (string) $this->plan->getKey(),
@@ -232,7 +232,7 @@ class VipPaymentGatewayTest extends TestCase
 
         $response->assertCreated()->assertJsonPath('data.method', 'vnpay');
         parse_str((string) parse_url((string) $response->json('data.checkout_url'), PHP_URL_QUERY), $query);
-        $this->assertSame('VNPAYQR', $query['vnp_BankCode'] ?? null);
+        $this->assertArrayNotHasKey('vnp_BankCode', $query);
     }
 
     public function test_zalopay_checkout_creates_a_signed_wallet_only_order(): void

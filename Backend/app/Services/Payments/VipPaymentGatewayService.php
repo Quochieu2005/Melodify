@@ -14,7 +14,7 @@ class VipPaymentGatewayService
     {
         return [
             ['id' => 'momo', 'label' => 'MoMo', 'enabled' => $this->isConfigured('momo')],
-            ['id' => 'vnpay', 'label' => 'VNPAY QR', 'enabled' => $this->isConfigured('vnpay')],
+            ['id' => 'vnpay', 'label' => 'VNPAY', 'enabled' => $this->isConfigured('vnpay')],
             ['id' => 'zalopay', 'label' => 'Ví ZaloPay', 'enabled' => $this->isConfigured('zalopay')],
         ];
     }
@@ -153,11 +153,14 @@ class VipPaymentGatewayService
             'vnp_Locale' => 'vn',
             'vnp_OrderInfo' => 'Melodify VIP '.$payment->payment_code,
             'vnp_OrderType' => 'other',
-            'vnp_BankCode' => 'VNPAYQR',
             'vnp_ReturnUrl' => (string) $settings['return_url'],
             'vnp_TxnRef' => (string) $payment->payment_code,
             'vnp_ExpireDate' => $now->copy()->addMinutes(15)->format('YmdHis'),
         ];
+        $bankCode = trim((string) ($settings['bank_code'] ?? ''));
+        if ($bankCode !== '') {
+            $params['vnp_BankCode'] = $bankCode;
+        }
         ksort($params, SORT_STRING);
         $query = http_build_query($params, '', '&', PHP_QUERY_RFC1738);
         $signature = hash_hmac('sha512', $query, (string) $settings['hash_secret']);
