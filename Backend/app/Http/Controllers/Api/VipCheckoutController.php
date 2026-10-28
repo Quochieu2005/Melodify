@@ -238,7 +238,11 @@ class VipCheckoutController extends Controller
         return response()->json(['RspCode' => '00', 'Message' => 'Confirm Success']);
     }
 
-    public function vnpayReturn(Request $request, VipPaymentGatewayService $gateways): RedirectResponse
+    public function vnpayReturn(
+        Request $request,
+        VipPaymentGatewayService $gateways,
+        VipPaymentSettlementService $settlements,
+    ): RedirectResponse
     {
         $payload = $request->query();
         abort_unless($gateways->verifyVnpayCallback($payload), 400, 'Phản hồi VNPAY không hợp lệ.');
@@ -248,6 +252,18 @@ class VipCheckoutController extends Controller
             ->where('method', 'vnpay')
             ->firstOrFail();
         abort_unless((int) ($payload['vnp_Amount'] ?? -1) === (int) round((float) $payment->amount) * 100, 400, 'Số tiền VNPAY không khớp.');
+
+        $transactionCode = (string) ($payload['vnp_TransactionNo'] ?? '');
+        if (($payload['vnp_ResponseCode'] ?? '') === '00'
+            && ($payload['vnp_TransactionStatus'] ?? '') === '00') {
+            // The signed browser return is a verified fallback for local setups
+            // where VNPay cannot reach the merchant IPN URL (for example localhost).
+            // Settlement is idempotent, so a later IPN will not grant VIP twice.
+            $settlements->markPaid($payment, $transactionCode, $payload);
+        } else {
+            $status = (string) ($payload['vnp_ResponseCode'] ?? '') === '24' ? 'cancelled' : 'failed';
+            $settlements->markFailed($payment, $status, $transactionCode);
+        }
 
         return $this->redirectToResult((string) $payment->payment_code);
     }
