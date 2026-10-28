@@ -124,6 +124,14 @@ export type SongReportReason =
   | "copyright"
   | "other";
 
+export type VideoReportReason =
+  | "incorrect_video"
+  | "incorrect_information"
+  | "duplicate"
+  | "inappropriate"
+  | "copyright"
+  | "other";
+
 export type HomeDiscovery = {
   single_new_releases: Song[];
   popular_songs: Song[];
@@ -273,6 +281,11 @@ export type SongVideo = {
   video_url: string | null;
   thumbnail_url?: string | null;
   duration_seconds?: number | null;
+  view_count?: number;
+  favorite_count?: number;
+  share_count?: number;
+  is_favorite?: boolean;
+  can_download?: boolean;
   source?: string | null;
   external_id?: string | null;
   external_source?: string | null;
@@ -405,6 +418,7 @@ export type SocialProvider = "google" | "facebook";
 
 export const AUTH_TOKEN_STORAGE_KEY = "melodify_access_token";
 export const AUTH_USER_STORAGE_KEY = "melodify_auth_user";
+export const AUTH_REQUIRED_EVENT = "melodify-auth-required";
 const LIBRARY_IMPORT_SESSION_KEY = "melodify_library_imported";
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
 const catalogResponseCache = new Map<string, { expiresAt: number; value: unknown }>();
@@ -423,6 +437,21 @@ function catalogCacheTtl(path: string): number {
 }
 const songFavoriteStates = new Map<string, boolean>();
 const importedLibraries = new Map<string, Promise<void>>();
+
+function requireAuthenticatedFavorite(): void {
+  if (typeof window === "undefined") return;
+  if (window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)) return;
+
+  window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
+  throw new ApiError(401, "Vui lòng đăng nhập để yêu thích.");
+}
+
+function isFavoriteMutation(path: string, method: string): boolean {
+  return method !== "GET" && (
+    /\/(?:favorite)(?:\?|$)/.test(path)
+    || path.split("?")[0] === "/v1/favorites/songs/reorder"
+  );
+}
 
 export function notifyLibraryChanged() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event("melodify-library-changed"));
@@ -444,7 +473,18 @@ async function importLegacyLibrary(token: string) {
         throw new ApiError(response.status, body.message || "Không thể đồng bộ thư viện.");
       }
       if (typeof window !== "undefined") window.sessionStorage.setItem(LIBRARY_IMPORT_SESSION_KEY, "1");
-    }).catch((error) => { importedLibraries.delete(token); throw error; });
+    }).catch((error) => {
+      importedLibraries.delete(token);
+      if (
+        error instanceof ApiError && error.status === 401 &&
+        typeof window !== "undefined" &&
+        window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) === token
+      ) {
+        clearAuthSession();
+        window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
+      }
+      throw error;
+    });
     importedLibraries.set(token, pending);
   }
   return pending;
@@ -601,6 +641,18 @@ export async function apiFetch<T>(
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
+      const requiresUserSession = /^\/v1\/me(?:\/|$)/.test(path)
+        || /^\/v1\/auth\/me(?:\?|$)/.test(path)
+        || /^\/v1\/favorites\/songs(?:\/|$)/.test(path)
+        || /\/(?:favorite)(?:\?|$)/.test(path);
+      if (response.status === 401 && requiresUserSession && typeof window !== "undefined") {
+        const currentToken = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+        const hasStaleUser = window.localStorage.getItem(AUTH_USER_STORAGE_KEY) !== null;
+        if ((storedToken && currentToken === storedToken) || hasStaleUser) clearAuthSession();
+        if (isFavoriteMutation(path, method)) {
+          window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
+        }
+      }
       const validationMessage = response.status === 422 && body.errors && typeof body.errors === "object"
         ? Object.values(body.errors as Record<string, unknown>)
           .flatMap((messages) => Array.isArray(messages) ? messages : [messages])
@@ -701,18 +753,19 @@ export async function listSongs(
   );
 }
 
-export function listFavoriteSongs(visitorId?: string) {
-  const query = visitorId ? `?visitor_id=${encodeURIComponent(visitorId)}` : "";
+export function listFavoriteSongs(_visitorId?: string) {
+  void _visitorId;
   return apiFetch<{ data: Song[]; meta: { total: number } }>(
-    `/v1/favorites/songs${query}`,
+    "/v1/favorites/songs",
   );
 }
 
-export function reorderFavoriteSongs(songIds: string[], visitorId?: string) {
+export function reorderFavoriteSongs(songIds: string[], _visitorId?: string) {
+  void _visitorId;
   return apiFetch<{ ordered: boolean }>("/v1/favorites/songs/reorder", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ song_ids: songIds, ...(visitorId ? { visitor_id: visitorId } : {}) }),
+    body: JSON.stringify({ song_ids: songIds }),
   });
 }
 
@@ -902,12 +955,13 @@ export async function getSong(songId: string, visitorId?: string) {
 }
 
 export async function listVideos(
-  options: { query?: string; page?: number; perPage?: number } = {},
+  options: { query?: string; page?: number; perPage?: number; visitorId?: string } = {},
 ) {
   const params = new URLSearchParams();
   if (options.query?.trim()) params.set("q", options.query.trim());
   if (options.page) params.set("page", String(options.page));
   if (options.perPage) params.set("per_page", String(options.perPage));
+  if (options.visitorId) params.set("visitor_id", options.visitorId);
 
   const query = params.toString();
   return apiFetch<PaginatedResponse<SongVideo>>(
@@ -915,10 +969,66 @@ export async function listVideos(
   );
 }
 
-export async function getVideo(slug: string) {
+export async function getVideo(slug: string, visitorId?: string) {
+  const query = visitorId ? `?visitor_id=${encodeURIComponent(visitorId)}` : "";
   return apiFetch<{ data: SongVideo }>(
-    `/v1/videos/${encodeURIComponent(slug)}`,
+    `/v1/videos/${encodeURIComponent(slug)}${query}`,
   );
+}
+
+export async function recordVideoView(videoId: string, visitorId?: string) {
+  return apiFetch<{ recorded: boolean; views: number }>(
+    `/v1/videos/${encodeURIComponent(videoId)}/view`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(visitorId ? { visitor_id: visitorId } : {}),
+    },
+  );
+}
+
+export async function toggleVideoFavorite(videoId: string, _visitorId?: string) {
+  void _visitorId;
+  requireAuthenticatedFavorite();
+  return apiFetch<{ favorited: boolean; favorites: number }>(
+    `/v1/videos/${encodeURIComponent(videoId)}/favorite`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    },
+  );
+}
+
+export async function recordVideoShare(videoId: string, source = "copy_link", visitorId?: string) {
+  return apiFetch<{ recorded: boolean; shares: number }>(
+    `/v1/videos/${encodeURIComponent(videoId)}/share`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source, ...(visitorId ? { visitor_id: visitorId } : {}) }),
+    },
+  );
+}
+
+export function reportVideo(
+  video: Pick<SongVideo, "id" | "slug">,
+  reason: VideoReportReason,
+  details: string,
+  visitorId?: string,
+) {
+  return apiFetch<{ message: string; report_id: string }>(
+    `/v1/videos/${encodeURIComponent(video.slug || video.id)}/report`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason, details, ...(visitorId ? { visitor_id: visitorId } : {}) }),
+    },
+  );
+}
+
+export function getVideoDownloadUrl(video: Pick<SongVideo, "id" | "slug">) {
+  return `${API_URL}/v1/videos/${encodeURIComponent(video.slug || video.id)}/download`;
 }
 
 export async function getSongLyrics(songId: string, language?: string) {
@@ -947,26 +1057,30 @@ export async function recordSongView(
   );
 }
 
-export async function toggleSongFavorite(songId: string, visitorId?: string) {
+export async function toggleSongFavorite(songId: string, _visitorId?: string) {
+  void _visitorId;
+  requireAuthenticatedFavorite();
   const response = await apiFetch<{ favorited: boolean; favorites: number }>(
     `/v1/songs/${encodeURIComponent(songId)}/favorite`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(visitorId ? { visitor_id: visitorId } : {}),
+      body: JSON.stringify({}),
     },
   );
   rememberSongFavorite(songId, response.favorited);
   return response;
 }
 
-export async function setSongFavorite(songId: string, favorited: boolean, visitorId?: string) {
+export async function setSongFavorite(songId: string, favorited: boolean, _visitorId?: string) {
+  void _visitorId;
+  requireAuthenticatedFavorite();
   const response = await apiFetch<{ favorited: boolean; favorites: number }>(
     `/v1/songs/${encodeURIComponent(songId)}/favorite`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ favorited, ...(visitorId ? { visitor_id: visitorId } : {}) }),
+      body: JSON.stringify({ favorited }),
     },
   );
   rememberSongFavorite(songId, response.favorited);
@@ -1153,13 +1267,15 @@ export async function getAlbum(slug: string, visitorId?: string) {
   );
 }
 
-export function toggleAlbumFavorite(albumId: string, visitorId?: string) {
+export async function toggleAlbumFavorite(albumId: string, _visitorId?: string) {
+  void _visitorId;
+  requireAuthenticatedFavorite();
   return apiFetch<{ favorited: boolean; favorites: number }>(
     `/v1/albums/${encodeURIComponent(albumId)}/favorite`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(visitorId ? { visitor_id: visitorId } : {}),
+      body: JSON.stringify({}),
     },
   );
 }
@@ -1222,13 +1338,15 @@ export function getVisitorId() {
   return visitorId;
 }
 
-export async function togglePlaylistFavorite(playlistId: string, visitorId?: string) {
+export async function togglePlaylistFavorite(playlistId: string, _visitorId?: string) {
+  void _visitorId;
+  requireAuthenticatedFavorite();
   return apiFetch<{ favorited: boolean; favorites: number }>(
     `/v1/playlists/${encodeURIComponent(playlistId)}/favorite`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(visitorId ? { visitor_id: visitorId } : {}),
+      body: JSON.stringify({}),
     },
   );
 }

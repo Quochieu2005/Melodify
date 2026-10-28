@@ -28,6 +28,7 @@ use App\Models\SongVideo;
 use App\Models\Topic;
 use App\Models\TopicSong;
 use App\Models\User;
+use App\Models\VideoFavorite;
 use App\Services\Music\LyricsClient;
 use App\Services\Music\NhacCuaTuiClient;
 use App\Services\Music\SongImportService;
@@ -117,16 +118,13 @@ class CatalogController extends Controller
 
     public function album(string $slug, Request $request): JsonResponse
     {
-        $filters = $request->validate([
-            'visitor_id' => ['nullable', 'string', 'max:120'],
-        ]);
         $payload = $this->responsePayload($this->show(Album::class, $slug, ['published'], fn (Album $album): array => $this->albumData($album, true)));
         $albumId = (string) data_get($payload, 'data.id', '');
         if ($albumId !== '') {
-            $actorId = $this->engagementActorId($request, $filters['visitor_id'] ?? null);
+            $actorId = $request->user() ? (string) $request->user()->getKey() : null;
             $payload['data']['favorite_count'] = AlbumFavorite::query()->where('album_id', $albumId)->count();
             $payload['data']['share_count'] = AlbumShare::query()->where('album_id', $albumId)->count();
-            $payload['data']['is_favorite'] = AlbumFavorite::query()
+            $payload['data']['is_favorite'] = $actorId !== null && AlbumFavorite::query()
                 ->where('album_id', $albumId)
                 ->where('user_id', $actorId)
                 ->exists();
@@ -137,12 +135,14 @@ class CatalogController extends Controller
 
     public function toggleAlbumFavorite(string $slug, Request $request): JsonResponse
     {
+        $user = $request->user();
+        abort_unless($user, 401, 'Vui lòng đăng nhập để yêu thích album.');
+
         $album = $this->findPublishedAlbum($slug);
         abort_unless($album, 404, 'Không tìm thấy album.');
 
-        $data = $request->validate(['visitor_id' => ['nullable', 'string', 'max:120']]);
         $albumId = (string) $album->getKey();
-        $actorId = $this->engagementActorId($request, $data['visitor_id'] ?? null);
+        $actorId = (string) $user->getKey();
         $favorite = AlbumFavorite::query()->where('album_id', $albumId)->where('user_id', $actorId)->first();
 
         if ($favorite) {
@@ -359,8 +359,8 @@ class CatalogController extends Controller
 
         $song = $candidatePayloads->isEmpty() ? null : $candidatePayloads->random();
         if ($song !== null) {
-            $actorId = $this->engagementActorId($request, $filters['visitor_id'] ?? null);
-            $song['is_favorite'] = Favorite::query()
+            $actorId = $request->user() ? (string) $request->user()->getKey() : null;
+            $song['is_favorite'] = $actorId !== null && Favorite::query()
                 ->where('song_id', (string) $song['id'])
                 ->where('user_id', $actorId)
                 ->exists();
@@ -655,10 +655,7 @@ class CatalogController extends Controller
         }
         abort_unless($playlist, 404, 'Không tìm thấy playlist.');
 
-        $query = $request->validate([
-            'visitor_id' => ['nullable', 'string', 'max:120'],
-        ]);
-        $actorId = $this->engagementActorId($request, $query['visitor_id'] ?? null);
+        $actorId = $request->user() ? (string) $request->user()->getKey() : null;
         $playlistId = (string) $playlist->getKey();
         $cacheKey = 'api:playlist-detail:v1:'.$this->catalogContentRevision().':'.sha1($playlistId);
         $data = Cache::store('file')->remember($cacheKey, now()->addMinute(), function () use ($playlist, $playlistId): array {
@@ -673,7 +670,7 @@ class CatalogController extends Controller
         $canEngage = in_array((string) $playlist->visibility, ['public', 'unlisted'], true);
         $data['favorite_count'] = $canEngage ? PlaylistFavorite::query()->where('playlist_id', $playlistId)->count() : 0;
         $data['share_count'] = $canEngage ? PlaylistShare::query()->where('playlist_id', $playlistId)->count() : 0;
-        $data['is_favorite'] = $canEngage && PlaylistFavorite::query()
+        $data['is_favorite'] = $canEngage && $actorId !== null && PlaylistFavorite::query()
             ->where('playlist_id', $playlistId)
             ->where('user_id', $actorId)
             ->exists();
@@ -686,14 +683,14 @@ class CatalogController extends Controller
 
     public function togglePlaylistFavorite(string $slug, Request $request): JsonResponse
     {
+        $user = $request->user();
+        abort_unless($user, 401, 'Vui lòng đăng nhập để yêu thích playlist.');
+
         $playlist = $this->findPublicPlaylist($slug);
         abort_unless($playlist, 404, 'Không tìm thấy playlist.');
 
-        $data = $request->validate([
-            'visitor_id' => ['nullable', 'string', 'max:120'],
-        ]);
         $playlistId = (string) $playlist->getKey();
-        $actorId = $this->engagementActorId($request, $data['visitor_id'] ?? null);
+        $actorId = (string) $user->getKey();
         $favorite = PlaylistFavorite::query()
             ->where('playlist_id', $playlistId)
             ->where('user_id', $actorId)
@@ -1230,8 +1227,12 @@ class CatalogController extends Controller
             ->orderByDesc('created_at')
             ->paginate($perPage);
 
+        $videos = collect($items->items());
+        $actorId = $request->user() ? (string) $request->user()->getKey() : null;
+        $videoStats = $this->videoEngagementStats($videos, $actorId);
+
         return response()->json([
-            'data' => collect($items->items())->map(fn (SongVideo $video): array => $this->videoData($video))->values()->all(),
+            'data' => $videos->map(fn (SongVideo $video): array => $this->videoData($video, $videoStats[(string) $video->getKey()] ?? []))->values()->all(),
             'meta' => [
                 'current_page' => $items->currentPage(),
                 'last_page' => $items->lastPage(),
@@ -1241,7 +1242,7 @@ class CatalogController extends Controller
         ]);
     }
 
-    public function video(string $slug): JsonResponse
+    public function video(string $slug, Request $request): JsonResponse
     {
         $video = SongVideo::query()->where('status', 'active')->where('slug', $slug)->first();
         if (! $video) {
@@ -1254,7 +1255,79 @@ class CatalogController extends Controller
 
         abort_unless($video, 404);
 
-        return response()->json(['data' => $this->videoData($video)]);
+        $actorId = $request->user() ? (string) $request->user()->getKey() : null;
+        $videoStats = $this->videoEngagementStats(collect([$video]), $actorId);
+
+        return response()->json(['data' => $this->videoData($video, $videoStats[(string) $video->getKey()] ?? [])])
+            ->header('Cache-Control', 'private, no-store');
+    }
+
+    public function recordVideoView(string $slug, Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'visitor_id' => ['nullable', 'string', 'max:120'],
+        ]);
+        $video = $this->activeVideoByIdentifier($slug);
+        abort_unless($video, 404, 'Không tìm thấy video.');
+
+        $actorId = $this->engagementActorId($request, $data['visitor_id'] ?? null);
+        $cacheKey = 'video-view:'.(string) $video->getKey().':'.hash('sha256', $actorId);
+        if (! Cache::store('file')->add($cacheKey, true, now()->addMinutes(30))) {
+            return response()->json(['recorded' => false, 'views' => (int) ($video->view_count ?? 0)]);
+        }
+
+        try {
+            $video->increment('view_count');
+        } catch (\Throwable $exception) {
+            Cache::store('file')->forget($cacheKey);
+            throw $exception;
+        }
+
+        return response()->json(['recorded' => true, 'views' => (int) ($video->fresh()?->view_count ?? 0)]);
+    }
+
+    public function toggleVideoFavorite(string $slug, Request $request): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user, 401, 'Vui lòng đăng nhập để yêu thích video.');
+
+        $data = $request->validate([
+            'favorited' => ['sometimes', 'boolean'],
+        ]);
+        $video = $this->activeVideoByIdentifier($slug);
+        abort_unless($video, 404, 'Không tìm thấy video.');
+
+        $videoId = (string) $video->getKey();
+        $actorId = (string) $user->getKey();
+        $favorite = VideoFavorite::query()->where('video_id', $videoId)->where('actor_id', $actorId)->first();
+        $favorited = array_key_exists('favorited', $data) ? (bool) $data['favorited'] : ! $favorite;
+
+        if ($favorited && ! $favorite) {
+            VideoFavorite::query()->firstOrCreate(['video_id' => $videoId, 'actor_id' => $actorId]);
+        } elseif (! $favorited && $favorite) {
+            $favorite->delete();
+        }
+
+        $favorites = VideoFavorite::query()->where('video_id', $videoId)->count();
+        $video->forceFill(['favorite_count' => $favorites])->save();
+
+        return response()->json(['favorited' => $favorited, 'favorites' => $favorites]);
+    }
+
+    public function recordVideoShare(string $slug, Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'visitor_id' => ['nullable', 'string', 'max:120'],
+            'source' => ['nullable', 'in:web,copy_link,facebook'],
+        ]);
+        $video = $this->activeVideoByIdentifier($slug);
+        abort_unless($video, 404, 'Không tìm thấy video.');
+        $video->increment('share_count');
+
+        return response()->json([
+            'recorded' => true,
+            'shares' => (int) ($video->fresh()?->share_count ?? 0),
+        ]);
     }
 
     public function popularSongs(Request $request): JsonResponse
@@ -1364,15 +1437,17 @@ class CatalogController extends Controller
 
     public function toggleSongFavorite(string $slug, Request $request): JsonResponse
     {
+        $user = $request->user();
+        abort_unless($user, 401, 'Vui lòng đăng nhập để yêu thích bài hát.');
+
         $song = $this->localSongById($slug);
 
         abort_unless($song, 404, 'Bài hát chưa được lưu trong kho nhạc.');
 
         $data = $request->validate([
-            'visitor_id' => ['nullable', 'string', 'max:120'],
             'favorited' => ['sometimes', 'boolean'],
         ]);
-        $actorId = $this->engagementActorId($request, $data['visitor_id'] ?? null);
+        $actorId = (string) $user->getKey();
         $favorite = Favorite::query()
             ->where('user_id', $actorId)
             ->where('song_id', (string) $song->getKey())
@@ -1409,12 +1484,14 @@ class CatalogController extends Controller
 
     public function reorderFavoriteSongs(Request $request): JsonResponse
     {
+        $user = $request->user();
+        abort_unless($user, 401, 'Vui lòng đăng nhập để sắp xếp bài hát yêu thích.');
+
         $data = $request->validate([
-            'visitor_id' => ['nullable', 'string', 'max:120'],
             'song_ids' => ['required', 'array', 'max:500'],
             'song_ids.*' => ['required', 'string', 'distinct', 'max:120'],
         ]);
-        $actorId = $this->engagementActorId($request, $data['visitor_id'] ?? null);
+        $actorId = (string) $user->getKey();
         $requestedIds = collect($data['song_ids'])->map(fn ($songId): string => (string) $songId)->values();
         $existingIds = Favorite::query()
             ->where('user_id', $actorId)
@@ -1441,10 +1518,10 @@ class CatalogController extends Controller
 
     public function favoriteSongs(Request $request): JsonResponse
     {
-        $filters = $request->validate([
-            'visitor_id' => ['nullable', 'string', 'max:120'],
-        ]);
-        $actorId = $this->engagementActorId($request, $filters['visitor_id'] ?? null);
+        $user = $request->user();
+        abort_unless($user, 401, 'Vui lòng đăng nhập để xem bài hát yêu thích.');
+
+        $actorId = (string) $user->getKey();
         $favorites = Favorite::query()
             ->where('user_id', $actorId)
             ->get(['song_id', 'sort_order', 'created_at']);
@@ -1531,9 +1608,6 @@ class CatalogController extends Controller
 
     public function song(string $slug, Request $request): JsonResponse
     {
-        $filters = $request->validate([
-            'visitor_id' => ['nullable', 'string', 'max:120'],
-        ]);
         $cacheKey = 'api:song:v4:'.$this->catalogContentRevision().':'.sha1($slug);
         try {
             $payload = Cache::store('file')->remember($cacheKey, now()->addMinutes(5), function () use ($slug): array {
@@ -1556,8 +1630,8 @@ class CatalogController extends Controller
             unset($payload['_local_song_id']);
 
             if ($localSongId !== '') {
-                $actorId = $this->engagementActorId($request, $filters['visitor_id'] ?? null);
-                $payload['data']['is_favorite'] = Favorite::query()
+                $actorId = $request->user() ? (string) $request->user()->getKey() : null;
+                $payload['data']['is_favorite'] = $actorId !== null && Favorite::query()
                     ->where('song_id', $localSongId)
                     ->where('user_id', $actorId)
                     ->exists();
@@ -2437,6 +2511,17 @@ class CatalogController extends Controller
             ->map(function (array $option) use ($endpoint): array {
                 $qualityId = (string) ($option['qualityId'] ?? $option['quality_id']);
                 $available = (bool) ($option['available'] ?? filled($option['streamUrl'] ?? $option['stream_url'] ?? null));
+                $bitrate = isset($option['bitrate']) ? (int) $option['bitrate'] : null;
+                $qualityHint = implode(' ', array_filter([
+                    (string) ($option['format'] ?? ''),
+                    (string) ($option['quality'] ?? ''),
+                    (string) ($option['label'] ?? ''),
+                    (string) ($option['name'] ?? ''),
+                    (string) ($option['key'] ?? ''),
+                    (string) ($option['typeUI'] ?? ''),
+                    (string) ($option['type'] ?? ''),
+                ]));
+                $isLossless = preg_match('/lossless|flac|alac/i', $qualityHint) === 1 || ($bitrate ?? 0) >= 900;
                 $audioUrl = null;
                 if ($available) {
                     $query = http_build_query(['quality_id' => $qualityId], '', '&', PHP_QUERY_RFC3986);
@@ -2446,8 +2531,8 @@ class CatalogController extends Controller
                 return [
                     'quality_id' => $qualityId,
                     'label' => (string) ($option['label'] ?? 'Chất lượng nhạc'),
-                    'bitrate' => isset($option['bitrate']) ? (int) $option['bitrate'] : null,
-                    'premium_only' => (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false),
+                    'bitrate' => $bitrate,
+                    'premium_only' => (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false) || $isLossless,
                     'available' => $available,
                     'audio_url' => $audioUrl,
                     'download_url' => $audioUrl ? $audioUrl.'&download=1' : null,
@@ -2464,7 +2549,64 @@ class CatalogController extends Controller
         return $default['label'] ?? null;
     }
 
-    private function videoData(SongVideo $video): array
+    private function activeVideoByIdentifier(string $identifier): ?SongVideo
+    {
+        $query = SongVideo::query()->where('status', 'active');
+        $video = (clone $query)->where('slug', $identifier)->first();
+        if ($video) {
+            return $video;
+        }
+
+        if (! preg_match('/^[a-f0-9]{24}$/i', $identifier)) {
+            return null;
+        }
+
+        try {
+            return (clone $query)->find($identifier);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /** @param Collection<int, SongVideo> $videos
+     * @return array<string, array{view_count: int, favorite_count: int, share_count: int, is_favorite: bool}>
+     */
+    private function videoEngagementStats(Collection $videos, ?string $actorId): array
+    {
+        $videoIds = $videos->map(fn (SongVideo $video): string => (string) $video->getKey())->values();
+        $stats = $videos->mapWithKeys(function (SongVideo $video): array {
+            $videoId = (string) $video->getKey();
+
+            return [$videoId => [
+                'view_count' => (int) ($video->view_count ?? 0),
+                'favorite_count' => 0,
+                'share_count' => (int) ($video->share_count ?? 0),
+                'is_favorite' => false,
+            ]];
+        })->all();
+
+        if ($videoIds->isEmpty()) {
+            return $stats;
+        }
+
+        $favorites = VideoFavorite::query()->whereIn('video_id', $videoIds->all())->get(['video_id', 'actor_id']);
+        foreach ($favorites as $favorite) {
+            $videoId = (string) $favorite->video_id;
+            if (! isset($stats[$videoId])) {
+                continue;
+            }
+
+            $stats[$videoId]['favorite_count']++;
+            if ($actorId !== null && (string) $favorite->actor_id === $actorId) {
+                $stats[$videoId]['is_favorite'] = true;
+            }
+        }
+
+        return $stats;
+    }
+
+    /** @param array{view_count?: int, favorite_count?: int, share_count?: int, is_favorite?: bool} $stats */
+    private function videoData(SongVideo $video, array $stats = []): array
     {
         $streamUrl = $video->video_url;
         $embedUrl = null;
@@ -2491,6 +2633,11 @@ class CatalogController extends Controller
             'youtube_video_id' => $video->source === 'youtube' ? $video->external_id : null,
             'thumbnail_url' => $video->thumbnail_url,
             'duration_seconds' => $video->duration_seconds !== null ? (int) $video->duration_seconds : null,
+            'view_count' => $stats['view_count'] ?? (int) ($video->view_count ?? 0),
+            'favorite_count' => $stats['favorite_count'] ?? (int) ($video->favorite_count ?? 0),
+            'share_count' => $stats['share_count'] ?? (int) ($video->share_count ?? 0),
+            'is_favorite' => $stats['is_favorite'] ?? false,
+            'can_download' => $video->source !== 'youtube' && (filled($video->video_url) || ($video->source === 'nhaccuatui' && filled($video->external_id))),
             'source' => $video->source,
             'external_id' => $video->external_id,
             'external_source' => $video->external_source,

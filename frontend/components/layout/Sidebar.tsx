@@ -112,7 +112,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const hasCollections = Boolean(data && (data.created_playlists.length || data.favorite_playlists.length || data.favorite_albums.length));
   const groups = data ? [
-    { title: 'Playlist đã tạo', create: true, items: data.created_playlists.map((item) => ({ ...item, href: `/playlist/${encodeURIComponent(item.slug || item.id)}` })) },
+    { title: 'Playlist đã tạo', create: true, items: data.created_playlists.map((item) => ({ ...item, href: item.visibility === 'private' ? `/me/create/${encodeURIComponent(item.id)}` : `/playlist/${encodeURIComponent(item.slug || item.id)}` })) },
     { title: 'Playlist yêu thích', items: data.favorite_playlists.map((item) => ({ ...item, href: `/playlist/${encodeURIComponent(item.slug || item.id)}` })) },
     { title: 'Album yêu thích', items: data.favorite_albums.map((item) => ({ ...item, name: item.title, href: `/album/${encodeURIComponent(item.slug || item.id)}` })) },
   ] : [];

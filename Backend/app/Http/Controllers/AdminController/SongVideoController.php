@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Http\Controllers\Controller;
+use App\Models\Artist;
 use App\Models\SongVideo;
 use App\Services\CloudinaryService;
 use App\Services\Music\SongImportService;
 use App\Services\Music\YouTubeClient;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
@@ -46,6 +47,7 @@ class SongVideoController extends Controller
     {
         return view('Admin.videos.create', [
             'item' => null,
+            'nextSortOrder' => $this->nextSortOrder(),
         ]);
     }
 
@@ -92,6 +94,79 @@ class SongVideoController extends Controller
         return response()->json(['data' => $this->externalVideoData($video)]);
     }
 
+    public function signVideoUpload(Request $request, CloudinaryService $cloudinary): JsonResponse
+    {
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:160'],
+        ]);
+
+        try {
+            return response()->json(['data' => $cloudinary->createSignedVideoUpload($data['title'])]);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+    }
+
+    public function searchArtists(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'q' => ['nullable', 'string', 'min:1', 'max:100'],
+            'filename' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $query = Artist::query()->where('status', 'active');
+        $filename = trim((string) ($data['filename'] ?? ''));
+
+        if ($filename !== '') {
+            $filenameKey = $this->normalizedArtistName(pathinfo($filename, PATHINFO_FILENAME));
+            $tokens = array_slice(array_values(array_filter(explode(' ', $filenameKey))), 0, 12);
+            $patterns = [];
+            $maxPhraseLength = min(5, count($tokens));
+            for ($length = 1; $length <= $maxPhraseLength; $length++) {
+                for ($start = 0; $start + $length <= count($tokens); $start++) {
+                    $phrase = implode(' ', array_slice($tokens, $start, $length));
+                    if (mb_strlen($phrase) >= 2) {
+                        $patterns[] = $this->artistNameRegex($phrase, exact: true);
+                    }
+                }
+            }
+            $patterns = array_values(array_unique($patterns));
+
+            $artists = $patterns === []
+                ? collect()
+                : $query->where(function ($builder) use ($patterns): void {
+                    foreach ($patterns as $index => $pattern) {
+                        $method = $index === 0 ? 'where' : 'orWhere';
+                        $builder->{$method}('name', 'regex', $pattern);
+                    }
+                })->get(['name', 'slug', 'avatar_url', 'country_code'])
+                    ->sortByDesc(fn (Artist $artist): int => mb_strlen($this->normalizedArtistName((string) $artist->name)))
+                    ->take(10)
+                    ->values();
+        } else {
+            $term = trim((string) ($data['q'] ?? ''));
+            $termKey = $this->normalizedArtistName($term);
+            $artists = $termKey === ''
+                ? collect()
+                : $query->where('name', 'regex', $this->artistNameRegex($termKey))
+                    ->orderBy('name')
+                    ->limit(10)
+                    ->get(['name', 'slug', 'avatar_url', 'country_code']);
+        }
+
+        return response()->json([
+            'data' => $artists->map(fn (Artist $artist): array => [
+                'id' => (string) $artist->getKey(),
+                'name' => $artist->name,
+                'slug' => $artist->slug,
+                'avatar_url' => $artist->avatar_url,
+                'country_code' => $artist->country_code,
+            ])->values()->all(),
+        ]);
+    }
+
     public function source(string $slug): JsonResponse
     {
         $video = $this->findVideo($slug);
@@ -128,22 +203,23 @@ class SongVideoController extends Controller
     public function store(Request $request, CloudinaryService $cloudinary, YouTubeClient $youtube, SongImportService $songImport): RedirectResponse
     {
         $data = $this->validated($request);
+        $data['sort_order'] ??= $this->nextSortOrder();
 
-        if (! $request->hasFile('video_file') && blank($data['video_url'] ?? null)) {
+        if (! $request->hasFile('video_file') && blank($data['video_url'] ?? null) && blank($data['cloudinary_video_public_id'] ?? null)) {
             return back()->withErrors(['video_file' => 'Hãy chọn file video hoặc nhập URL video.'])->withInput();
         }
 
         try {
             $media = $this->resolveMedia($request, $data, $cloudinary);
             $artistData = $this->syncVideoArtists($data, $youtube, $songImport);
-            $video = new SongVideo();
+            $video = new SongVideo;
             $this->fillVideo($video, $data, $media, $artistData);
             $video->created_by_admin_id = (string) auth('admin')->id();
             $video->save();
         } catch (Throwable $exception) {
             report($exception);
 
-            return back()->withErrors(['video_file' => 'Không thể upload video. Kiểm tra Cloudinary, file hoặc URL rồi thử lại.'])->withInput();
+            return back()->withErrors(['video_file' => 'Không thể upload video: '.Str::limit($exception->getMessage(), 240)])->withInput();
         }
 
         return redirect()->route('admin.videos.index')->with('success', 'Đã upload video nhạc thành công.');
@@ -163,14 +239,14 @@ class SongVideoController extends Controller
         $video = $this->findVideo($slug);
         $data = $this->validated($request);
 
-        if ($request->boolean('remove_video') && ! $request->hasFile('video_file') && blank($data['video_url'] ?? null)) {
+        if ($request->boolean('remove_video') && ! $request->hasFile('video_file') && blank($data['video_url'] ?? null) && blank($data['cloudinary_video_public_id'] ?? null)) {
             $this->deleteCloudinaryVideo($video, $cloudinary);
             $video->delete();
 
             return redirect()->route('admin.videos.index')->with('success', 'Đã xóa video nhạc.');
         }
 
-        $hasNewMedia = $request->hasFile('video_file') || filled($data['video_url'] ?? null);
+        $hasNewMedia = $request->hasFile('video_file') || filled($data['video_url'] ?? null) || filled($data['cloudinary_video_public_id'] ?? null);
         $artistData = $this->syncVideoArtists($data, $youtube, $songImport);
         if ($hasNewMedia) {
             try {
@@ -186,7 +262,7 @@ class SongVideoController extends Controller
             } catch (Throwable $exception) {
                 report($exception);
 
-                return back()->withErrors(['video_file' => 'Không thể cập nhật video. Kiểm tra Cloudinary, file hoặc URL rồi thử lại.'])->withInput();
+                return back()->withErrors(['video_file' => 'Không thể cập nhật video: '.Str::limit($exception->getMessage(), 240)])->withInput();
             }
         } else {
             $video->title = trim((string) $data['title']);
@@ -199,9 +275,9 @@ class SongVideoController extends Controller
             $video->duration_seconds = $data['duration_seconds'] ?? $video->duration_seconds;
             $video->sort_order = (int) ($data['sort_order'] ?? 0);
             $video->status = $data['status'];
-            if ($artistData !== null) {
-                $video->artist_ids = $artistData['ids'];
-                $video->artists = $artistData['items'];
+            if ($artistData !== null || ! in_array($video->source, ['youtube', 'nhaccuatui'], true)) {
+                $video->artist_ids = $artistData['ids'] ?? [];
+                $video->artists = $artistData['items'] ?? [];
             }
             if (filled($data['external_id'] ?? null) && in_array(($data['external_source'] ?? null), ['youtube', 'nhaccuatui'], true)) {
                 $video->external_id = $data['external_id'];
@@ -240,7 +316,7 @@ class SongVideoController extends Controller
             'ids' => ['required', 'array', 'min:1', 'max:50'],
             'ids.*' => ['required', 'string', 'max:64', 'distinct'],
         ]);
-        $keyName = (new SongVideo())->getKeyName();
+        $keyName = (new SongVideo)->getKeyName();
         $videos = SongVideo::query()->whereIn($keyName, array_values($data['ids']))->get();
 
         if ($videos->isEmpty()) {
@@ -273,10 +349,19 @@ class SongVideoController extends Controller
     /** @return array<string, mixed> */
     private function validated(Request $request): array
     {
+        $maxVideoSizeKilobytes = max(1, (int) ceil(
+            max(1, (int) config('cloudinary.video_max_bytes', 104857600)) / 1024,
+        ));
+
         return $request->validate([
             'title' => ['required', 'string', 'max:160'],
             'slug' => ['nullable', 'alpha_dash', 'max:200'],
-            'video_file' => ['nullable', 'file', 'mimes:mp4,mov,m4v,webm,avi,mkv', 'max:512000'],
+            'video_file' => ['nullable', 'file', 'mimes:mp4,mov,m4v,webm,avi,mkv', "max:{$maxVideoSizeKilobytes}"],
+            'cloudinary_video_expected_public_id' => ['nullable', 'string', 'max:255'],
+            'cloudinary_video_public_id' => ['nullable', 'string', 'max:500'],
+            'cloudinary_video_version' => ['nullable', 'integer', 'min:1'],
+            'cloudinary_video_signature' => ['nullable', 'regex:/^[A-Fa-f0-9]{40}$/'],
+            'cloudinary_video_format' => ['nullable', 'in:mp4,mov,m4v,webm,avi,mkv,mpeg,mpg,ogv,3gp'],
             'video_url' => ['nullable', 'url:http,https', 'max:1000'],
             'thumbnail_url' => ['nullable', 'url:http,https', 'max:500'],
             'source_url' => ['nullable', 'url:http,https', 'max:1000'],
@@ -290,9 +375,31 @@ class SongVideoController extends Controller
         ]);
     }
 
+    private function nextSortOrder(): int
+    {
+        return max(1, (int) SongVideo::query()->max('sort_order') + 1);
+    }
+
     /** @return array{url: ?string, public_id: ?string, source: string, duration_seconds: ?int} */
     private function resolveMedia(Request $request, array $data, CloudinaryService $cloudinary): array
     {
+        if (filled($data['cloudinary_video_public_id'] ?? null)) {
+            $uploaded = $cloudinary->verifySignedVideoUpload(
+                (string) $data['cloudinary_video_public_id'],
+                (string) ($data['cloudinary_video_expected_public_id'] ?? ''),
+                (int) ($data['cloudinary_video_version'] ?? 0),
+                (string) ($data['cloudinary_video_signature'] ?? ''),
+                (string) ($data['cloudinary_video_format'] ?? ''),
+            );
+
+            return [
+                'url' => $uploaded['secure_url'],
+                'public_id' => $uploaded['public_id'],
+                'source' => 'cloudinary',
+                'duration_seconds' => filled($data['duration_seconds'] ?? null) ? (int) $data['duration_seconds'] : null,
+            ];
+        }
+
         if ($request->hasFile('video_file')) {
             $uploaded = $cloudinary->uploadVideo(
                 $request->file('video_file'),
@@ -355,8 +462,8 @@ class SongVideoController extends Controller
             $video->video_url_encrypted = null;
         }
         if (! $isExternalVideo) {
-            $video->artist_ids = [];
-            $video->artists = [];
+            $video->artist_ids = $artistData['ids'] ?? [];
+            $video->artists = $artistData['items'] ?? [];
         } elseif ($artistData !== null) {
             $video->artist_ids = $artistData['ids'];
             $video->artists = $artistData['items'];
@@ -436,8 +543,10 @@ class SongVideoController extends Controller
     /** @return array{ids: array<int, string>, items: array<int, array<string, mixed>>}|null */
     private function syncVideoArtists(array $data, YouTubeClient $youtube, SongImportService $songImport): ?array
     {
+        $manualNames = $songImport->artistNames((string) ($data['artist_names'] ?? ''));
+
         if (($data['external_source'] ?? null) !== 'youtube' || blank($data['external_id'] ?? null)) {
-            return null;
+            return $this->databaseVideoArtists($manualNames);
         }
 
         try {
@@ -448,7 +557,6 @@ class SongVideoController extends Controller
                 ->map(fn ($name): string => trim((string) $name))
                 ->filter()
                 ->all();
-            $manualNames = $songImport->artistNames((string) ($data['artist_names'] ?? ''));
             $names = collect([...$primaryNames, ...$manualNames])
                 ->map(fn ($name): string => trim((string) $name))
                 ->filter()
@@ -503,7 +611,68 @@ class SongVideoController extends Controller
         } catch (Throwable $exception) {
             report($exception);
 
+            return $this->databaseVideoArtists($manualNames);
+        }
+    }
+
+    /** @param array<int, string> $names
+     * @return array{ids: array<int, string>, items: array<int, array<string, mixed>>}|null
+     */
+    private function databaseVideoArtists(array $names): ?array
+    {
+        if ($names === []) {
             return null;
         }
+
+        $artists = Artist::query()
+            ->where('status', 'active')
+            ->whereIn('name', $names)
+            ->orderBy('name')
+            ->get();
+        $items = $artists->map(function (Artist $artist): array {
+            $countryCode = $artist->country_code ?: null;
+
+            return [
+                'id' => (string) $artist->getKey(),
+                'name' => $artist->name,
+                'slug' => $artist->slug,
+                'avatar_url' => $artist->avatar_url,
+                'country_code' => $countryCode,
+                'country' => filled($countryCode)
+                    ? config('music.countries.'.$countryCode, $countryCode)
+                    : null,
+            ];
+        })->values();
+
+        return [
+            'ids' => $items->pluck('id')->all(),
+            'items' => $items->all(),
+        ];
+    }
+
+    private function normalizedArtistName(string $name): string
+    {
+        return trim(preg_replace('/[^a-z0-9]+/', ' ', Str::lower(Str::ascii($name))) ?? '');
+    }
+
+    private function artistNameRegex(string $normalizedName, bool $exact = false): string
+    {
+        $accentGroups = [
+            'a' => '[aàáạảãâầấậẩẫăằắặẳẵ]',
+            'd' => '[dđ]',
+            'e' => '[eèéẹẻẽêềếệểễ]',
+            'i' => '[iìíịỉĩ]',
+            'o' => '[oòóọỏõôồốộổỗơờớợởỡ]',
+            'u' => '[uùúụủũưừứựửữ]',
+            'y' => '[yỳýỵỷỹ]',
+        ];
+        $pattern = '';
+        foreach (mb_str_split($normalizedName) as $character) {
+            $pattern .= $character === ' '
+                ? '[\\s\\p{P}]+'
+                : ($accentGroups[$character] ?? preg_quote($character, '/'));
+        }
+
+        return '/'.($exact ? '^' : '').$pattern.($exact ? '$' : '').'/iu';
     }
 }

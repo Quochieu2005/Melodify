@@ -9,6 +9,9 @@ class SongVideo extends BaseModel
     protected $casts = [
         'duration_seconds' => 'integer',
         'sort_order' => 'integer',
+        'view_count' => 'integer',
+        'favorite_count' => 'integer',
+        'share_count' => 'integer',
         'artist_ids' => 'array',
         'artists' => 'array',
     ];

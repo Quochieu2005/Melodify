@@ -7,6 +7,7 @@ import { useLoginModal } from '@/components/auth/LoginModalProvider';
 import CreatePlaylistDialog from '@/components/playlists/CreatePlaylistDialog';
 import {
   addSongsToUserPlaylist,
+  AUTH_TOKEN_STORAGE_KEY,
   listUserPlaylists,
   type Song,
   type UserPlaylistSummary,
@@ -37,7 +38,12 @@ export function AddSongsToPlaylistDialog({
   onClose: () => void;
   onAdded?: (message: string) => void;
 }) {
-  const { openLogin } = useLoginModal();
+  const { openLogin, user, authReady } = useLoginModal();
+  // The token is the source of truth for API access. Context hydration can lag
+  // behind the sidebar during client navigation, so don't label that session logged out.
+  const hasStoredToken = typeof window !== 'undefined'
+    && Boolean(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY));
+  const canLoadPlaylists = Boolean(user) || hasStoredToken;
   const [playlists, setPlaylists] = useState<UserPlaylistSummary[]>([]);
   const [search, setSearch] = useState('');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -61,7 +67,8 @@ export function AddSongsToPlaylistDialog({
   }, [isBusy, onClose]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !authReady) return;
+    if (!canLoadPlaylists) return;
     let cancelled = false;
 
     listUserPlaylists()
@@ -71,7 +78,9 @@ export function AddSongsToPlaylistDialog({
       .catch((cause: unknown) => {
         if (!cancelled) {
           setError(isUnauthorized(cause)
-            ? 'Bạn cần đăng nhập để thêm bài vào playlist cá nhân.'
+            ? canLoadPlaylists
+              ? 'Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại để xem playlist cá nhân.'
+              : 'Bạn cần đăng nhập để thêm bài vào playlist cá nhân.'
             : 'Không thể tải playlist. Vui lòng thử lại.');
         }
       })
@@ -80,7 +89,7 @@ export function AddSongsToPlaylistDialog({
       });
 
     return () => { cancelled = true; };
-  }, [open]);
+  }, [authReady, canLoadPlaylists, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -97,6 +106,9 @@ export function AddSongsToPlaylistDialog({
       ? playlists.filter((playlist) => playlist.name.toLocaleLowerCase('vi').includes(query))
       : playlists;
   }, [playlists, search]);
+  const visibleError = error || (authReady && !canLoadPlaylists
+    ? 'Bạn cần đăng nhập để thêm bài vào playlist cá nhân.'
+    : '');
 
   if (!open || typeof document === 'undefined') return null;
 
@@ -151,10 +163,10 @@ export function AddSongsToPlaylistDialog({
           </button>
 
           <h3 className="mb-2 mt-5 text-[16px] font-bold text-white/70">Playlist của bạn</h3>
-          {isLoading ? <p className="py-5 text-sm text-white/60">Đang tải playlist…</p> : null}
-          {!isLoading && filteredPlaylists.length === 0 && !error ? <p className="py-5 text-sm text-white/60">{playlists.length ? 'Không tìm thấy playlist phù hợp.' : 'Bạn chưa có playlist cá nhân.'}</p> : null}
+          {authReady && canLoadPlaylists && isLoading ? <p className="py-5 text-sm text-white/60">Đang tải playlist…</p> : null}
+          {authReady && canLoadPlaylists && !isLoading && filteredPlaylists.length === 0 && !visibleError ? <p className="py-5 text-sm text-white/60">{playlists.length ? 'Không tìm thấy playlist phù hợp.' : 'Bạn chưa có playlist cá nhân.'}</p> : null}
 
-          {!isLoading ? <div className="space-y-1">
+          {authReady && canLoadPlaylists && !isLoading ? <div className="space-y-1">
             {filteredPlaylists.map((playlist) => {
               const isAdded = addedIds.includes(playlist.id);
               const isRowSaving = savingPlaylistId === playlist.id;
@@ -168,7 +180,7 @@ export function AddSongsToPlaylistDialog({
             })}
           </div> : null}
 
-          {error ? <div role="alert" className="mt-4 flex flex-wrap items-center gap-3 text-sm text-rose-300"><p>{error}</p>{/đăng nhập|phiên đăng nhập/i.test(error) ? <button type="button" onClick={() => openLogin()} className="font-bold text-cyan-300 underline decoration-cyan-300/50 underline-offset-2 hover:text-cyan-200">Đăng nhập</button> : null}</div> : null}
+          {visibleError ? <div role="alert" className="mt-4 flex flex-wrap items-center gap-3 text-sm text-rose-300"><p>{visibleError}</p>{/đăng nhập|phiên đăng nhập/i.test(visibleError) ? <button type="button" onClick={() => openLogin()} className="font-bold text-cyan-300 underline decoration-cyan-300/50 underline-offset-2 hover:text-cyan-200">Đăng nhập</button> : null}</div> : null}
           {status ? <p role="status" className="mt-4 text-sm text-cyan-200">{status}</p> : null}
         </div>
       </section>

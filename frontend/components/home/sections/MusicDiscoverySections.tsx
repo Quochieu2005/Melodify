@@ -11,6 +11,7 @@ import { artistPath, type ArtistReference } from '@/components/artists/ArtistLin
 import { getHomeBootstrap, type HomeDiscovery, type HomeTrendingArtist, type Playlist, type Song } from '@/lib/api';
 import FollowButton from '@/components/follow/FollowButton';
 import { recentPlaylistItem, recordRecentItem, recentArtistItem, recentSongItem, songPath } from '@/lib/recent-history';
+import VideoSection from '@/components/videos/VideoSection';
 
 import styles from './MusicDiscoverySections.module.css';
 
@@ -252,5 +253,6 @@ export default function MusicDiscoverySections() {
     <SongSection id="popular-songs-heading" title="Nhiều Lượt Nghe Nhất" songs={discovery.popular_songs} />
     {sections.map((section) => section.playlists.length > 0 ? <PlaylistSection key={section.id} {...section} /> : null)}
     <TrendingArtistsSection artists={trendingArtists} onFollowersChanged={(id, count) => setTrendingArtists((current) => current.map((artist) => artist.id === id ? { ...artist, followers_count: count } : artist))} />
+    <VideoSection />
   </>;
 }
