@@ -1,4 +1,5 @@
 @php($isEditing = $isEditing ?? filled($item))
+@php($videoMaxBytes = max(1, (int) config('cloudinary.video_max_bytes', 104857600)))
 <section class="admin-page admin-form-page">
     <div class="admin-page-header">
         <div class="admin-page-header-main">
@@ -11,6 +12,11 @@
     <form method="POST" action="{{ $isEditing ? route('admin.videos.update', $item->getKey()) : route('admin.videos.store') }}" class="ant-card admin-resource-form" enctype="multipart/form-data">
         @csrf
         @if($isEditing) @method('PUT') @endif
+        <input type="hidden" name="cloudinary_video_expected_public_id" value="">
+        <input type="hidden" name="cloudinary_video_public_id" value="">
+        <input type="hidden" name="cloudinary_video_version" value="">
+        <input type="hidden" name="cloudinary_video_signature" value="">
+        <input type="hidden" name="cloudinary_video_format" value="">
         <div class="admin-resource-form-heading"><div><strong>Thông tin video</strong><span>Video được lưu trong collection song_videos riêng.</span></div><span class="ant-tag {{ $isEditing ? 'ant-tag-blue' : 'ant-tag-green' }}">{{ $isEditing ? 'Đang chỉnh sửa' : 'Tạo mới' }}</span></div>
 
         <div class="admin-form-grid">
@@ -52,8 +58,9 @@
                     <video class="admin-video-preview" controls preload="metadata" poster="{{ $item->thumbnail_url ?: '' }}"><source src="{{ $item->video_url }}"></video>
                     <p class="admin-field-help">Video hiện tại: {{ $item->source === 'cloudinary' ? 'Cloudinary' : ($item->source === 'nhaccuatui' ? 'NhacCuaTui' : 'URL bên ngoài') }}.</p>
                 @endif
-                <input id="video-file" name="video_file" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo,video/x-matroska,.mp4,.mov,.m4v,.webm,.avi,.mkv" class="ant-input admin-form-input @error('video_file') is-invalid @enderror">
-                <p class="admin-field-help">MP4, MOV, M4V, WEBM, AVI hoặc MKV · tối đa 500MB.</p>
+                <input id="video-file" name="video_file" type="file" data-max-bytes="{{ $videoMaxBytes }}" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo,video/x-matroska,.mp4,.mov,.m4v,.webm,.avi,.mkv" class="ant-input admin-form-input @error('video_file') is-invalid @enderror">
+                <p class="admin-field-help">MP4, MOV, M4V, WEBM, AVI hoặc MKV · tối đa {{ number_format($videoMaxBytes / 1048576, $videoMaxBytes % 1048576 === 0 ? 0 : 1) }} MiB theo giới hạn Cloudinary hiện tại.</p>
+                <p class="admin-field-help" data-video-file-message>Tên file và thời lượng sẽ được đọc tự động. File trong giới hạn Cloudinary được gửi thẳng lên; file lớn hơn 100 MB được chia phần để hiển thị tiến độ.</p>
                 @error('video_file')<p class="admin-field-error">{{ $message }}</p>@enderror
             </div>
             <div class="admin-form-group admin-form-span">
@@ -69,8 +76,12 @@
             </div>
             <div class="admin-form-group admin-form-span">
                 <label class="admin-form-label" for="video-artist-names">Nghệ sĩ</label>
-                <input id="video-artist-names" name="artist_names" value="{{ old('artist_names', collect($item?->artists ?? [])->pluck('name')->filter()->join(', ')) }}" maxlength="500" class="ant-input admin-form-input @error('artist_names') is-invalid @enderror" placeholder="Nghệ sĩ chính, Nghệ sĩ kết hợp">
-                <p class="admin-field-help">YouTube tự lấy kênh chính. Nếu có nhiều nghệ sĩ, nhập cách nhau bằng dấu phẩy để hệ thống kiểm tra, lấy ảnh và quốc gia từng người.</p>
+                <div class="admin-video-artist-search">
+                    <input id="video-artist-names" name="artist_names" value="{{ old('artist_names', collect($item?->artists ?? [])->pluck('name')->filter()->join(', ')) }}" maxlength="500" class="ant-input admin-form-input @error('artist_names') is-invalid @enderror" placeholder="Tìm và chọn nghệ sĩ trong database" autocomplete="off">
+                    <div class="admin-video-artist-results" data-video-artist-results role="listbox" hidden></div>
+                </div>
+                <p class="admin-field-help">YouTube lấy nghệ sĩ từ API. Với file upload, hệ thống dò tên nghệ sĩ trong tên file và database; bạn cũng có thể gõ để chọn nghệ sĩ đã lưu.</p>
+                <p class="admin-field-help" data-video-artist-message></p>
                 @error('artist_names')<p class="admin-field-error">{{ $message }}</p>@enderror
             </div>
             <div class="admin-form-group">
@@ -80,7 +91,7 @@
             </div>
             <div class="admin-form-group">
                 <label class="admin-form-label" for="video-sort-order">Thứ tự</label>
-                <input id="video-sort-order" name="sort_order" type="number" min="0" max="9999" value="{{ old('sort_order', $item?->sort_order ?? 0) }}" class="ant-input admin-form-input @error('sort_order') is-invalid @enderror">
+                <input id="video-sort-order" name="sort_order" type="number" min="0" max="9999" value="{{ old('sort_order', $item?->sort_order ?? $nextSortOrder ?? 1) }}" class="ant-input admin-form-input @error('sort_order') is-invalid @enderror">
                 @error('sort_order')<p class="admin-field-error">{{ $message }}</p>@enderror
             </div>
             <div class="admin-form-group">
@@ -106,6 +117,8 @@
 (() => {
     const searchUrl = @json(route('admin.videos.external-search'));
     const previewUrl = @json(route('admin.videos.external-preview'));
+    const artistSearchUrl = @json(route('admin.videos.artist-search'));
+    const uploadSignatureUrl = @json(route('admin.videos.upload-signature'));
     const queryInput = document.querySelector('#youtube-video-search');
     const searchButton = document.querySelector('[data-youtube-video-search]');
     const refreshButton = document.querySelector('[data-youtube-video-refresh]');
@@ -120,9 +133,26 @@
     const externalSource = document.querySelector('[data-video-external-source]');
     const sourceUrl = document.querySelector('[data-video-source-url]');
     const file = document.querySelector('#video-file');
+    const maxVideoBytes = Number(file?.dataset.maxBytes || 104857600);
+    const directUploadSingleRequestMaxBytes = 100000000;
+    const fileMessage = document.querySelector('[data-video-file-message]');
     const artistNames = document.querySelector('#video-artist-names');
+    const artistResults = document.querySelector('[data-video-artist-results]');
+    const artistMessage = document.querySelector('[data-video-artist-message]');
     const artistBox = document.querySelector('[data-youtube-video-artists]');
+    const form = file?.form;
+    const cloudinaryUploadFields = {
+        expectedPublicId: form?.querySelector('[name="cloudinary_video_expected_public_id"]'),
+        publicId: form?.querySelector('[name="cloudinary_video_public_id"]'),
+        version: form?.querySelector('[name="cloudinary_video_version"]'),
+        signature: form?.querySelector('[name="cloudinary_video_signature"]'),
+        format: form?.querySelector('[name="cloudinary_video_format"]'),
+    };
+    let directUploadInProgress = false;
     let slugTouched = Boolean(slug?.value.trim());
+    let durationObjectUrl = null;
+    let artistSearchTimer = null;
+    let artistSearchController = null;
 
     const makeSlug = (value) => value
         .normalize('NFD')
@@ -132,6 +162,120 @@
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '')
         .slice(0, 200);
+
+    const getTitleFromFileName = (fileName) => fileName
+        .replace(/\.[^.]+$/, '')
+        .replace(/[_]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
+
+    const normalizeArtistName = (name) => name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'd')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+
+    const clearDirectUploadResult = () => {
+        Object.values(cloudinaryUploadFields).forEach((field) => {
+            if (field) field.value = '';
+        });
+    };
+
+    const uploadVideoDirectly = async (selectedFile, submitButton) => {
+        const csrfToken = form?.querySelector('input[name="_token"]')?.value;
+        if (!csrfToken) throw new Error('Phiên quản trị đã hết hạn. Tải lại trang rồi thử lại.');
+
+        const signatureResponse = await fetch(uploadSignatureUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            body: JSON.stringify({title: title?.value.trim() || 'video'}),
+        });
+        const signaturePayload = await signatureResponse.json().catch(() => ({}));
+        if (!signatureResponse.ok || !signaturePayload.data) {
+            throw new Error(signaturePayload.message || 'Không thể khởi tạo upload Cloudinary.');
+        }
+
+        const authorization = signaturePayload.data;
+        const uploadChunk = (start, end, uploadId, overallProgress) => new Promise((resolve, reject) => {
+            const chunk = selectedFile.slice(start, end);
+            const uploadData = new FormData();
+            uploadData.append('file', chunk, selectedFile.name);
+            uploadData.append('api_key', authorization.api_key);
+            uploadData.append('timestamp', String(authorization.timestamp));
+            uploadData.append('folder', authorization.folder);
+            uploadData.append('public_id', authorization.public_id);
+            uploadData.append('signature', authorization.signature);
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `https://api.cloudinary.com/v1_1/${authorization.cloud_name}/video/upload`);
+            xhr.timeout = 600000;
+            if (uploadId) {
+                xhr.setRequestHeader('Content-Range', `bytes ${start}-${end - 1}/${selectedFile.size}`);
+                xhr.setRequestHeader('X-Unique-Upload-Id', uploadId);
+            }
+            xhr.upload.addEventListener('progress', (event) => {
+                if (!event.lengthComputable || !fileMessage) return;
+                const sentInChunk = Math.min(end - start, event.loaded);
+                const percent = Math.min(100, Math.round(((start + sentInChunk) / selectedFile.size) * 100));
+                fileMessage.textContent = overallProgress
+                    ? `Đang upload trực tiếp lên Cloudinary: ${percent}% (${Math.floor((start + sentInChunk) / 1048576)} / ${Math.ceil(selectedFile.size / 1048576)} MiB)`
+                    : `Đang upload trực tiếp lên Cloudinary: ${percent}%`;
+            });
+            xhr.addEventListener('load', () => {
+                const payload = (() => {
+                    try { return JSON.parse(xhr.responseText); } catch { return {}; }
+                })();
+                if (xhr.status < 200 || xhr.status >= 300) {
+                    reject(new Error(payload.error?.message || `Cloudinary từ chối upload (HTTP ${xhr.status}).`));
+                    return;
+                }
+                resolve(payload);
+            });
+            xhr.addEventListener('error', () => reject(new Error('Mất kết nối khi gửi video lên Cloudinary. Kiểm tra mạng rồi thử lại.')));
+            xhr.addEventListener('timeout', () => reject(new Error('Upload quá thời gian chờ. Hãy thử file nhỏ hơn hoặc mạng ổn định hơn.')));
+            xhr.send(uploadData);
+        });
+
+        let uploaded;
+        if (selectedFile.size <= directUploadSingleRequestMaxBytes) {
+            uploaded = await uploadChunk(0, selectedFile.size, '', false);
+        } else {
+            const chunkSize = 20 * 1024 * 1024;
+            const uploadId = typeof globalThis.crypto?.randomUUID === 'function'
+                ? globalThis.crypto.randomUUID()
+                : `melodify-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            for (let start = 0; start < selectedFile.size; start += chunkSize) {
+                const end = Math.min(start + chunkSize, selectedFile.size);
+                uploaded = await uploadChunk(start, end, uploadId, true);
+            }
+        }
+
+        if (!uploaded.public_id || !uploaded.version || !uploaded.signature || !uploaded.format) {
+            throw new Error('Cloudinary không trả về đủ thông tin xác nhận video.');
+        }
+
+        if (cloudinaryUploadFields.expectedPublicId) cloudinaryUploadFields.expectedPublicId.value = authorization.public_id;
+        if (cloudinaryUploadFields.publicId) cloudinaryUploadFields.publicId.value = uploaded.public_id;
+        if (cloudinaryUploadFields.version) cloudinaryUploadFields.version.value = String(uploaded.version);
+        if (cloudinaryUploadFields.signature) cloudinaryUploadFields.signature.value = uploaded.signature;
+        if (cloudinaryUploadFields.format) cloudinaryUploadFields.format.value = uploaded.format;
+        file.value = '';
+        directUploadInProgress = false;
+        if (fileMessage) fileMessage.textContent = 'Upload video thành công. Đang lưu thông tin video…';
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = @json($isEditing ? 'Lưu thay đổi' : 'Upload video');
+        }
+        form?.requestSubmit();
+    };
 
     const getYouTubeId = (value) => {
         try {
@@ -153,23 +297,41 @@
         return null;
     };
 
-    const renderArtists = (artists = []) => {
+    const renderArtists = (artists = [], labelText = 'Nghệ sĩ lấy từ YouTube API') => {
         if (!artistBox) return;
         artistBox.innerHTML = '';
         if (!artists.length) {
-            artistBox.textContent = 'Chưa có thông tin nghệ sĩ từ API.';
             return;
         }
         const label = document.createElement('strong');
-        label.textContent = 'Nghệ sĩ lấy từ API';
+        label.textContent = labelText;
         artistBox.appendChild(label);
         artists.forEach((artist) => {
-            const item = document.createElement('span');
+            const item = document.createElement('div');
+            item.className = 'admin-video-artist-card';
+            item.style.alignItems = 'center';
+            item.style.display = 'flex';
+            item.style.flexDirection = 'column';
+            item.style.flex = '0 0 112px';
+            item.style.width = '112px';
+            item.style.overflow = 'hidden';
             const image = document.createElement('img');
             image.src = artist.avatar_url || artist.image_url || '';
             image.alt = '';
+            image.width = 88;
+            image.height = 88;
+            image.style.display = 'block';
+            image.style.width = '88px';
+            image.style.height = '88px';
+            image.style.maxWidth = '88px';
+            image.style.objectFit = 'cover';
             const text = document.createElement('span');
             text.textContent = `${artist.name || 'Nghệ sĩ chưa xác định'}${artist.country ? ` · ${artist.country}` : ''}`;
+            text.style.maxWidth = '100%';
+            text.style.overflow = 'hidden';
+            text.style.textAlign = 'center';
+            text.style.textOverflow = 'ellipsis';
+            text.style.whiteSpace = 'nowrap';
             item.append(image, text);
             artistBox.appendChild(item);
         });
@@ -191,8 +353,65 @@
         if (externalSource) externalSource.value = video.external_source || 'youtube';
         if (sourceUrl) sourceUrl.value = video.source_url || '';
         if (artistNames) artistNames.value = (video.artists || []).map((artist) => artist.name).filter(Boolean).join(', ');
-        renderArtists(video.artists || []);
+        renderArtists(video.artists || [], 'Nghệ sĩ lấy từ YouTube API');
         setMessage(video.video_url ? `Đã chọn video YouTube: ${video.title}` : 'API không trả về đường dẫn YouTube.', !video.video_url);
+    };
+
+    const renderArtistSuggestions = (artists = []) => {
+        if (!artistResults) return;
+        artistResults.innerHTML = '';
+        if (!artists.length) {
+            artistResults.hidden = true;
+            return;
+        }
+
+        artists.forEach((artist) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'admin-video-artist-result';
+            const image = document.createElement('img');
+            image.src = artist.avatar_url || '';
+            image.alt = '';
+            const name = document.createElement('strong');
+            name.textContent = artist.name || 'Nghệ sĩ';
+            button.append(image, name);
+            button.addEventListener('click', () => {
+                const parts = (artistNames?.value || '').split(',');
+                parts.pop();
+                const selectedNames = parts.map((item) => item.trim()).filter(Boolean);
+                const selectedKey = normalizeArtistName(artist.name || '');
+                if (!selectedNames.some((item) => normalizeArtistName(item) === selectedKey)) {
+                    selectedNames.push(artist.name);
+                }
+                if (artistNames) artistNames.value = `${selectedNames.join(', ')}, `;
+                artistResults.hidden = true;
+                artistResults.innerHTML = '';
+                if (artistMessage) artistMessage.textContent = `Đã chọn nghệ sĩ trong database: ${artist.name}`;
+            });
+            artistResults.appendChild(button);
+        });
+        artistResults.hidden = false;
+    };
+
+    const findArtistsInDatabase = async (selectedFile) => {
+        try {
+            const response = await fetch(`${artistSearchUrl}?filename=${encodeURIComponent(selectedFile.name)}`, {headers: {'Accept': 'application/json'}});
+            const payload = await response.json();
+            if (!response.ok || file?.files?.[0] !== selectedFile) return;
+
+            const artists = payload.data || [];
+            if (artists.length) {
+                if (artistNames) artistNames.value = artists.map((artist) => artist.name).join(', ');
+                renderArtists(artists, 'Nghệ sĩ tìm thấy trong database theo tên file');
+                if (artistMessage) artistMessage.textContent = `Đã nhận diện nghệ sĩ từ tên file: ${artists.map((artist) => artist.name).join(', ')}`;
+            } else if (artistMessage) {
+                artistMessage.textContent = 'Tên file không khớp nghệ sĩ nào trong database. Gõ tên để tìm và chọn nghệ sĩ có sẵn.';
+            }
+        } catch (_) {
+            if (file?.files?.[0] === selectedFile && artistMessage) {
+                artistMessage.textContent = 'Chưa thể dò nghệ sĩ từ tên file. Gõ tên để tìm nghệ sĩ trong database.';
+            }
+        }
     };
 
     const loadPreview = async (id) => {
@@ -253,6 +472,48 @@
     searchButton?.addEventListener('click', search);
     queryInput?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); search(); } });
     refreshButton?.addEventListener('click', () => loadPreview(refreshButton.dataset.videoId));
+    artistNames?.addEventListener('input', () => {
+        const query = artistNames.value.split(',').pop()?.trim() || '';
+        window.clearTimeout(artistSearchTimer);
+        artistSearchController?.abort();
+        // A previous YouTube artist preview must not cover the database suggestions.
+        if (artistBox) artistBox.replaceChildren();
+        if (query.length < 1) {
+            if (artistResults) {
+                artistResults.innerHTML = '';
+                artistResults.hidden = true;
+            }
+            if (artistMessage) artistMessage.textContent = '';
+            return;
+        }
+
+        artistSearchTimer = window.setTimeout(async () => {
+            artistSearchController = new AbortController();
+            try {
+                const response = await fetch(`${artistSearchUrl}?q=${encodeURIComponent(query)}`, {
+                    headers: {'Accept': 'application/json'},
+                    signal: artistSearchController.signal,
+                });
+                const payload = await response.json();
+                if (response.ok) {
+                    const matches = payload.data || [];
+                    renderArtistSuggestions(matches);
+                    if (artistMessage) {
+                        artistMessage.textContent = matches.length
+                            ? `Tìm thấy ${matches.length} nghệ sĩ. Chọn tên trong danh sách để thêm.`
+                            : 'Không tìm thấy nghệ sĩ phù hợp trong database.';
+                    }
+                } else if (artistMessage) {
+                    artistMessage.textContent = payload.message || 'Không thể tìm nghệ sĩ. Thử lại.';
+                }
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    renderArtistSuggestions([]);
+                    if (artistMessage) artistMessage.textContent = 'Không kết nối được danh sách nghệ sĩ. Thử lại.';
+                }
+            }
+        }, 160);
+    });
     title?.addEventListener('input', () => {
         if (!slugTouched && slug) slug.value = makeSlug(title.value || 'music-video');
     });
@@ -271,9 +532,134 @@
         if (sourceUrl) sourceUrl.value = '';
     });
     file?.addEventListener('change', () => {
+        clearDirectUploadResult();
+        if (durationObjectUrl) {
+            URL.revokeObjectURL(durationObjectUrl);
+            durationObjectUrl = null;
+        }
+
+        const selectedFile = file.files?.[0];
+        if (!selectedFile) {
+            file.setCustomValidity('');
+            file.classList.remove('is-invalid');
+            if (fileMessage) {
+                fileMessage.textContent = 'Tên file và thời lượng sẽ được đọc tự động. File trong giới hạn Cloudinary được gửi thẳng lên; file lớn hơn 100 MB được chia phần để hiển thị tiến độ.';
+                fileMessage.classList.remove('admin-field-error');
+            }
+            return;
+        }
+
+        const fileTitle = getTitleFromFileName(selectedFile.name);
+        if (fileTitle && title) {
+            title.value = fileTitle;
+            if (slug && !slugTouched) slug.value = makeSlug(fileTitle);
+        }
+
+        const sizeLimitMiB = (maxVideoBytes / 1048576).toLocaleString('vi-VN', { maximumFractionDigits: 1 });
+        if (selectedFile.size > maxVideoBytes) {
+            const sizeError = `File này ${(selectedFile.size / 1048576).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} MiB, vượt giới hạn Cloudinary ${sizeLimitMiB} MiB. Hãy nén video hoặc tăng giới hạn gói Cloudinary trước khi upload.`;
+            file.setCustomValidity(sizeError);
+            file.classList.add('is-invalid');
+            if (fileMessage) {
+                fileMessage.textContent = sizeError;
+                fileMessage.classList.add('admin-field-error');
+            }
+            return;
+        }
+
+        file.setCustomValidity('');
+        file.classList.remove('is-invalid');
+        if (fileMessage) fileMessage.classList.remove('admin-field-error');
+
+        if (videoUrl) videoUrl.value = '';
         if (externalSource) externalSource.value = '';
         if (externalId) externalId.value = '';
         if (sourceUrl) sourceUrl.value = '';
+        if (artistNames) artistNames.value = '';
+        if (artistResults) {
+            artistResults.innerHTML = '';
+            artistResults.hidden = true;
+        }
+        if (artistBox) artistBox.innerHTML = '';
+        if (artistMessage) artistMessage.textContent = 'Đang dò nghệ sĩ trong database theo tên file…';
+        void findArtistsInDatabase(selectedFile);
+
+        if (fileMessage) fileMessage.textContent = `Đã đọc tên file: ${selectedFile.name}${fileTitle ? ` · Tên video: ${fileTitle}` : ''}`;
+
+        if (duration) {
+            const currentObjectUrl = URL.createObjectURL(selectedFile);
+            durationObjectUrl = currentObjectUrl;
+            const metadataReader = document.createElement('video');
+            metadataReader.preload = 'metadata';
+            metadataReader.onloadedmetadata = () => {
+                if (file.files?.[0] !== selectedFile) {
+                    URL.revokeObjectURL(currentObjectUrl);
+                    return;
+                }
+                if (Number.isFinite(metadataReader.duration) && metadataReader.duration > 0) {
+                    duration.value = String(Math.floor(metadataReader.duration));
+                    if (fileMessage) fileMessage.textContent = `Đã đọc tên file và thời lượng ${duration.value} giây từ video.`;
+                } else if (fileMessage) {
+                    fileMessage.textContent = `Đã đọc tên file: ${selectedFile.name}. Không đọc được thời lượng tự động; bạn có thể nhập thủ công.`;
+                }
+                if (durationObjectUrl === currentObjectUrl) {
+                    URL.revokeObjectURL(currentObjectUrl);
+                    durationObjectUrl = null;
+                }
+            };
+            metadataReader.onerror = () => {
+                if (file.files?.[0] === selectedFile && fileMessage) {
+                    fileMessage.textContent = `Đã đọc tên file: ${selectedFile.name}. Không đọc được thời lượng tự động; bạn có thể nhập thủ công.`;
+                }
+                if (durationObjectUrl === currentObjectUrl) {
+                    URL.revokeObjectURL(currentObjectUrl);
+                    durationObjectUrl = null;
+                }
+            };
+            metadataReader.src = currentObjectUrl;
+        }
+    });
+    form?.addEventListener('submit', (event) => {
+        const selectedFile = file?.files?.[0];
+        if (!selectedFile) return;
+
+        const submitButton = form.querySelector('button[type="submit"]');
+        if (selectedFile.size <= maxVideoBytes) {
+            event.preventDefault();
+            if (directUploadInProgress) return;
+            directUploadInProgress = true;
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.textContent = 'Đang upload video…';
+            }
+            if (fileMessage) fileMessage.textContent = `Đang kết nối Cloudinary để upload ${selectedFile.name}…`;
+            void uploadVideoDirectly(selectedFile, submitButton).catch((error) => {
+                directUploadInProgress = false;
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = @json($isEditing ? 'Lưu thay đổi' : 'Upload video');
+                }
+                if (fileMessage) {
+                    fileMessage.textContent = error.message || 'Không thể upload video. Hãy thử lại.';
+                    fileMessage.classList.add('admin-field-error');
+                }
+            });
+            return;
+        }
+
+        event.preventDefault();
+        const sizeLimitMiB = (maxVideoBytes / 1048576).toLocaleString('vi-VN', { maximumFractionDigits: 1 });
+        const sizeError = `File vượt giới hạn Cloudinary ${sizeLimitMiB} MiB. Hãy nén video hoặc tăng giới hạn gói Cloudinary.`;
+        if (fileMessage) {
+            fileMessage.textContent = sizeError;
+            fileMessage.classList.add('admin-field-error');
+        }
+        file?.setCustomValidity(sizeError);
+        file?.reportValidity();
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = @json($isEditing ? 'Lưu thay đổi' : 'Upload video');
+        }
     });
     renderArtists(@json($item?->artists ?? []));
 })();

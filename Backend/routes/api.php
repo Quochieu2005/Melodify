@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\SubscriptionPlanController;
 use App\Http\Controllers\Api\UserLibraryController;
 use App\Http\Controllers\Api\UserPlaylistController;
 use App\Http\Controllers\Api\UserUploadController;
+use App\Http\Controllers\Api\VideoReportController;
 use App\Http\Controllers\Api\VipCheckoutController;
 use App\Http\Controllers\AudioController;
 use App\Http\Controllers\VideoController;
@@ -175,7 +176,7 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::get('/banners/{slug}', [CatalogController::class, 'banner'])->name('banners.show');
     Route::get('/albums', [CatalogController::class, 'albums'])->name('albums.index');
     Route::post('/albums/{slug}/favorite', [CatalogController::class, 'toggleAlbumFavorite'])
-        ->middleware('throttle:60,1')
+        ->middleware(['api.user', 'throttle:60,1'])
         ->name('albums.favorite');
     Route::post('/albums/{slug}/share', [CatalogController::class, 'recordAlbumShare'])
         ->middleware('throttle:60,1')
@@ -190,7 +191,7 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::get('/playlists', [CatalogController::class, 'playlists'])->name('playlists.index');
     Route::get('/playlists/{slug}', [CatalogController::class, 'playlist'])->name('playlists.show');
     Route::post('/playlists/{slug}/favorite', [CatalogController::class, 'togglePlaylistFavorite'])
-        ->middleware('throttle:60,1')
+        ->middleware(['api.user', 'throttle:60,1'])
         ->name('playlists.favorite');
     Route::post('/playlists/{slug}/share', [CatalogController::class, 'recordPlaylistShare'])
         ->middleware('throttle:60,1')
@@ -205,9 +206,11 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::get('/home/discovery', [CatalogController::class, 'homeDiscovery'])->name('home.discovery');
     Route::get('/songs', [CatalogController::class, 'songs'])->name('songs.index');
     Route::get('/songs/popular', [CatalogController::class, 'popularSongs'])->name('songs.popular');
-    Route::get('/favorites/songs', [CatalogController::class, 'favoriteSongs'])->name('favorites.songs');
+    Route::get('/favorites/songs', [CatalogController::class, 'favoriteSongs'])
+        ->middleware('api.user')
+        ->name('favorites.songs');
     Route::post('/favorites/songs/reorder', [CatalogController::class, 'reorderFavoriteSongs'])
-        ->middleware('throttle:30,1')
+        ->middleware(['api.user', 'throttle:30,1'])
         ->name('favorites.songs.reorder');
     Route::get('/songs/external/{externalId}/audio', [AudioController::class, 'streamExternal'])
         ->middleware('api.user.optional')
@@ -219,7 +222,7 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
         ->middleware('api.user.optional')
         ->name('songs.view');
     Route::post('/songs/{slug}/favorite', [CatalogController::class, 'toggleSongFavorite'])
-        ->middleware('throttle:60,1')
+        ->middleware(['api.user', 'throttle:60,1'])
         ->name('songs.favorite');
     Route::post('/songs/{slug}/share', [CatalogController::class, 'recordSongShare'])
         ->middleware('throttle:60,1')
@@ -230,6 +233,19 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::get('/songs/{slug}/lyrics', [CatalogController::class, 'lyrics'])->name('songs.lyrics');
     Route::get('/songs/{slug}', [CatalogController::class, 'song'])->name('songs.show');
     Route::get('/videos', [CatalogController::class, 'videos'])->name('videos.index');
+    Route::post('/videos/{slug}/view', [CatalogController::class, 'recordVideoView'])
+        ->middleware('throttle:60,1')
+        ->name('videos.view');
+    Route::post('/videos/{slug}/favorite', [CatalogController::class, 'toggleVideoFavorite'])
+        ->middleware(['api.user', 'throttle:60,1'])
+        ->name('videos.favorite');
+    Route::post('/videos/{slug}/share', [CatalogController::class, 'recordVideoShare'])
+        ->middleware('throttle:60,1')
+        ->name('videos.share');
+    Route::post('/videos/{slug}/report', [VideoReportController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('videos.report');
+    Route::get('/videos/{slug}/download', [VideoController::class, 'download'])->name('videos.download');
     Route::get('/videos/{slug}/stream', [VideoController::class, 'stream'])->name('videos.stream');
     Route::get('/videos/{slug}', [CatalogController::class, 'video'])->name('videos.show');
 });

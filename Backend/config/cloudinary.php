@@ -10,4 +10,6 @@ return [
     'artist_folder' => env('CLOUDINARY_ARTIST_FOLDER', 'melodify/artists'),
     'audio_folder' => env('CLOUDINARY_AUDIO_FOLDER', 'melodify/audio'),
     'video_folder' => env('CLOUDINARY_VIDEO_FOLDER', 'melodify/videos'),
+    // Current Cloudinary account limit is 100 MiB. Raise this only when the plan allows it.
+    'video_max_bytes' => (int) env('CLOUDINARY_VIDEO_MAX_BYTES', 104857600),
 ];

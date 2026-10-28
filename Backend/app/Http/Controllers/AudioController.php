@@ -8,6 +8,7 @@ use App\Services\Music\NhacCuaTuiClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Throwable;
 
 class AudioController extends Controller
@@ -54,10 +55,13 @@ class AudioController extends Controller
             ? $this->qualityUrl($option, $download)
             : ($download ? $this->defaultDownloadUrl($audio) : $audio?->file_url);
         abort_if(blank($url), 404, 'Bài hát chưa có audio ở chất lượng này.');
+        $downloadFilename = $download
+            ? $this->downloadFilename((string) $song->title, $option ?? $this->defaultDownloadOption($audio?->stream_options ?? []), $url)
+            : null;
 
         if (($audio?->source ?? null) !== 'nhaccuatui') {
             if ($download) {
-                $url = $this->cloudinaryAttachmentUrl($url);
+                $url = $this->cloudinaryAttachmentUrl($url, $downloadFilename);
             }
 
             return redirect()->away($url);
@@ -75,6 +79,7 @@ class AudioController extends Controller
                     : ($download ? $this->defaultDownloadUrl($fresh) : $fresh?->file_url);
             },
             $download,
+            $downloadFilename,
         );
     }
 
@@ -96,6 +101,13 @@ class AudioController extends Controller
             ? $this->qualityUrl($option, $download)
             : ($download ? $this->trackDownloadUrl($track) : ($track['streamUrl'] ?? null));
         abort_if(blank($url), 404, 'NhacCuaTui không cung cấp bản audio đầy đủ cho bài hát này.');
+        $downloadFilename = $download
+            ? $this->downloadFilename(
+                (string) ($track['trackName'] ?? 'Bài hát'),
+                $option ?? $this->defaultDownloadOption($track['streamOptions'] ?? []),
+                $url,
+            )
+            : null;
 
         return $this->proxy($url, $request, $nhaccuatui, function () use ($key, $externalId, $nhaccuatui, $qualityId, $download, $request): ?string {
             Cache::forget($key);
@@ -107,10 +119,21 @@ class AudioController extends Controller
             return $qualityId !== ''
                 ? $this->findQualityUrl($track['streamOptions'] ?? [], $qualityId, $download, $request)
                 : ($download ? $this->trackDownloadUrl($track) : ($track['streamUrl'] ?? null));
-        }, $download);
+        }, $download, $downloadFilename);
     }
 
     private function authorizeQuality(array $option, Request $request): void
+    {
+        abort_if(
+            $this->requiresVipQuality($option)
+                && ! ($request->user()?->hasPremiumAccess() ?? false)
+                && ! $request->user('admin'),
+            403,
+            'Chất lượng này dành cho tài khoản VIP.',
+        );
+    }
+
+    private function requiresVipQuality(array $option): bool
     {
         $qualityHint = implode(' ', array_filter([
             (string) ($option['format'] ?? ''),
@@ -121,15 +144,10 @@ class AudioController extends Controller
             (string) ($option['typeUI'] ?? ''),
             (string) ($option['type'] ?? ''),
         ]));
-        $isLossless = preg_match('/lossless|flac|alac/i', $qualityHint) === 1;
 
-        abort_if(
-            ((bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false) || $isLossless)
-                && ! ($request->user()?->hasPremiumAccess() ?? false)
-                && ! $request->user('admin'),
-            403,
-            'Chất lượng này dành cho tài khoản VIP.',
-        );
+        return (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false)
+            || preg_match('/lossless|flac|alac/i', $qualityHint) === 1
+            || (int) ($option['bitrate'] ?? 0) >= 900;
     }
 
     private function qualityUrl(array $option, bool $download): ?string
@@ -156,10 +174,17 @@ class AudioController extends Controller
 
     private function defaultDownloadUrl(?SongAudioFile $audio): ?string
     {
-        foreach ($audio?->stream_options ?? [] as $option) {
-            if (is_array($option) && ! (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false)) {
-                return $this->qualityUrl($option, true) ?? $audio?->file_url;
-            }
+        $options = array_values(array_filter($audio?->stream_options ?? [], 'is_array'));
+        $option = $this->defaultDownloadOption($options);
+        $url = $option ? $this->qualityUrl($option, true) : null;
+        if (filled($url)) {
+            return $url;
+        }
+
+        // If the provider supplied quality options but none are public, do not
+        // fall back to a generic URL that may point at a VIP-only quality.
+        if ($options !== []) {
+            return null;
         }
 
         return $audio?->file_url;
@@ -167,25 +192,86 @@ class AudioController extends Controller
 
     private function trackDownloadUrl(array $track): ?string
     {
-        foreach ($track['streamOptions'] ?? [] as $option) {
-            if (is_array($option) && ! (bool) ($option['premiumOnly'] ?? $option['premium_only'] ?? false)) {
-                return $this->qualityUrl($option, true) ?? ($track['streamUrl'] ?? null);
-            }
+        $options = array_values(array_filter($track['streamOptions'] ?? [], 'is_array'));
+        $option = $this->defaultDownloadOption($options);
+        $url = $option ? $this->qualityUrl($option, true) : null;
+        if (filled($url)) {
+            return $url;
+        }
+
+        // Avoid bypassing quality-level VIP checks through a generic provider URL.
+        if ($options !== []) {
+            return null;
         }
 
         return $track['downloadUrl'] ?? $track['streamUrl'] ?? null;
     }
 
-    private function cloudinaryAttachmentUrl(string $url): string
+    private function defaultDownloadOption(array $options): ?array
+    {
+        foreach ($options as $option) {
+            if ($this->requiresVipQuality($option)
+                || ! (bool) ($option['available'] ?? filled($option['streamUrl'] ?? $option['stream_url'] ?? null))) {
+                continue;
+            }
+
+            if (filled($this->qualityUrl($option, true))) {
+                return $option;
+            }
+        }
+
+        return null;
+    }
+
+    private function downloadFilename(string $title, ?array $option, ?string $url): string
+    {
+        $qualityHint = implode(' ', array_filter([
+            (string) ($option['format'] ?? ''),
+            (string) ($option['quality'] ?? ''),
+            (string) ($option['label'] ?? ''),
+            (string) ($option['name'] ?? ''),
+            (string) ($option['typeUI'] ?? ''),
+            (string) ($option['type'] ?? ''),
+        ]));
+        $extension = match (true) {
+            preg_match('/flac|lossless/i', $qualityHint) === 1 => 'flac',
+            preg_match('/\\b(?:m4a|aac|alac)\\b/i', $qualityHint) === 1 => 'm4a',
+            preg_match('/\\bwav\\b/i', $qualityHint) === 1 => 'wav',
+            preg_match('/\\bmp3\\b/i', $qualityHint) === 1 => 'mp3',
+            default => null,
+        };
+
+        if ($extension === null && filled($url)) {
+            $path = parse_url((string) $url, PHP_URL_PATH);
+            $urlExtension = is_string($path) ? strtolower(pathinfo($path, PATHINFO_EXTENSION)) : '';
+            $extension = in_array($urlExtension, ['mp3', 'm4a', 'aac', 'flac', 'wav'], true) ? $urlExtension : null;
+        }
+
+        $extension ??= 'mp3';
+        $safeTitle = preg_replace('/[\\x00-\\x1F\\x7F\\/\\\\:*?"<>|]+/u', ' ', trim($title)) ?? '';
+        $safeTitle = preg_replace('/\\s+/u', ' ', trim($safeTitle)) ?? '';
+        $safeTitle = preg_replace('/\\.(?:mp3|m4a|aac|flac|wav)$/i', '', $safeTitle) ?? $safeTitle;
+
+        return ($safeTitle !== '' ? $safeTitle : 'Melodify').'.'.$extension;
+    }
+
+    private function cloudinaryAttachmentUrl(string $url, ?string $filename = null): string
     {
         $parts = parse_url($url);
         if (($parts['host'] ?? '') !== 'res.cloudinary.com' || ! isset($parts['path'])) {
             return $url;
         }
 
+        $attachment = 'fl_attachment';
+        if (filled($filename)) {
+            $asciiFilename = Str::ascii((string) $filename);
+            $asciiFilename = preg_replace('/[^A-Za-z0-9._-]+/', '_', $asciiFilename) ?? '';
+            $attachment .= ':'.(trim($asciiFilename, '._-') ?: 'melodify-audio.mp3');
+        }
+
         $path = preg_replace(
             '#/(?:image|video|raw)/upload/(?!fl_attachment(?:,|/))#i',
-            '$0fl_attachment/',
+            '$0'.$attachment.'/',
             $parts['path'],
             1,
         );
@@ -269,7 +355,7 @@ class AudioController extends Controller
         return $audio;
     }
 
-    private function proxy(string $url, Request $request, NhacCuaTuiClient $nhaccuatui, ?callable $refresh = null, bool $download = false)
+    private function proxy(string $url, Request $request, NhacCuaTuiClient $nhaccuatui, ?callable $refresh = null, bool $download = false, ?string $downloadFilename = null)
     {
         try {
             $remote = $nhaccuatui->stream($url, $request->header('Range'));
@@ -308,7 +394,11 @@ class AudioController extends Controller
         $headers['Cache-Control'] = 'no-store, no-cache, must-revalidate';
         $headers['X-Accel-Buffering'] = 'no';
         if ($download) {
-            $headers['Content-Disposition'] = 'attachment; filename="melodify-audio"';
+            $filename = $downloadFilename ?: 'Melodify.mp3';
+            $fallbackFilename = Str::ascii($filename);
+            $fallbackFilename = preg_replace('/[^A-Za-z0-9._-]+/', '_', $fallbackFilename) ?? '';
+            $fallbackFilename = trim($fallbackFilename, '._-') ?: 'Melodify.mp3';
+            $headers['Content-Disposition'] = 'attachment; filename="'.$fallbackFilename.'"; filename*=UTF-8\'\''.rawurlencode($filename);
         }
 
         return response()->stream(function () use ($remote): void {

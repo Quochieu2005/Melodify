@@ -7,13 +7,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
-import { AUTH_TOKEN_STORAGE_KEY, deleteUserPlaylist, getPlaylist, getSongDownloadUrl, getVisitorId, recordPlaylistShare, togglePlaylistFavorite, updateUserPlaylist, type Playlist, type Song, type SongArtistCredit, type SongAudioQuality } from '@/lib/api';
+import { AUTH_TOKEN_STORAGE_KEY, ApiError, deleteUserPlaylist, getPlaylist, getSongDownloadUrl, getVisitorId, recordPlaylistShare, togglePlaylistFavorite, updateUserPlaylist, type Playlist, type Song, type SongArtistCredit, type SongAudioQuality } from '@/lib/api';
 import { ArtistLink, ArtistNames } from '@/components/artists';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { AddSongsToPlaylistDialog } from '@/components/playlists/AddSongsToPlaylistDialog';
 import { AddSongsToOwnedPlaylistDialog } from '@/components/playlists/AddSongsToOwnedPlaylistDialog';
 import { EditUserPlaylistDialog } from '@/components/playlists/EditUserPlaylistDialog';
 import { useLibrary } from '@/components/library/LibraryProvider';
+import { useLoginModal } from '@/components/auth/LoginModalProvider';
 import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 import { downloadSongFiles, setSongFavorites } from '@/lib/song-actions';
 
@@ -217,9 +218,11 @@ function PlaylistSongRow({ song, index, coverUrl, checked, onToggle, onPlay, isC
 
 export default function PlaylistDetailPage({ slug }: { slug: string }) {
   const router = useRouter();
+  const { user, authReady } = useLoginModal();
   const { track, isPlaying, isPremium, requestVipAccess, playSong, togglePlay } = usePlayerControls();
   const { refresh: refreshLibrary } = useLibrary();
-  const [request, setRequest] = useState({ slug: '', playlist: null as Playlist | null, visibleCount: 30, isLoading: true, error: '' });
+  const [request, setRequest] = useState({ slug: '', ownerId: '', retryCount: -1, playlist: null as Playlist | null, visibleCount: 30, isLoading: true, error: '', errorStatus: null as number | null });
+  const [retryCount, setRetryCount] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteCount, setFavoriteCount] = useState(0);
@@ -241,13 +244,16 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
   const downloadControlRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!authReady) return;
+
     let cancelled = false;
     const visitorId = getVisitorId();
+    const ownerId = user?.id ?? 'guest';
 
     getPlaylist(slug, visitorId)
       .then((response) => {
         if (!cancelled) {
-          setRequest({ slug, playlist: response.data, visibleCount: 30, isLoading: false, error: '' });
+          setRequest({ slug, ownerId, retryCount, playlist: response.data, visibleCount: 30, isLoading: false, error: '', errorStatus: null });
           setSelectedIds([]);
           setIsFavorite(response.data.is_favorite ?? false);
           setFavoriteCount(response.data.favorite_count ?? 0);
@@ -257,12 +263,24 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
           setIsDownloadOpen(false);
         }
       })
-      .catch(() => {
-        if (!cancelled) setRequest({ slug, playlist: null, visibleCount: 30, isLoading: false, error: 'Không thể tải playlist lúc này.' });
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          const errorStatus = cause instanceof ApiError ? cause.status : null;
+          setRequest({
+            slug,
+            ownerId,
+            retryCount,
+            playlist: null,
+            visibleCount: 30,
+            isLoading: false,
+            error: errorStatus === 404 ? '' : 'Không thể tải playlist lúc này.',
+            errorStatus,
+          });
+        }
       });
 
     return () => { cancelled = true; };
-  }, [slug]);
+  }, [authReady, retryCount, slug, user?.id]);
 
   useEffect(() => {
     if (!isMoreOpen && !isShareOpen && !isDownloadOpen) return;
@@ -291,7 +309,7 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
     };
   }, [isMoreOpen, isShareOpen, isDownloadOpen]);
 
-  const isCurrentRequest = request.slug === slug;
+  const isCurrentRequest = request.slug === slug && request.ownerId === (user?.id ?? 'guest') && request.retryCount === retryCount;
   const playlist = isCurrentRequest ? request.playlist : null;
   const isLoading = !isCurrentRequest || request.isLoading;
   const collaborators = useMemo(() => (playlist ? collectCollaborators(playlist) : []), [playlist]);
@@ -300,11 +318,33 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
     return <main className="min-h-[calc(100vh-80px)] bg-[#202a28] px-5 pb-20 pt-7 sm:px-8 lg:px-7"><div className="h-[270px] animate-pulse rounded-2xl bg-[#30443f]" /></main>;
   }
 
+  if (request.errorStatus === 404) {
+    return (
+      <main className="flex min-h-[calc(100vh-160px)] flex-col items-center justify-center bg-[#202a28] px-5 pb-20 pt-7 text-center text-white sm:px-8 lg:px-7">
+        <svg aria-hidden="true" viewBox="0 0 80 80" className="mb-5 size-[84px] drop-shadow-[0_8px_22px_rgba(0,211,229,0.18)]">
+          <path d="m12 21 28-14 28 14-12 16-16-8-16 8L12 21Z" fill="#9fe7ef" fillOpacity=".72" />
+          <path d="M12 21v34l28 16V29L12 21Z" fill="#63db8c" />
+          <path d="M68 21v34L40 71V29l28-8Z" fill="#36c9dc" />
+          <path d="m12 21 18 9-9 17-16-9 7-17Z" fill="#8ce6cc" />
+          <path d="m68 21-18 9 9 17 16-9-7-17Z" fill="#82e4f1" />
+          <path d="m30 30 10-5 10 5-10 6-10-6Z" fill="#d3fbef" fillOpacity=".85" />
+        </svg>
+        <p role="status" className="text-lg font-bold text-white">Không có dữ liệu</p>
+      </main>
+    );
+  }
+
   if (request.error || !playlist) {
     return (
       <main className="min-h-[calc(100vh-80px)] bg-[#202a28] px-5 pb-20 pt-7 text-white sm:px-8 lg:px-7">
         <Link href="/playlist" className="text-sm text-white/70 transition-colors hover:text-white">← Quay lại playlist</Link>
-        <p role="alert" className="mt-8 rounded-lg bg-[#30443f] px-4 py-3 text-sm text-white/75">{request.error || 'Không tìm thấy playlist.'}</p>
+        <section className="mx-auto mt-8 flex min-h-[420px] max-w-[900px] flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-[#202020] px-6 py-12 text-center shadow-[0_18px_60px_rgba(0,0,0,0.2)] sm:min-h-[480px]">
+          <h1 className="text-2xl font-extrabold">Không thể tải playlist</h1>
+          <p className="mt-3 max-w-[560px] text-sm leading-6 text-white/60">{request.error || 'Đã xảy ra lỗi khi tải playlist. Vui lòng thử lại.'}</p>
+          <button type="button" onClick={() => setRetryCount((count) => count + 1)} className="mt-6 h-11 rounded-full bg-[#3b3d3c] px-8 text-sm font-bold text-white transition-colors hover:bg-[#4a4d4c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200">
+            Thử tải lại
+          </button>
+        </section>
       </main>
     );
   }
@@ -510,7 +550,7 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
     refreshLibrary();
     try {
       const response = await getPlaylist(playlist.slug || playlist.id, getVisitorId());
-      setRequest({ slug, playlist: response.data, visibleCount: request.visibleCount, isLoading: false, error: '' });
+      setRequest({ slug, ownerId: user?.id ?? 'guest', retryCount, playlist: response.data, visibleCount: request.visibleCount, isLoading: false, error: '', errorStatus: null });
     } catch {
       // Keep the current playlist view usable even if a refresh request fails.
     }
@@ -526,15 +566,15 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
   return (
     <main className="min-h-[calc(100vh-80px)] overflow-x-hidden bg-[#202a28] px-5 pb-20 pt-7 text-white sm:px-8 lg:px-7">
       <div className="w-full max-w-[1582px]">
-        <section className="grid gap-6 lg:grid-cols-[248px_minmax(0,1fr)] lg:items-stretch">
-          <div role="img" aria-label={`Ảnh bìa ${playlist.name}`} className="group/playlist-cover relative aspect-square w-full max-w-[248px] rounded-[8px] bg-cover bg-center" style={{ backgroundImage: `url("${coverUrl}")` }}>
+        <section className="grid gap-6 lg:grid-cols-[310px_minmax(0,1fr)] lg:items-stretch">
+          <div role="img" aria-label={`Ảnh bìa ${playlist.name}`} className="group/playlist-cover relative aspect-square w-full max-w-[310px] rounded-[8px] bg-cover bg-center" style={{ backgroundImage: `url("${coverUrl}")` }}>
             {playlist.can_edit ? <button type="button" onClick={() => setIsEditPlaylistOpen(true)} className="absolute inset-0 grid place-content-center gap-2 rounded-[8px] bg-black/55 text-center font-bold text-white opacity-0 transition-opacity group-hover/playlist-cover:opacity-100 group-focus-within/playlist-cover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
               <svg viewBox="0 0 24 24" aria-hidden="true" className="mx-auto size-10 fill-none stroke-current stroke-[1.8]"><path d="m14.5 5.5 4 4M4 20l4.2-.8L19 8.4a2.8 2.8 0 0 0-4-4L4.2 15.2 4 20Z" strokeLinecap="round" strokeLinejoin="round" /></svg>
               Chỉnh sửa
             </button> : null}
           </div>
 
-          <div className="flex min-w-0 flex-col lg:h-[248px]">
+          <div className="flex min-w-0 flex-col lg:h-[310px]">
             <p className="text-[13px] text-white/55">Playlist&nbsp; · &nbsp;{songs.length} Bài hát</p>
             <h1 className="mt-4 truncate text-[30px] font-bold leading-tight text-white sm:text-[34px]">{playlist.name}</h1>
             {visibleHeaderArtists.length > 0 ? (
@@ -547,10 +587,10 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
 
             <div className="mt-auto">
               <div ref={actionMenusRef} className="relative flex items-start gap-3">
-                {playlist.visibility !== 'private' ? <button type="button" aria-label={isFavorite ? 'Bỏ yêu thích playlist' : 'Thêm playlist vào yêu thích'} aria-pressed={isFavorite} disabled={isFavoritePending} onClick={() => void handleFavorite()} className="group flex min-w-8 flex-col items-center gap-1 rounded-full px-1.5 py-1 text-white outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-60">
+                <button type="button" aria-label={playlist.visibility === 'private' ? 'Playlist riêng tư không thể yêu thích' : isFavorite ? 'Bỏ yêu thích playlist' : 'Thêm playlist vào yêu thích'} aria-pressed={isFavorite} disabled={isFavoritePending || playlist.visibility === 'private'} onClick={() => void handleFavorite()} className="group flex min-w-8 flex-col items-center gap-1 rounded-full px-1.5 py-1 text-white outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-not-allowed disabled:opacity-40">
                   <span className="grid size-8 place-items-center"><HeartIcon filled={isFavorite} /></span>
                   <span className="text-[11px] font-bold text-white">{favoriteCount}</span>
-                </button> : null}
+                </button>
                 <div className="relative">
                   <button type="button" aria-label="Chia sẻ playlist" aria-haspopup="menu" aria-controls="playlist-share-menu" aria-expanded={isShareOpen} disabled={isSharePending} onClick={() => { setIsMoreOpen(false); setIsDownloadOpen(false); setIsShareOpen((current) => !current); }} className="group flex min-w-8 flex-col items-center gap-1 rounded-full px-1.5 py-1 text-white outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-wait disabled:opacity-60">
                     <span className="grid size-8 place-items-center"><ShareIcon /></span>
@@ -578,7 +618,7 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-4">
-                <button type="button" onClick={handlePlayAll} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#00cfe3] px-6 text-[14px] font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">{playlistIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}{playlistIsPlaying ? 'Tạm dừng' : 'Phát tất cả'}</button>
+                <button type="button" onClick={handlePlayAll} disabled={songs.length === 0} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#00cfe3] px-6 text-[14px] font-bold text-[#07363a] transition-colors hover:bg-[#34dbea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-not-allowed disabled:bg-[#3c4140] disabled:text-white/35">{playlistIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}{playlistIsPlaying ? 'Tạm dừng' : 'Phát tất cả'}</button>
                 <div ref={downloadControlRef} className="relative">
                   <button type="button" aria-label="Tải playlist về" aria-haspopup="menu" aria-controls="playlist-download-menu" aria-expanded={isDownloadOpen} onClick={() => { setIsMoreOpen(false); setIsShareOpen(false); setIsDownloadOpen((current) => !current); }} disabled={songs.length === 0} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3c4140] px-7 text-[14px] font-bold text-white transition-colors hover:bg-[#4a504e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] disabled:cursor-not-allowed disabled:opacity-50"><DownloadIcon />Tải về</button>
                   {isDownloadOpen ? <div id="playlist-download-menu" role="menu" aria-label="Chất lượng tải playlist" className="absolute left-1/2 top-full z-30 mt-1 w-[270px] max-w-[calc(100vw-24px)] -translate-x-1/2 overflow-hidden rounded-xl border border-white/[0.06] bg-[#292c2b] p-1.5 text-[12px] font-bold text-white shadow-2xl">
@@ -603,22 +643,30 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
           </div>
         </section>
 
-        <section aria-labelledby="playlist-songs-heading" className="mt-10">
+        <section aria-labelledby="playlist-songs-heading" className="mt-6">
           <h2 id="playlist-songs-heading" className="sr-only">Danh sách bài hát trong playlist</h2>
-          {selectedIds.length > 0 ? (
+          {songs.length > 0 && selectedIds.length > 0 ? (
             <div className="mb-3 flex min-h-8 flex-wrap items-center gap-2">
               <SelectionCheckbox checked={allSongsSelected} label="Chọn tất cả bài hát" onChange={toggleAllSongs} />
               <button type="button" onClick={() => setIsPlaylistDialogOpen(true)} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><PlaylistAddIcon />Thêm vào playlist</button>
               <button type="button" onClick={() => void handleAddSelectedToFavorites()} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><HeartIcon filled={false} className="size-[18px]" />Thêm vào Yêu thích</button>
               <button type="button" onClick={handleDownloadSelected} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><DownloadIcon className="size-[18px]" />Tải về</button>
             </div>
-          ) : (
+          ) : songs.length > 0 ? (
             <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1fr)_minmax(180px,0.8fr)_64px_32px] sm:gap-4"><span>#</span><span>Tiêu đề</span><span className="hidden sm:block">Nghệ sĩ</span><span className="grid size-5 place-items-center justify-self-end text-[18px] leading-none">◷</span><span aria-hidden="true" /></div>
-          )}
+          ) : null}
 
-          {visibleSongs.length > 0 ? <ol className="mt-2 space-y-0.5">{visibleSongs.map((song, index) => <PlaylistSongRow key={song.id} song={song} index={index} coverUrl={coverUrl} checked={selectedIds.includes(song.id)} onToggle={() => toggleSong(song.id)} onPlay={() => handlePlaySong(song)} isCurrentTrack={track?.id === song.id} isPlaying={isPlaying && track?.id === song.id} />)}</ol> : <div className="mt-8 flex flex-col items-center rounded-lg px-4 py-12 text-center">
-            <p className="text-lg font-bold text-white">Playlist chưa có bài hát</p>
-            {playlist.can_edit ? <><p className="mt-2 text-sm text-white/55">Chọn nhạc từ playlist, album yêu thích hoặc lịch sử nghe của bạn.</p><button type="button" onClick={() => setIsAddSongsOpen(true)} className="mt-5 h-11 rounded-full bg-[#3b3d3c] px-8 text-sm font-bold text-white transition-colors hover:bg-[#4a4d4c]">Thêm bài hát</button></> : null}
+          {visibleSongs.length > 0 ? <ol className="mt-2 space-y-0.5">{visibleSongs.map((song, index) => <PlaylistSongRow key={song.id} song={song} index={index} coverUrl={coverUrl} checked={selectedIds.includes(song.id)} onToggle={() => toggleSong(song.id)} onPlay={() => handlePlaySong(song)} isCurrentTrack={track?.id === song.id} isPlaying={isPlaying && track?.id === song.id} />)}</ol> : <div className={`flex flex-col items-center rounded-lg px-4 text-center ${songs.length === 0 ? 'py-0' : 'mt-8 py-12'}`}>
+            <svg aria-hidden="true" viewBox="0 0 80 80" className="mb-5 size-[84px] drop-shadow-[0_8px_22px_rgba(0,211,229,0.18)]">
+              <path d="m12 21 28-14 28 14-12 16-16-8-16 8L12 21Z" fill="#9fe7ef" fillOpacity=".72" />
+              <path d="M12 21v34l28 16V29L12 21Z" fill="#63db8c" />
+              <path d="M68 21v34L40 71V29l28-8Z" fill="#36c9dc" />
+              <path d="m12 21 18 9-9 17-16-9 7-17Z" fill="#8ce6cc" />
+              <path d="m68 21-18 9 9 17 16-9-7-17Z" fill="#82e4f1" />
+              <path d="m30 30 10-5 10 5-10 6-10-6Z" fill="#d3fbef" fillOpacity=".85" />
+            </svg>
+            <p className="text-lg font-bold text-white">Không có dữ liệu</p>
+            {playlist.can_edit ? <><p className="mt-2 text-sm text-white/55">Chọn bài hát thêm vào playlist</p><button type="button" onClick={() => setIsAddSongsOpen(true)} className="mt-5 h-11 rounded-full bg-[#3b3d3c] px-8 text-sm font-bold text-white transition-colors hover:bg-[#4a4d4c]">Thêm bài hát</button></> : null}
           </div>}
           {hasMoreSongs ? <button type="button" onClick={() => setRequest((current) => ({ ...current, visibleCount: current.visibleCount + 30 }))} className="mt-5 inline-flex items-center gap-2 text-[14px] font-bold text-white transition-colors hover:text-[#00d3e5]">Xem thêm <span aria-hidden="true">⌄</span></button> : null}
         </section>

@@ -35,6 +35,7 @@ class InitializeMongoDb extends Command
             'song_genres',
             'song_audio_files',
             'song_videos',
+            'video_favorites',
             'lyrics',
             'playlists',
             'playlist_songs',
@@ -97,6 +98,7 @@ class InitializeMongoDb extends Command
             'lyrics' => [[['song_id' => 1, 'language' => 1], ['unique' => true]]],
             'song_audio_files' => [[['song_id' => 1, 'file_type' => 1, 'status' => 1], []]],
             'song_videos' => [[['slug' => 1], ['unique' => true, 'sparse' => true]], [['song_id' => 1, 'status' => 1, 'sort_order' => 1], []], [['artist_ids' => 1, 'status' => 1], []], [['created_at' => -1], []]],
+            'video_favorites' => [[['video_id' => 1, 'actor_id' => 1], ['unique' => true]], [['video_id' => 1, 'created_at' => -1], []], [['actor_id' => 1, 'created_at' => -1], []]],
             'playlists' => [[['slug' => 1], ['unique' => true]], [['user_id' => 1], []], [['sort_order' => 1], []], [['status' => 1], []], [['artist_ids' => 1, 'status' => 1, 'visibility' => 1], []]],
             'media_assets' => [[['public_id' => 1], ['unique' => true]], [['folder' => 1], []], [['created_at' => -1], []]],
             'user_upload_stages' => [[['user_id' => 1, 'created_at' => -1], []], [['expires_at' => 1], []]],
@@ -136,12 +138,12 @@ class InitializeMongoDb extends Command
         }
 
         $this->info('Melodify MongoDB initialized successfully.');
-        $this->info('Database: ' . $database->getDatabaseName());
+        $this->info('Database: '.$database->getDatabaseName());
         $collectionCount = 0;
         foreach ($database->listCollections() as $_) {
             $collectionCount++;
         }
-        $this->info('Collections: ' . $collectionCount);
+        $this->info('Collections: '.$collectionCount);
 
         return self::SUCCESS;
     }

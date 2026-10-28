@@ -111,6 +111,10 @@ Route::prefix('admin')->name('admin.')->middleware('admin.timing')->group(functi
             Route::get('/videos/create', [SongVideoController::class, 'create'])->name('videos.create');
             Route::get('/videos/search-external', [SongVideoController::class, 'searchExternal'])->name('videos.external-search');
             Route::get('/videos/preview-external', [SongVideoController::class, 'previewExternal'])->name('videos.external-preview');
+            Route::get('/videos/search-artists', [SongVideoController::class, 'searchArtists'])->name('videos.artist-search');
+            Route::post('/videos/upload-signature', [SongVideoController::class, 'signVideoUpload'])
+                ->middleware('throttle:30,1')
+                ->name('videos.upload-signature');
             Route::get('/videos/{video}/source', [SongVideoController::class, 'source'])->name('videos.source');
             Route::delete('/videos/bulk', [SongVideoController::class, 'destroyBulk'])->name('videos.bulk-destroy');
             Route::delete('/videos/all', [SongVideoController::class, 'destroyAll'])->name('videos.destroy-all');

@@ -15,6 +15,8 @@ const collections = [
     "song_artists",
     "song_genres",
     "song_audio_files",
+    "song_videos",
+    "video_favorites",
     "lyrics",
     "playlists",
     "playlist_songs",
@@ -144,6 +146,17 @@ const indexes = {
     song_shares: [
         [{ song_id: 1, created_at: -1 }, {}],
         [{ visitor_id: 1, created_at: -1 }, {}],
+    ],
+    song_videos: [
+        [{ slug: 1 }, { unique: true, sparse: true }],
+        [{ song_id: 1, status: 1, sort_order: 1 }, {}],
+        [{ artist_ids: 1, status: 1 }, {}],
+        [{ created_at: -1 }, {}],
+    ],
+    video_favorites: [
+        [{ video_id: 1, actor_id: 1 }, { unique: true }],
+        [{ video_id: 1, created_at: -1 }, {}],
+        [{ actor_id: 1, created_at: -1 }, {}],
     ],
     listening_history: [
         [{ user_id: 1, song_id: 1 }, { unique: true }],

@@ -29,30 +29,48 @@ function bitrateOf(quality: SongAudioQuality) {
   return quality.bitrate ?? (Number.parseInt(quality.label, 10) || 0);
 }
 
+function isLosslessQuality(quality: SongAudioQuality) {
+  return /lossless|flac|alac/i.test(quality.label) || bitrateOf(quality) >= 900;
+}
+
+function isHighQuality(quality: SongAudioQuality) {
+  return bitrateOf(quality) >= 256 || /\bhigh\b|\bhq\b/i.test(quality.label);
+}
+
 function qualityForSong(song: Song, tier: DownloadTier): SongAudioQuality | null | undefined {
   const qualities = song.audio_qualities ?? [];
-  if (qualities.length === 0) return tier === 'standard' ? null : undefined;
+  if (qualities.length === 0) {
+    if (tier === 'standard') return null;
+    return tier === 'lossless' && song.premium_only && hasFallbackDownloadForSong(song) ? null : undefined;
+  }
 
   const available = qualities.filter((quality) => quality.available !== false && Boolean(quality.download_url));
   if (tier === 'lossless') {
-    const lossless = available.filter((quality) => /lossless|flac|alac/i.test(quality.label));
-    const candidates = lossless.length ? lossless : available.filter((quality) => quality.premium_only);
-    return candidates.sort((left, right) => bitrateOf(right) - bitrateOf(left))[0];
+    const lossless = available.filter(isLosslessQuality).sort((left, right) => bitrateOf(right) - bitrateOf(left));
+    return lossless[0] ?? (song.premium_only && hasFallbackDownloadForSong(song) ? null : undefined);
   }
 
-  const standardQualities = available.filter((quality) => !quality.premium_only).sort((left, right) => bitrateOf(left) - bitrateOf(right));
-  if (standardQualities.length === 0) return undefined;
-  return tier === 'standard' ? standardQualities[0] : standardQualities[standardQualities.length - 1];
+  const regularQualities = available.filter((quality) => !isLosslessQuality(quality));
+  if (tier === 'standard') {
+    const standardQualities = regularQualities.filter((quality) => !quality.premium_only);
+    return (standardQualities.length ? standardQualities : regularQualities)
+      .sort((left, right) => bitrateOf(left) - bitrateOf(right))[0];
+  }
+
+  const highQualities = regularQualities.filter(isHighQuality);
+  const nonVipHighQualities = highQualities.filter((quality) => !quality.premium_only);
+  return (nonVipHighQualities.length ? nonVipHighQualities : highQualities)
+    .sort((left, right) => bitrateOf(right) - bitrateOf(left))[0];
 }
 
 function estimatedSize(song: Song, tier: (typeof downloadTiers)[number], quality: SongAudioQuality | null | undefined) {
   if (!song.duration_seconds) return null;
-  const megabytes = song.duration_seconds * (quality?.bitrate ?? tier.estimateBitrate) / 8 / 1000;
+  const megabytes = song.duration_seconds * (quality ? bitrateOf(quality) || tier.estimateBitrate : tier.estimateBitrate) / 8 / 1000;
   return megabytes > 0 ? `${megabytes.toFixed(1)}MB` : null;
 }
 
 function hasFallbackDownloadForSong(song: Song, downloadUrl?: string | null) {
-  return Boolean(downloadUrl || song.download_url) || song.has_full_audio !== false;
+  return Boolean(downloadUrl || song.download_url) || song.has_full_audio === true;
 }
 
 const reportReasons: Array<{ value: SongReportReason; label: string }> = [
@@ -157,7 +175,7 @@ export function SongRowActionMenu({
 
     const quality = qualityForSong(song, tierId);
     const hasFallbackDownload = hasFallbackDownloadForSong(song, downloadUrl);
-    const requiresVip = tier.premium || Boolean(song.premium_only) || Boolean(quality?.premium_only);
+    const requiresVip = tier.premium || Boolean(song.premium_only) || Boolean(quality?.premium_only) || Boolean(quality && isLosslessQuality(quality));
     if (requiresVip && !isPremium) {
       updateMenuOpen(false);
       setDownloadOpen(false);
@@ -280,8 +298,8 @@ export function SongRowActionMenu({
                 const quality = qualityForSong(song, tier.id);
                 const available = quality !== undefined
                   && (Boolean(quality) || hasFallbackDownloadForSong(song, downloadUrl));
-                const requiresVip = tier.premium || Boolean(song.premium_only) || Boolean(quality?.premium_only);
-                const disabled = !available && !(requiresVip && !isPremium);
+                const requiresVip = tier.premium || Boolean(song.premium_only) || Boolean(quality?.premium_only) || Boolean(quality && isLosslessQuality(quality));
+                const disabled = !available;
                 const size = estimatedSize(song, tier, quality);
 
                 return <button key={tier.id} type="button" role="menuitem" disabled={disabled} title={disabled ? 'Bài hát chưa có file tải ở chất lượng này' : undefined} onClick={() => handleDownload(tier.id)} className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5] disabled:cursor-not-allowed disabled:opacity-50">

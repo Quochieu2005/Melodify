@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
-import { apiFetch, clearAuthSession, getCurrentUser, type AuthResponse, type AuthUser } from '@/lib/api';
+import { AUTH_REQUIRED_EVENT, AUTH_TOKEN_STORAGE_KEY, AUTH_USER_STORAGE_KEY, apiFetch, clearAuthSession, getCurrentUser, type AuthResponse, type AuthUser } from '@/lib/api';
 const LoginModal = dynamic(() => import('./LoginModal'));
 
 type LoginModalContextValue = {
@@ -35,17 +35,26 @@ export function LoginModalProvider({ children, variant = 'default' }: { children
 
   useEffect(() => {
     const readStoredUser = () => {
-      const storedUser = window.localStorage.getItem('melodify_auth_user');
+      const storedUser = window.localStorage.getItem(AUTH_USER_STORAGE_KEY);
+      const storedToken = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
 
-      if (!storedUser) {
+      if (!storedUser || !storedToken) {
+        if (storedUser && !storedToken) clearAuthSession();
         setUser(null);
         setAuthReady(true);
         return;
       }
 
       try {
-        setUser(JSON.parse(storedUser) as AuthUser);
+        const parsedUser = JSON.parse(storedUser) as AuthUser;
+        if (!parsedUser || typeof parsedUser !== 'object' || !parsedUser.id) {
+          clearAuthSession();
+          setUser(null);
+        } else {
+          setUser(parsedUser);
+        }
       } catch {
+        clearAuthSession();
         setUser(null);
       }
       setAuthReady(true);
@@ -60,6 +69,12 @@ export function LoginModalProvider({ children, variant = 'default' }: { children
       window.removeEventListener('melodify-auth-changed', readStoredUser);
     };
   }, []);
+
+  useEffect(() => {
+    const handleAuthRequired = () => openLogin();
+    window.addEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+  }, [openLogin]);
 
   useEffect(() => {
     if (!toast) return;
