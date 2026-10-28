@@ -79,6 +79,7 @@ return [
         'tmn_code' => env('VNPAY_TMN_CODE'),
         'hash_secret' => env('VNPAY_HASH_SECRET'),
         'payment_url' => env('VNPAY_PAYMENT_URL', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html'),
+        'bank_code' => env('VNPAY_BANK_CODE', ''),
         'return_url' => env('VNPAY_RETURN_URL') ?: rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/v1/vip/payments/vnpay/return',
         'ipn_url' => env('VNPAY_IPN_URL') ?: rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/v1/vip/payments/vnpay/ipn',
     ],

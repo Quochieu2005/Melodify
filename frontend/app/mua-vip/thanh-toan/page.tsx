@@ -25,7 +25,7 @@ const paymentMethods: {
   { id: "momo", label: "Ví MoMo", logos: ["f_momo.png"] },
   {
     id: "vnpay",
-    label: "VNPAY QR Code",
+    label: "VNPAY",
     logos: ["f_vnpay.png"],
   },
   { id: "zalopay", label: "Ví ZaloPay", logos: ["f_zalopay.png"] },
@@ -302,7 +302,7 @@ export default function VipCheckoutPage() {
                 ) : null}
                 {method === "vnpay" ? (
                   <p className="mx-3 mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-900" role="note">
-                    VNPAY sẽ mở mã QR. Hãy quét bằng ứng dụng ngân hàng có hỗ trợ VNPAY-QR; không phải ứng dụng ví nào cũng quét được. Backend cũng cần HTTPS công khai để VNPAY gửi kết quả xác nhận.
+                    VNPAY sẽ hiển thị các phương thức được hỗ trợ cho merchant. Nếu chọn quét QR, hãy dùng ứng dụng ngân hàng có hỗ trợ VNPAY-QR; phương thức QR cần được bật cho tài khoản/terminal VNPAY. Backend cũng cần HTTPS công khai để VNPAY gửi kết quả xác nhận.
                   </p>
                 ) : null}
                 {method === "zalopay" ? (
