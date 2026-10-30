@@ -4,12 +4,22 @@ import { Image } from 'expo-image';
 
 import { AppShell } from '@/components/layout';
 import { Artwork, SongRow } from '@/components/music';
-import { ScrollPage, SectionHeading, StateMessage, useSurfaceStyles } from '@/components/shared';
+import { ScrollPage, SectionHeading, useSurfaceStyles } from '@/components/shared';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { useRemoteData } from '@/hooks/useRemoteData';
 import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
 import { useTheme } from '@/hooks/use-theme';
-import { getHomeBootstrap, type Song } from '@/lib/api';
+import {
+  getHomeDiscovery,
+  getTrendingArtists,
+  listAlbums,
+  listBanners,
+  listCharts,
+  listGenres,
+  listPlaylists,
+  listTopics,
+  type Song,
+} from '@/lib/api';
 import { getAlbumRailCardWidth } from '@/lib/layout';
 
 function SongSection({ title, songs }: { title: string; songs: Song[] }) {
@@ -38,7 +48,24 @@ export default function HomeScreen() {
   const catalogCardWidth = Math.min(184, Math.max(140, (width - 48) / 2.2));
   const albumCardWidth = getAlbumRailCardWidth(width);
   const chartWidth = Math.max(280, width - 32);
-  const { data, loading, error, reload } = useRemoteData(async () => (await getHomeBootstrap()).data);
+  // Keep each home area on its own API and let all requests start together.
+  const bannersResource = useRemoteData(() => listBanners({ daily: true, limit: 4 }));
+  const topicsResource = useRemoteData(() => listTopics({ perPage: 12 }));
+  const chartsResource = useRemoteData(listCharts);
+  const discoveryResource = useRemoteData(getHomeDiscovery);
+  const artistsResource = useRemoteData(getTrendingArtists);
+  const genresResource = useRemoteData(() => listGenres({ perPage: 12 }));
+  const albumsResource = useRemoteData(() => listAlbums({ perPage: 12 }));
+  const playlistsResource = useRemoteData(() => listPlaylists({ perPage: 12 }));
+
+  const banners = bannersResource.data?.data ?? [];
+  const topics = topicsResource.data?.data ?? [];
+  const charts = chartsResource.data?.data ?? [];
+  const discovery = discoveryResource.data?.data;
+  const trendingArtists = artistsResource.data?.data ?? [];
+  const genres = genresResource.data?.data ?? [];
+  const albums = albumsResource.data?.data ?? [];
+  const playlists = playlistsResource.data?.data ?? [];
 
   const openBanner = (target: string | null) => {
     if (!target) return;
@@ -52,14 +79,10 @@ export default function HomeScreen() {
   return (
     <AppShell>
       <ScrollPage>
-        {loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}
-
-        {data ? (
-          <>
             {/* Top Banners Carousel (Ảnh 1) */}
-            {data.banners?.length ? (
+            {banners.length ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
-                {data.banners.slice(0, 4).map((banner) => (
+                {banners.slice(0, 4).map((banner) => (
                   <Pressable key={banner.id} onPress={() => openBanner(banner.link_url)} style={[styles.banner, { width: bannerWidth }]}>
                     {banner.image_url ? <Image source={{ uri: banner.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null}
                     <View style={styles.bannerShade} />
@@ -70,11 +93,11 @@ export default function HomeScreen() {
             ) : null}
 
             {/* Chủ Đề (Topic Cards Grid/Rail - Ảnh 1) */}
-            {data.topics?.length ? (
+            {topics.length ? (
               <CatalogSection
                 title="Chủ Đề"
                 cardWidth={catalogCardWidth}
-                items={data.topics.map((item) => ({
+                items={topics.map((item) => ({
                   id: item.id,
                   name: item.name,
                   image: item.image_url,
@@ -85,7 +108,7 @@ export default function HomeScreen() {
             ) : null}
 
             {/* Bảng Xếp Hạng (Rankings - Ảnh 1) */}
-            {!!data.charts?.length ? (
+            {!!charts.length ? (
               <View style={styles.section}>
                 <SectionHeading
                   title="Bảng Xếp Hạng"
@@ -103,7 +126,7 @@ export default function HomeScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.chartCarousel}
                 >
-                  {data.charts.map((chart) => (
+                  {charts.map((chart) => (
                     <Pressable
                       key={chart.id}
                       onPress={() => router.push(('/charts/' + chart.slug) as never)}
@@ -148,11 +171,11 @@ export default function HomeScreen() {
             ) : null}
 
             {/* Bài hát mới phát hành & phổ biến */}
-            <SongSection title="Bài hát mới phát hành" songs={data.discovery?.single_new_releases ?? []} />
-            <SongSection title="Bài hát phổ biến" songs={data.discovery?.popular_songs ?? []} />
+            <SongSection title="Bài hát mới phát hành" songs={discovery?.single_new_releases ?? []} />
+            <SongSection title="Bài hát phổ biến" songs={discovery?.popular_songs ?? []} />
 
             {/* Nghệ sĩ thịnh hành */}
-            {!!data.trending_artists?.filter((artist) => artist.featured_song).length ? (
+            {!!trendingArtists.filter((artist) => artist.featured_song).length ? (
               <View style={styles.section}>
                 <SectionHeading
                   title="Nghệ sĩ thịnh hành"
@@ -163,7 +186,7 @@ export default function HomeScreen() {
                   }
                 />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
-                  {data.trending_artists
+                  {trendingArtists
                     .filter((artist) => artist.featured_song)
                     .slice(0, 8)
                     .map((artist) => (
@@ -200,11 +223,9 @@ export default function HomeScreen() {
               </View>
             ) : null}
 
-            <CatalogSection title="Thể loại" cardWidth={catalogCardWidth} items={data.genres.map((item) => ({ id: item.id, name: item.name, image: item.image_url, route: '/genre/' + (item.slug || item.id) }))} onPress={(route) => router.push(route as never)} />
-            <CatalogSection title="Album" cardWidth={albumCardWidth} items={data.albums.map((item) => ({ id: item.id, name: item.title, image: item.cover_url, route: '/album/' + (item.slug || item.id) }))} onPress={(route) => router.push(route as never)} />
-            <CatalogSection title="Playlist" cardWidth={catalogCardWidth} items={data.playlists.map((item) => ({ id: item.id, name: item.name, image: item.cover_url, route: '/playlist/' + (item.slug || item.id) }))} onPress={(route) => router.push(route as never)} />
-          </>
-        ) : null}
+            <CatalogSection title="Thể loại" cardWidth={catalogCardWidth} items={genres.map((item) => ({ id: item.id, name: item.name, image: item.image_url, route: '/genre/' + (item.slug || item.id) }))} onPress={(route) => router.push(route as never)} />
+            <CatalogSection title="Album" cardWidth={albumCardWidth} items={albums.map((item) => ({ id: item.id, name: item.title, image: item.cover_url, route: '/album/' + (item.slug || item.id) }))} onPress={(route) => router.push(route as never)} />
+            <CatalogSection title="Playlist" cardWidth={catalogCardWidth} items={playlists.map((item) => ({ id: item.id, name: item.name, image: item.cover_url, route: '/playlist/' + (item.slug || item.id) }))} onPress={(route) => router.push(route as never)} />
       </ScrollPage>
     </AppShell>
   );

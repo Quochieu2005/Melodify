@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type TransitionEvent as ReactTransitionEvent } from 'react';
 import Image from 'next/image';
-import { getHomeBootstrap, type Banner as ApiBanner } from '@/lib/api';
+import { listBanners, subscribeCatalogResponse, type Banner as ApiBanner } from '@/lib/api';
 
 const dragThreshold = 48;
 
@@ -265,19 +265,23 @@ export default function MorningBannerCarousel() {
 
   useEffect(() => {
     let isCurrent = true;
+    const applyBanners = (response: Awaited<ReturnType<typeof listBanners>>) => {
+      const uniqueBanners = Array.from(
+        new Map(
+          response.data
+            .filter((banner) => banner.image_url)
+            .map((banner) => [banner.image_url, banner]),
+        ).values(),
+      ).slice(0, 5);
+      if (isCurrent) setBanners(uniqueBanners.map(mapApiBanner));
+    };
+    const unsubscribe = subscribeCatalogResponse<Awaited<ReturnType<typeof listBanners>>>(
+      '/v1/banners?daily=1&limit=5',
+      applyBanners,
+    );
 
-    getHomeBootstrap()
-      .then((response) => {
-        const uniqueBanners = Array.from(
-          new Map(
-            response.data.banners
-              .filter((banner) => banner.image_url)
-              .map((banner) => [banner.image_url, banner]),
-          ).values(),
-        ).slice(0, 5);
-
-        if (isCurrent) setBanners(uniqueBanners.map(mapApiBanner));
-      })
+    listBanners({ daily: true, limit: 5 })
+      .then(applyBanners)
       .catch(() => {
         if (isCurrent) setBanners([]);
       })
@@ -287,6 +291,7 @@ export default function MorningBannerCarousel() {
 
     return () => {
       isCurrent = false;
+      unsubscribe();
     };
   }, []);
 

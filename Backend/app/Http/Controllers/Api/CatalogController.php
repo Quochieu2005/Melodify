@@ -442,7 +442,7 @@ class CatalogController extends Controller
 
         $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
         $revision = $this->catalogContentRevision();
-        Cache::store('file')->forget('api:home-bootstrap:v19:'.$dateKey.':'.$revision);
+        Cache::store('file')->forget('api:home-bootstrap:v20:'.$dateKey.':'.$revision);
         Cache::store('file')->forget('api:trending-artists:v8:'.$dateKey.':'.$revision);
 
         return response()->json(['recorded' => true]);
@@ -739,12 +739,7 @@ class CatalogController extends Controller
     public function charts(): JsonResponse
     {
         $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
-        $items = collect($this->cachedChartPayloads($dateKey))
-            ->map(fn (array $chart): array => array_merge($chart, [
-                'songs' => collect($chart['songs'])->take(5)->values()->all(),
-            ]))
-            ->values()
-            ->all();
+        $items = $this->cachedChartPayloads($dateKey, 5);
 
         return response()->json([
             'data' => $items,
@@ -822,7 +817,7 @@ class CatalogController extends Controller
     {
         $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
         $revision = $this->catalogContentRevision();
-        $payload = Cache::store('file')->remember('api:home-discovery:v2:'.$dateKey.':'.$revision, now()->addMinute(), function () use ($dateKey): array {
+        $payload = Cache::store('file')->flexible('api:home-discovery:v3:'.$dateKey.':'.$revision, [60, 300], function () use ($dateKey): array {
             // Include every published song in the discovery pool, including VIP
             // songs and songs whose audio is still being attached by an admin.
             // The audio endpoint is responsible for enforcing the VIP check.
@@ -846,12 +841,18 @@ class CatalogController extends Controller
                 ->values();
 
             $dayStart = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->startOfDay();
-            $playCounts = $publishedSongIds === [] ? collect() : SongPlayEvent::query()
-                ->whereIn('song_id', $publishedSongIds)
-                ->where('started_at', '>=', $dayStart)
-                ->get(['song_id'])
-                ->groupBy(fn (SongPlayEvent $event): string => (string) $event->song_id)
-                ->map(fn (Collection $events): int => $events->count());
+            $playCountRows = $publishedSongIds === [] ? [] : SongPlayEvent::query()->raw(
+                fn ($collection) => $collection->aggregate([
+                    ['$match' => [
+                        'song_id' => ['$in' => $publishedSongIds],
+                        'started_at' => ['$gte' => new UTCDateTime($dayStart->getTimestampMs())],
+                    ]],
+                    ['$group' => ['_id' => '$song_id', 'plays' => ['$sum' => 1]]],
+                ], ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']])->toArray(),
+            );
+            $playCounts = collect($playCountRows)->mapWithKeys(function (array $row): array {
+                return [(string) data_get($row, '_id', '') => (int) data_get($row, 'plays', 0)];
+            });
             $popularCandidates = $publishedSongs
                 ->sort(function (Song $left, Song $right) use ($playCounts, $dateKey): int {
                     $leftCount = (int) $playCounts->get((string) $left->getKey(), 0);
@@ -911,7 +912,7 @@ class CatalogController extends Controller
     {
         $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
         $revision = $this->catalogContentRevision();
-        $payload = Cache::store('file')->flexible('api:home-bootstrap:v19:'.$dateKey.':'.$revision, [60, 300], function () use ($dateKey): array {
+        $payload = Cache::store('file')->flexible('api:home-bootstrap:v20:'.$dateKey.':'.$revision, [60, 300], function () use ($dateKey): array {
             $banners = $this->responsePayload($this->banners(Request::create('/api/v1/banners', 'GET', [
                 'daily' => 1,
                 'limit' => 5,
@@ -2715,7 +2716,7 @@ class CatalogController extends Controller
     /**
      * Build chart lists from the published catalog, ordered by most recently added.
      */
-    private function chartPayloads(string $dateKey): array
+    private function chartPayloads(string $dateKey, int $songsPerChart = 50): array
     {
         $songs = Song::query()
             ->where('status', 'published')
@@ -2750,7 +2751,8 @@ class CatalogController extends Controller
                     ->values();
             }
 
-            $chartSongs = $filtered->take(50)->map(function (Song $song, int $index) use ($audioBySong, $artistCredits): array {
+            $chartSongCount = min($filtered->count(), 50);
+            $chartSongs = $filtered->take($songsPerChart)->map(function (Song $song, int $index) use ($audioBySong, $artistCredits): array {
                 $data = $this->compactSongData($song, $audioBySong->get((string) $song->getKey()), $artistCredits[(string) $song->getKey()] ?? []);
 
                 return array_merge($data, [
@@ -2769,7 +2771,7 @@ class CatalogController extends Controller
                 'cover_url' => $firstSong['cover_url'] ?? '/topics/genre/vpop_600.png',
                 'date' => $dateKey,
                 'updated_at' => now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toISOString(),
-                'song_count' => count($chartSongs),
+                'song_count' => $chartSongCount,
                 'songs' => $chartSongs,
             ];
         }
@@ -2777,9 +2779,9 @@ class CatalogController extends Controller
         return $charts;
     }
 
-    private function cachedChartPayloads(string $dateKey): array
+    private function cachedChartPayloads(string $dateKey, int $songsPerChart = 50): array
     {
-        return Cache::store('file')->remember('api:charts:v7:full:'.$dateKey.':'.$this->catalogContentRevision(), now()->addMinute(), fn (): array => $this->chartPayloads($dateKey));
+        return Cache::store('file')->flexible('api:charts:v8:'.$songsPerChart.':'.$dateKey.':'.$this->catalogContentRevision(), [60, 300], fn (): array => $this->chartPayloads($dateKey, $songsPerChart));
     }
 
     private function catalogContentRevision(): string

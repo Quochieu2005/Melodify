@@ -457,17 +457,17 @@ Mở:
 http://127.0.0.1:8000/api/docs
 ```
 
-Swagger UI dùng OpenAPI 3.0.3 và load spec từ `resources/api-docs/openapi.json` thông qua route bảo vệ; file không còn nằm trong `public/`.
+Swagger UI dùng OpenAPI 3.0.3 và load spec từ `resources/api-docs/openapi.json` thông qua route tài liệu; file không nằm trong `public/`. Spec gồm `GET /api/health` và toàn bộ operation đang khai báo dưới `/api/v1`, được chia theo nhóm Auth, Music, Playlists, Favorites, Library, Uploads, Engagement, Charts, VIP Payments, Videos và các nhóm catalog/discovery.
 
-Hiện spec có:
+Các thao tác cá nhân như tạo/sửa/xóa playlist, yêu thích, theo dõi, thư viện, upload và giao dịch VIP được đánh dấu Bearer bắt buộc. Các route đọc công khai hỗ trợ Bearer tùy chọn để cá nhân hóa. Callback MoMo, VNPay và ZaloPay không dùng Bearer; backend xác minh callback bằng chữ ký/dữ liệu từ cổng thanh toán.
 
-- Group `System`.
-- Group `Auth` placeholder.
-- Group `Music` placeholder.
-- Bearer `Authorize` scheme.
-- `GET /api/health`.
+Để đồng bộ tài liệu sau khi thêm route Laravel, chạy từ thư mục `Backend`:
 
-Khi thêm API mới, cập nhật cả route Laravel và OpenAPI JSON để endpoint xuất hiện trong giao diện.
+```bash
+python scripts/sync_openapi.py
+```
+
+Script lấy route trực tiếp từ `php artisan route:list --path=api/v1 --json`, giữ lại mô tả thủ công hiện có, bổ sung operation còn thiếu, path parameter và chính sách xác thực vào `resources/api-docs/openapi.json`.
 
 ## 13. File cấu hình Laravel
 

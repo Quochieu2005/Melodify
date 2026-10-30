@@ -30,8 +30,8 @@ class AudioController extends Controller
 
         abort_if(
             (bool) ($audio?->premium_only ?? false)
-                && ! ($request->user()?->hasPremiumAccess() ?? false)
-                && ! $request->user('admin'),
+                && ! $request->user('admin')
+                && ! ($request->user()?->hasPremiumAccess() ?? false),
             403,
             'Bài hát này dành cho tài khoản VIP đã nạp.',
         );
@@ -126,8 +126,8 @@ class AudioController extends Controller
     {
         abort_if(
             $this->requiresVipQuality($option)
-                && ! ($request->user()?->hasPremiumAccess() ?? false)
-                && ! $request->user('admin'),
+                && ! $request->user('admin')
+                && ! ($request->user()?->hasPremiumAccess() ?? false),
             403,
             'Chất lượng này dành cho tài khoản VIP.',
         );

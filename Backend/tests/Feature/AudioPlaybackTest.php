@@ -152,7 +152,7 @@ class AudioPlaybackTest extends TestCase
         $client->shouldReceive('stream')->once()->with('https://audio.example.test/320-download.mp3', null)->andReturn($this->chunk());
         $this->get('/api/v1/songs/playback-test/audio?quality_id=nct-normal-320&download=1')
             ->assertStatus(206)
-            ->assertHeader('Content-Disposition', 'attachment; filename="melodify-audio"')
+            ->assertHeader('Content-Disposition', 'attachment; filename="Playback.mp3"; filename*=UTF-8\'\'Playback.mp3')
             ->assertStreamedContent('test');
         $this->assertSame('https://audio.example.test/320.mp3', $audio->fresh()->stream_options[0]['streamUrl']);
     }
@@ -319,7 +319,7 @@ class AudioPlaybackTest extends TestCase
             ->assertStreamedContent('test');
         $this->get('/api/v1/songs/external/'.$externalId.'/audio?quality_id=nct-vip-lossless&download=1&access_token='.$token)
             ->assertStatus(206)
-            ->assertHeader('Content-Disposition', 'attachment; filename="melodify-audio"')
+            ->assertHeader('Content-Disposition', 'attachment; filename="Bai_hat.flac"; filename*=UTF-8\'\'B%C3%A0i%20h%C3%A1t.flac')
             ->assertStreamedContent('test');
     }
 
@@ -344,7 +344,7 @@ class AudioPlaybackTest extends TestCase
         $client->shouldNotReceive('stream');
 
         $this->get('/api/v1/songs/playback-test/audio?download=1')
-            ->assertRedirect('https://res.cloudinary.com/demo/video/upload/fl_attachment/v123/melodify/audio/test.m4a');
+            ->assertRedirect('https://res.cloudinary.com/demo/video/upload/fl_attachment:Playback.m4a/v123/melodify/audio/test.m4a');
     }
 
     public function test_upstream_connection_failure_returns_gateway_error_not_internal_server_error(): void

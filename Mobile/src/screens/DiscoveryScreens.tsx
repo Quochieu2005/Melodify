@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputInstance,
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -790,7 +791,7 @@ export function LoginScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const mode = useThemeMode();
-  const otpInput = useRef<TextInput>(null);
+  const otpInput = useRef<TextInputInstance | null>(null);
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1228,8 +1229,8 @@ export function PasswordLoginScreen() {
   const [name, setName] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const submitting = useRef(false);
-  const passwordInput = useRef<TextInput>(null);
-  const passwordConfirmationInput = useRef<TextInput>(null);
+  const passwordInput = useRef<TextInputInstance | null>(null);
+  const passwordConfirmationInput = useRef<TextInputInstance | null>(null);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);

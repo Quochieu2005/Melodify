@@ -10,6 +10,7 @@ use App\Services\Payments\VipPaymentGatewayService;
 use App\Services\Payments\VipPaymentSettlementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -68,13 +69,41 @@ class VipCheckoutController extends Controller
         ]);
     }
 
-    public function show(Request $request, string $paymentCode): JsonResponse
+    public function show(
+        Request $request,
+        string $paymentCode,
+        VipPaymentGatewayService $gateways,
+        VipPaymentSettlementService $settlements,
+    ): JsonResponse
     {
         $payment = Payment::query()
             ->where('payment_code', $paymentCode)
             ->where('user_id', (string) $request->user()->getKey())
             ->with(['details.plan', 'subscription'])
             ->firstOrFail();
+
+        // ZaloPay IPNs can be delayed or dropped. Reconcile pending orders from
+        // the authenticated result page, with a short cache throttle per order.
+        if ($payment->method === 'zalopay' && $payment->status === 'pending') {
+            try {
+                $shouldQuery = Cache::add('vip:zalopay:query:'.(string) $payment->getKey(), true, 8);
+                if ($shouldQuery) {
+                    $providerStatus = $gateways->queryZaloPayOrder($payment);
+                    $transactionCode = trim((string) ($providerStatus['zp_trans_id'] ?? ''));
+                    if (is_array($providerStatus)
+                        && (int) ($providerStatus['return_code'] ?? 0) === 1
+                        && (int) ($providerStatus['amount'] ?? -1) === (int) round((float) $payment->amount)
+                        && $transactionCode !== '') {
+                        $settlements->markPaid($payment, $transactionCode, $providerStatus);
+                    }
+                }
+            } catch (Throwable $exception) {
+                // A temporary provider/cache outage must not break the result page.
+                report($exception);
+            }
+
+            $payment->refresh()->load(['details.plan', 'subscription']);
+        }
 
         return response()->json(['data' => [
             'payment_code' => (string) $payment->payment_code,
@@ -282,6 +311,7 @@ class VipCheckoutController extends Controller
         }
 
         if (! is_array($callbackData)
+            || (int) ($payload['type'] ?? 0) !== 1
             || (string) ($callbackData['app_id'] ?? '') !== (string) config('services.zalopay.app_id')) {
             return response()->json(['return_code' => 2, 'return_message' => 'Unknown application'], 403);
         }
@@ -297,7 +327,15 @@ class VipCheckoutController extends Controller
             return response()->json(['return_code' => 2, 'return_message' => 'Invalid amount'], 409);
         }
 
-        $settlements->markPaid($payment, (string) ($callbackData['zp_trans_id'] ?? ''), $callbackData);
+        $expectedAppUser = mb_substr((string) $payment->user_id, 0, 50);
+        if ((string) ($callbackData['app_user'] ?? '') !== $expectedAppUser
+            || trim((string) ($callbackData['zp_trans_id'] ?? '')) === '') {
+            return response()->json(['return_code' => 2, 'return_message' => 'Invalid payment details'], 409);
+        }
+
+        if (! $settlements->markPaid($payment, (string) $callbackData['zp_trans_id'], $callbackData)) {
+            return response()->json(['return_code' => 2, 'return_message' => 'Payment is not settled yet'], 409);
+        }
 
         return response()->json(['return_code' => 1, 'return_message' => 'success']);
     }

@@ -2,13 +2,13 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { artistPath, type ArtistReference } from '@/components/artists/ArtistLink';
-import { getHomeBootstrap, type HomeDiscovery, type HomeTrendingArtist, type Playlist, type Song } from '@/lib/api';
+import { getHomeDiscovery, getTrendingArtists, listPlaylists, subscribeCatalogResponse, type HomeDiscovery, type HomeTrendingArtist, type Playlist, type Song } from '@/lib/api';
 import FollowButton from '@/components/follow/FollowButton';
 import { recentPlaylistItem, recordRecentItem, recentArtistItem, recentSongItem, songPath } from '@/lib/recent-history';
 import VideoSection from '@/components/videos/VideoSection';
@@ -191,38 +191,95 @@ export default function MusicDiscoverySections() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [discovery, setDiscovery] = useState<HomeDiscovery>({ single_new_releases: [], popular_songs: [] });
   const [trendingArtists, setTrendingArtists] = useState<HomeTrendingArtist[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [discoveryLoaded, setDiscoveryLoaded] = useState(false);
+  const [playlistsLoaded, setPlaylistsLoaded] = useState(false);
+  const [artistsLoaded, setArtistsLoaded] = useState(false);
+  const requestsInFlight = useRef({ discovery: false, playlists: false, artists: false });
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadHome = () => getHomeBootstrap().then((response) => {
-      if (cancelled) return;
+    const unsubscribeDiscovery = subscribeCatalogResponse<Awaited<ReturnType<typeof getHomeDiscovery>>>(
+      '/v1/home/discovery',
+      (response) => {
+        if (!cancelled) {
+          setDiscovery({
+            single_new_releases: response.data.single_new_releases || [],
+            popular_songs: response.data.popular_songs || [],
+          });
+          setDiscoveryLoaded(true);
+        }
+      },
+    );
+    const unsubscribePlaylists = subscribeCatalogResponse<Awaited<ReturnType<typeof listPlaylists>>>(
+      '/v1/playlists?per_page=20',
+      (response) => { if (!cancelled) { setPlaylists(response.data || []); setPlaylistsLoaded(true); } },
+    );
+    const unsubscribeArtists = subscribeCatalogResponse<Awaited<ReturnType<typeof getTrendingArtists>>>(
+      '/v1/artists/trending',
+      (response) => {
+        if (!cancelled) {
+          setTrendingArtists((response.data || []).filter((artist) => artist.featured_song));
+          setArtistsLoaded(true);
+        }
+      },
+    );
 
-      const nextDiscovery = response.data.discovery;
-      setDiscovery({
-        single_new_releases: nextDiscovery.single_new_releases || [],
-        popular_songs: nextDiscovery.popular_songs || [],
-      });
-      setPlaylists(response.data.playlists);
-      setTrendingArtists((response.data.trending_artists || []).filter((artist) => artist.featured_song));
-      setError('');
-    }).catch(() => {
-      if (!cancelled) {
-        setDiscovery({ single_new_releases: [], popular_songs: [] });
-        setPlaylists([]);
-        setTrendingArtists([]);
-        setError('Không thể tải nội dung khám phá lúc này.');
+    const loadDiscovery = async () => {
+      if (requestsInFlight.current.discovery) return;
+      requestsInFlight.current.discovery = true;
+      try {
+        const response = await getHomeDiscovery();
+        if (!cancelled) setDiscovery({
+          single_new_releases: response.data.single_new_releases || [],
+          popular_songs: response.data.popular_songs || [],
+        });
+      } catch {
+        // Keep this section independent; other home APIs can still render.
+      } finally {
+        requestsInFlight.current.discovery = false;
+        if (!cancelled) setDiscoveryLoaded(true);
       }
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
+    };
 
-    void loadHome();
-    const refreshTimer = window.setInterval(() => void loadHome(), 60_000);
+    const loadPlaylists = async () => {
+      if (requestsInFlight.current.playlists) return;
+      requestsInFlight.current.playlists = true;
+      try {
+        const response = await listPlaylists({ perPage: 20 });
+        if (!cancelled) setPlaylists(response.data || []);
+      } catch {
+        // A failed playlist request must not hide discovery songs or artists.
+      } finally {
+        requestsInFlight.current.playlists = false;
+        if (!cancelled) setPlaylistsLoaded(true);
+      }
+    };
+
+    const loadTrendingArtists = async () => {
+      if (requestsInFlight.current.artists) return;
+      requestsInFlight.current.artists = true;
+      try {
+        const response = await getTrendingArtists();
+        if (!cancelled) setTrendingArtists((response.data || []).filter((artist) => artist.featured_song));
+      } catch {
+        // A failed artist request must not hide other home sections.
+      } finally {
+        requestsInFlight.current.artists = false;
+        if (!cancelled) setArtistsLoaded(true);
+      }
+    };
+
+    const loadHomeSections = () => {
+      void loadDiscovery();
+      void loadPlaylists();
+      void loadTrendingArtists();
+    };
+
+    loadHomeSections();
+    const refreshTimer = window.setInterval(loadHomeSections, 60_000);
     const refreshOnFocus = () => {
-      if (document.visibilityState === 'visible') void loadHome();
+      if (document.visibilityState === 'visible') loadHomeSections();
     };
     document.addEventListener('visibilitychange', refreshOnFocus);
 
@@ -230,6 +287,9 @@ export default function MusicDiscoverySections() {
       cancelled = true;
       window.clearInterval(refreshTimer);
       document.removeEventListener('visibilitychange', refreshOnFocus);
+      unsubscribeDiscovery();
+      unsubscribePlaylists();
+      unsubscribeArtists();
     };
   }, []);
 
@@ -245,14 +305,13 @@ export default function MusicDiscoverySections() {
     ];
   }, [playlists]);
 
-  if (loading) return <div role="status" aria-label="Đang tải nội dung khám phá" className="mt-12 h-72 animate-pulse rounded-xl bg-white/5" />;
-  if (error) return <p role="alert" className="mt-12 text-sm text-red-300">{error}</p>;
-
   return <>
-    <SongSection id="new-releases-heading" title="Single Mới Phát Hành" songs={discovery.single_new_releases} />
-    <SongSection id="popular-songs-heading" title="Nhiều Lượt Nghe Nhất" songs={discovery.popular_songs} />
-    {sections.map((section) => section.playlists.length > 0 ? <PlaylistSection key={section.id} {...section} /> : null)}
-    <TrendingArtistsSection artists={trendingArtists} onFollowersChanged={(id, count) => setTrendingArtists((current) => current.map((artist) => artist.id === id ? { ...artist, followers_count: count } : artist))} />
+    {discoveryLoaded ? <>
+      <SongSection id="new-releases-heading" title="Single Mới Phát Hành" songs={discovery.single_new_releases} />
+      <SongSection id="popular-songs-heading" title="Nhiều Lượt Nghe Nhất" songs={discovery.popular_songs} />
+    </> : null}
+    {playlistsLoaded ? sections.map((section) => section.playlists.length > 0 ? <PlaylistSection key={section.id} {...section} /> : null) : null}
+    {artistsLoaded ? <TrendingArtistsSection artists={trendingArtists} onFollowersChanged={(id, count) => setTrendingArtists((current) => current.map((artist) => artist.id === id ? { ...artist, followers_count: count } : artist))} /> : null}
     <VideoSection />
   </>;
 }

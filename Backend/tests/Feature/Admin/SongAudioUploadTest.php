@@ -295,7 +295,7 @@ class SongAudioUploadTest extends TestCase
 
         $this->get(route('admin.songs.audio', ['song' => $song->getKey(), 'quality_id' => $qualityId, 'download' => 1]))
             ->assertOk()
-            ->assertHeader('Content-Disposition', 'attachment; filename="melodify-audio"')
+            ->assertHeader('Content-Disposition', 'attachment; filename="Lyrics_Quality_Preview.flac"; filename*=UTF-8\'\'Lyrics%20Quality%20Preview.flac')
             ->assertStreamedContent('fLaC');
         Http::assertSentCount(3);
     }
