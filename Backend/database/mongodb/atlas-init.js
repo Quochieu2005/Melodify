@@ -4,6 +4,8 @@ db = db.getSiblingDB("melodify");
 
 const collections = [
     "admins",
+    "admin_notifications",
+    "banners",
     "users",
     "artists",
     "artist_followers",
@@ -13,10 +15,13 @@ const collections = [
     "song_artists",
     "song_genres",
     "song_audio_files",
+    "song_videos",
+    "video_favorites",
     "lyrics",
     "playlists",
     "playlist_songs",
     "favorites",
+    "song_shares",
     "listening_history",
     "devices",
     "song_play_events",
@@ -28,9 +33,13 @@ const collections = [
     "payments",
     "transactions",
     "payment_details",
+    "user_api_tokens",
+    "phone_login_challenges",
     "logs",
     "reports",
     "recommendations",
+    "topics",
+    "media_assets",
 ];
 
 const existing = db.getCollectionNames();
@@ -44,10 +53,21 @@ const indexes = {
         [{ email: 1 }, { unique: true }],
         [{ status: 1 }, {}],
     ],
+    admin_notifications: [
+        [{ admin_id: 1, is_read: 1 }, {}],
+        [{ created_at: -1 }, {}],
+    ],
+    banners: [
+        [{ slug: 1 }, { unique: true }],
+        [{ sort_order: 1 }, {}],
+        [{ status: 1 }, {}],
+    ],
     users: [
         [{ slug: 1 }, { unique: true }],
-        [{ email: 1 }, { unique: true }],
+        [{ email: 1 }, { unique: true, sparse: true }],
         [{ username: 1 }, { unique: true, sparse: true }],
+        [{ phone: 1 }, { unique: true, sparse: true }],
+        [{ is_premium: 1 }, {}],
         [{ status: 1 }, {}],
     ],
     artists: [
@@ -62,6 +82,13 @@ const indexes = {
     genres: [
         [{ slug: 1 }, { unique: true }],
         [{ name: 1 }, { unique: true }],
+        [{ status: 1 }, {}],
+        [{ sort_order: 1 }, {}],
+    ],
+    topics: [
+        [{ slug: 1 }, { unique: true }],
+        [{ status: 1 }, {}],
+        [{ sort_order: 1 }, {}],
     ],
     albums: [
         [{ slug: 1 }, { unique: true }],
@@ -77,30 +104,59 @@ const indexes = {
     ],
     song_artists: [
         [{ song_id: 1, artist_id: 1, artist_role: 1 }, { unique: true }],
+        [{ song_id: 1, artist_role: 1 }, {}],
         [{ artist_id: 1 }, {}],
     ],
     song_genres: [
         [{ song_id: 1, genre_id: 1 }, { unique: true }],
+        [{ song_id: 1 }, {}],
         [{ genre_id: 1 }, {}],
     ],
+    topic_songs: [
+        [{ topic_id: 1, song_id: 1 }, { unique: true }],
+        [{ song_id: 1, position: 1 }, {}],
+        [{ topic_id: 1, position: 1 }, {}],
+    ],
     song_audio_files: [
-        [{ song_id: 1 }, {}],
-        [{ status: 1 }, {}],
+        [{ song_id: 1, file_type: 1, status: 1 }, {}],
     ],
     lyrics: [[{ song_id: 1, language: 1 }, { unique: true }]],
     playlists: [
         [{ slug: 1 }, { unique: true }],
         [{ user_id: 1 }, {}],
         [{ visibility: 1 }, {}],
+        [{ status: 1 }, {}],
+        [{ sort_order: 1 }, {}],
+    ],
+    media_assets: [
+        [{ public_id: 1 }, { unique: true }],
+        [{ folder: 1 }, {}],
+        [{ created_at: -1 }, {}],
     ],
     playlist_songs: [
         [{ playlist_id: 1, song_id: 1 }, { unique: true }],
         [{ song_id: 1 }, {}],
+        [{ song_id: 1, position: 1 }, {}],
         [{ playlist_id: 1, position: 1 }, {}],
     ],
     favorites: [
         [{ user_id: 1, song_id: 1 }, { unique: true }],
-        [{ song_id: 1 }, {}],
+        [{ song_id: 1, created_at: -1 }, {}],
+    ],
+    song_shares: [
+        [{ song_id: 1, created_at: -1 }, {}],
+        [{ visitor_id: 1, created_at: -1 }, {}],
+    ],
+    song_videos: [
+        [{ slug: 1 }, { unique: true, sparse: true }],
+        [{ song_id: 1, status: 1, sort_order: 1 }, {}],
+        [{ artist_ids: 1, status: 1 }, {}],
+        [{ created_at: -1 }, {}],
+    ],
+    video_favorites: [
+        [{ video_id: 1, actor_id: 1 }, { unique: true }],
+        [{ video_id: 1, created_at: -1 }, {}],
+        [{ actor_id: 1, created_at: -1 }, {}],
     ],
     listening_history: [
         [{ user_id: 1, song_id: 1 }, { unique: true }],
@@ -114,6 +170,7 @@ const indexes = {
         [{ user_id: 1 }, {}],
         [{ song_id: 1 }, {}],
         [{ song_id: 1, started_at: -1 }, {}],
+        [{ started_at: -1 }, {}],
     ],
     comments: [
         [{ song_id: 1 }, {}],
@@ -134,13 +191,14 @@ const indexes = {
     ],
     subscriptions: [
         [{ user_id: 1, status: 1 }, {}],
-        [{ plan_id: 1 }, {}],
+        [{ plan_id: 1, status: 1 }, {}],
         [{ end_date: 1 }, {}],
     ],
     payments: [
         [{ payment_code: 1 }, { unique: true }],
         [{ user_id: 1 }, {}],
         [{ status: 1 }, {}],
+        [{ status: 1, paid_at: -1 }, {}],
     ],
     transactions: [
         [{ transaction_code: 1 }, { unique: true }],
@@ -150,6 +208,15 @@ const indexes = {
     payment_details: [
         [{ payment_id: 1 }, {}],
         [{ plan_id: 1 }, {}],
+    ],
+    user_api_tokens: [
+        [{ token_hash: 1 }, { unique: true }],
+        [{ user_id: 1 }, {}],
+        [{ expires_at: 1 }, {}],
+    ],
+    phone_login_challenges: [
+        [{ phone: 1, created_at: -1 }, {}],
+        [{ expires_at: 1 }, {}],
     ],
     logs: [
         [{ user_id: 1 }, {}],
@@ -168,6 +235,12 @@ const indexes = {
         [{ expires_at: 1 }, {}],
     ],
 };
+
+try {
+    db.getCollection("users").dropIndex("email_1");
+} catch (error) {
+    // The index may not exist on a fresh database.
+}
 
 Object.entries(indexes).forEach(([name, collectionIndexes]) => {
     collectionIndexes.forEach(([keys, options]) =>

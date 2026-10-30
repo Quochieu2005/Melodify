@@ -8,11 +8,13 @@
     "require": {
         "php": "^8.3",
         "laravel/framework": "^13.17",
-        "mongodb/laravel-mongodb": "^5.8",
-        "laravel/tinker": "^3.0"
+        "laravel/socialite": "^5.31",
+        "laravel/tinker": "^3.0",
+        "mongodb/laravel-mongodb": "^5.8"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
+        "laravel/boost": "^2.10",
         "laravel/pail": "^1.2.5",
         "laravel/pao": "^1.0.6",
         "laravel/pint": "^1.27",
@@ -44,6 +46,10 @@
         "dev": [
             "Composer\\Config::disableProcessTimeout",
             "@php artisan dev"
+        ],
+        "dev:mobile": [
+            "Composer\\Config::disableProcessTimeout",
+            "cd public && php -d zend_extension=opcache -d opcache.enable_cli=1 -d opcache.validate_timestamps=1 -d opcache.revalidate_freq=0 -S 0.0.0.0:8000 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php"
         ],
         "test": [
             "@php artisan config:clear --ansi @no_additional_args",

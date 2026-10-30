@@ -45,7 +45,8 @@ aside:has(> nav[aria-label='Điều hướng chính']) > nav {
   padding: 0 14px !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) nav a {
+aside:has(> nav[aria-label='Điều hướng chính']) nav a,
+aside:has(> nav[aria-label='Điều hướng chính']) nav button {
   min-height: 49px;
   gap: 4px !important;
   border-radius: 999px !important;
@@ -55,25 +56,29 @@ aside:has(> nav[aria-label='Điều hướng chính']) nav a {
   font-weight: 700 !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) nav a[aria-current='page'] {
+aside:has(> nav[aria-label='Điều hướng chính']) nav a[aria-current='page'],
+aside:has(> nav[aria-label='Điều hướng chính']) nav button[aria-current='page'] {
   background: rgba(157, 167, 163, 0.38) !important;
   color: #fff !important;
   box-shadow: none !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) nav a:hover {
+aside:has(> nav[aria-label='Điều hướng chính']) nav a:hover,
+aside:has(> nav[aria-label='Điều hướng chính']) nav button:hover {
   background: transparent !important;
   color: white !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) nav a > span:first-child {
+aside:has(> nav[aria-label='Điều hướng chính']) nav a > span:first-child,
+aside:has(> nav[aria-label='Điều hướng chính']) nav button > span:first-child {
   width: 24px !important;
   height: 24px !important;
   color: inherit;
   font-size: 25px !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) nav a[aria-current='page'] > span:first-child {
+aside:has(> nav[aria-label='Điều hướng chính']) nav a[aria-current='page'] > span:first-child,
+aside:has(> nav[aria-label='Điều hướng chính']) nav button[aria-current='page'] > span:first-child {
   color: #78d7df;
 }
 
@@ -95,7 +100,8 @@ aside:has(> nav[aria-label='Điều hướng chính']) > section > div {
   margin-top: 11px !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) > section a {
+aside:has(> nav[aria-label='Điều hướng chính']) > section a,
+aside:has(> nav[aria-label='Điều hướng chính']) > section button {
   min-height: 49px;
   gap: 8px !important;
   border-radius: 999px !important;
@@ -105,12 +111,14 @@ aside:has(> nav[aria-label='Điều hướng chính']) > section a {
   font-weight: 700 !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) > section a:hover {
+aside:has(> nav[aria-label='Điều hướng chính']) > section a:hover,
+aside:has(> nav[aria-label='Điều hướng chính']) > section button:hover {
   background: transparent !important;
   color: white !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) > section a > span:first-child {
+aside:has(> nav[aria-label='Điều hướng chính']) > section a > span:first-child,
+aside:has(> nav[aria-label='Điều hướng chính']) > section button > span:first-child {
   width: 32px !important;
   height: 32px !important;
   flex: 0 0 32px;
@@ -128,26 +136,26 @@ aside:has(> nav[aria-label='Điều hướng chính']) > section li:last-child a
   color: #8ce8f1;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) > div:last-child {
+aside:has(> nav[aria-label='Điều hướng chính']) > .sidebar-account {
   margin-top: 25px !important;
   padding: 0 34px !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) > div:last-child > div {
+aside:has(> nav[aria-label='Điều hướng chính']) > .sidebar-account > div {
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
   padding: 0 !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) > div:last-child p {
+aside:has(> nav[aria-label='Điều hướng chính']) > .sidebar-account p {
   color: #9f9c98 !important;
   font-size: 14px !important;
   font-weight: 700;
   line-height: 1.45 !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) > div:last-child button {
+aside:has(> nav[aria-label='Điều hướng chính']) > .sidebar-account button {
   margin-top: 16px !important;
   min-height: 48px;
   border-radius: 999px !important;
@@ -157,6 +165,6 @@ aside:has(> nav[aria-label='Điều hướng chính']) > div:last-child button {
   font-weight: 800 !important;
 }
 
-aside:has(> nav[aria-label='Điều hướng chính']) > div:last-child button:hover {
+aside:has(> nav[aria-label='Điều hướng chính']) > .sidebar-account button:hover {
   background: #474747 !important;
 }

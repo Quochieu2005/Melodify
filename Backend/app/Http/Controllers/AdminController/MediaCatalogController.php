@@ -1,0 +1,525 @@
+<?php
+
+namespace App\Http\Controllers\AdminController;
+
+use App\Http\Controllers\Controller;
+use App\Models\Playlist;
+use App\Rules\PlainText;
+use App\Services\MediaAssetService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
+
+abstract class MediaCatalogController extends Controller
+{
+    protected string $model;
+
+    protected string $resource;
+
+    protected string $title;
+
+    protected string $nameField = 'name';
+
+    protected string $slugField = 'slug';
+
+    protected string $imageUrlField = 'image_url';
+
+    protected string $imagePublicIdField = 'image_public_id';
+
+    protected array $formFields = [];
+
+    protected array $columns = [];
+
+    protected string $viewDirectory = 'Admin.catalog';
+
+    abstract protected function rules(?object $item): array;
+
+    protected function validationMessages(): array
+    {
+        return [];
+    }
+
+    /** @return array<string, mixed> */
+    protected function supplementalFormData(?object $item): array
+    {
+        return [];
+    }
+
+    /** @return mixed */
+    protected function availablePlaylists()
+    {
+        return Playlist::query()
+            ->orderBy('name')
+            ->limit(500)
+            ->get();
+    }
+
+    /** @return array<int, string> */
+    protected function selectedPlaylistIds(?object $item, string $relationField): array
+    {
+        if ($item === null) {
+            return [];
+        }
+
+        return Playlist::query()
+            ->get()
+            ->filter(fn (Playlist $playlist): bool => $this->relationContainsId($playlist->{$relationField} ?? [], (string) $item->getKey()))
+            ->pluck((new Playlist())->getKeyName())
+            ->map(fn ($id): string => (string) $id)
+            ->values()
+            ->all();
+    }
+
+    protected function playlistsForRelation(string $relationField, string $catalogId): LengthAwarePaginator
+    {
+        $items = Playlist::query()
+            ->get()
+            ->filter(fn (Playlist $playlist): bool => $this->relationContainsId($playlist->{$relationField} ?? [], $catalogId))
+            ->sortBy(fn (Playlist $playlist): string => sprintf('%010d|%s', (int) ($playlist->sort_order ?? 0), mb_strtolower((string) $playlist->name)))
+            ->values();
+        $perPage = 20;
+        $page = max((int) request()->input('page', 1), 1);
+
+        return new LengthAwarePaginator(
+            $items->forPage($page, $perPage)->values(),
+            $items->count(),
+            $perPage,
+            $page,
+            ['path' => request()->url(), 'query' => request()->query()],
+        );
+    }
+
+    /** @param array<int, string> $playlistIds */
+    protected function validatePlaylistIds(array $playlistIds): void
+    {
+        foreach ($playlistIds as $playlistId) {
+            if (! Playlist::query()->find($playlistId)) {
+                throw ValidationException::withMessages([
+                    'playlist_ids' => 'Một playlist đã chọn không còn tồn tại.',
+                ]);
+            }
+        }
+    }
+
+    /** @param array<int, string> $selectedPlaylistIds */
+    protected function syncPlaylistRelation(string $relationField, string $catalogId, array $selectedPlaylistIds): void
+    {
+        $selected = collect($selectedPlaylistIds)
+            ->map(fn ($id): string => (string) $id)
+            ->filter()
+            ->unique()
+            ->flip();
+        Playlist::query()
+            ->get()
+            ->filter(fn (Playlist $playlist): bool => $this->relationContainsId($playlist->{$relationField} ?? [], $catalogId) || $selected->has((string) $playlist->getKey()))
+            ->unique(fn (Playlist $playlist): string => (string) $playlist->getKey())
+            ->each(function (Playlist $playlist) use ($relationField, $catalogId, $selected): void {
+                $ids = collect($this->relationIds($playlist->{$relationField} ?? []))
+                    ->map(fn ($id): string => (string) $id)
+                    ->filter(fn (string $id): bool => $id !== $catalogId)
+                    ->values();
+
+                if ($selected->has((string) $playlist->getKey())) {
+                    $ids->push($catalogId);
+                }
+
+                $nextIds = $ids->unique()->values()->all();
+                $currentIds = collect($this->relationIds($playlist->{$relationField} ?? []))
+                    ->map(fn ($id): string => (string) $id)
+                    ->values()
+                    ->all();
+
+                if ($currentIds !== $nextIds) {
+                    $playlist->setAttribute($relationField, $nextIds);
+                    $playlist->save();
+                }
+            });
+    }
+
+    /** @return array<int, string> */
+    private function relationIds(mixed $value): array
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : [];
+        }
+
+        return array_values(array_map('strval', is_array($value) ? $value : []));
+    }
+
+    private function relationContainsId(mixed $value, string $id): bool
+    {
+        return in_array($id, $this->relationIds($value), true);
+    }
+
+    /** @param array<string, mixed> $data */
+    protected function afterPersist(object $item, array $data): void
+    {
+        // Resources without side relations do not need post-save work.
+    }
+
+    public function index(?Request $request = null): View
+    {
+        $request ??= request();
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+        ]);
+        $search = trim((string) ($filters['q'] ?? ''));
+        $query = ($this->model)::query();
+
+        if ($search !== '') {
+            $query->where(function ($nestedQuery) use ($search): void {
+                $nestedQuery
+                    ->where($this->nameField, 'like', "%{$search}%")
+                    ->orWhere($this->slugField, 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhere('type_custom', 'like', "%{$search}%");
+            });
+        }
+
+        $items = $query
+            ->orderBy('sort_order')
+            ->latest()
+            ->paginate(12)
+            ->withQueryString();
+
+        return view('Admin.catalog.index', $this->viewData(compact('items', 'search')));
+    }
+
+    public function create(): View
+    {
+        return view("{$this->viewDirectory}.create", $this->viewData([
+            'item' => null,
+            'fields' => $this->resolvedFields(),
+            'mediaAssets' => app(MediaAssetService::class)->latest(),
+            'defaultSortOrder' => $this->nextSortOrder($this->defaultSortOrderGroup()),
+            'sortOrderByGroup' => $this->sortOrderSuggestions(),
+            ...$this->supplementalFormData(null),
+        ]));
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $this->normalizeRequest($request);
+        $data = $request->validate($this->rules(null), $this->validationMessages());
+        $this->applyAutomaticSortOrder($data);
+        $this->validateSortOrder($data, null);
+        $payload = $this->preparePayload($request, $data, null);
+        $item = ($this->model)::query()->create($payload);
+        $this->afterPersist($item, $data);
+
+        return redirect()->route("admin.{$this->resource}.index")
+            ->with('success', "Đã tạo {$this->title} thành công.");
+    }
+
+    public function edit(string $id): View
+    {
+        $item = ($this->model)::query()->findOrFail($id);
+
+        return view("{$this->viewDirectory}.edit", $this->viewData([
+            'item' => $item,
+            'fields' => $this->resolvedFields(),
+            'mediaAssets' => app(MediaAssetService::class)->latest(),
+            'sortOrderByGroup' => $this->sortOrderSuggestions(),
+            ...$this->supplementalFormData($item),
+        ]));
+    }
+
+    public function update(Request $request, string $id): RedirectResponse
+    {
+        $item = ($this->model)::query()->findOrFail($id);
+        $this->normalizeRequest($request);
+        $data = $request->validate($this->rules($item), $this->validationMessages());
+        $this->applyAutomaticSortOrder($data, $item);
+        $this->validateSortOrder($data, $item);
+        $item->update($this->preparePayload($request, $data, $item));
+        $this->afterPersist($item, $data);
+
+        return redirect()->route("admin.{$this->resource}.index")
+            ->with('success', "Đã cập nhật {$this->title}.");
+    }
+
+    public function destroy(string $id): RedirectResponse
+    {
+        $item = ($this->model)::query()->findOrFail($id);
+        $item->delete();
+        $this->afterDelete($item);
+
+        return back()->with('success', "Đã xóa {$this->title}. Ảnh vẫn được giữ trong kho ảnh dùng chung.");
+    }
+
+    public function destroyBulk(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:50'],
+            'ids.*' => ['required', 'string', 'max:64', 'distinct'],
+        ], [
+            'ids.required' => "Hãy chọn ít nhất một {$this->title} để xóa.",
+            'ids.array' => 'Danh sách được chọn không hợp lệ.',
+            'ids.min' => "Hãy chọn ít nhất một {$this->title} để xóa.",
+            'ids.max' => 'Bạn chỉ được xóa tối đa 50 mục mỗi lần.',
+            'ids.*.distinct' => 'Các mục được chọn không được trùng lặp.',
+        ]);
+
+        $keyName = (new $this->model())->getKeyName();
+        $items = ($this->model)::query()
+            ->whereIn($keyName, array_values($data['ids']))
+            ->get();
+
+        if ($items->isEmpty()) {
+            return back()->withErrors([
+                'ids' => "Không tìm thấy {$this->title} nào phù hợp để xóa.",
+            ]);
+        }
+
+        foreach ($items as $item) {
+            $item->delete();
+            $this->afterDelete($item);
+        }
+
+        return back()->with('success', "Đã xóa {$items->count()} {$this->title} đã chọn.");
+    }
+
+    public function destroyAll(): RedirectResponse
+    {
+        $items = ($this->model)::query()->get();
+
+        if ($items->isEmpty()) {
+            return back()->with('warning', "Hiện chưa có {$this->title} nào để xóa.");
+        }
+
+        foreach ($items as $item) {
+            $item->delete();
+            $this->afterDelete($item);
+        }
+
+        return back()->with('success', "Đã xóa toàn bộ {$items->count()} {$this->title}.");
+    }
+
+    public function toggleStatus(string $id): RedirectResponse
+    {
+        $item = ($this->model)::query()->findOrFail($id);
+        $item->status = $item->status === 'active' ? 'inactive' : 'active';
+        $item->save();
+
+        return back()->with('success', "Đã chuyển trạng thái {$this->title} sang ".($item->status === 'active' ? 'Hoạt động' : 'Tạm ẩn').'.');
+    }
+
+    protected function preparePayload(Request $request, array $data, ?object $item): array
+    {
+        $data = $this->normalizePayload($data, $request);
+        $data[$this->slugField] = $this->resolveSlug(
+            $data[$this->slugField] ?? null,
+            $data[$this->nameField] ?? '',
+            $item?->getKey(),
+        );
+
+        $data['sort_order'] = (int) ($data['sort_order'] ?? 0);
+        $media = app(MediaAssetService::class)->resolve(
+            $request,
+            request()->user('admin'),
+            $item ? data_get($item, $this->imageUrlField) : null,
+            $item ? data_get($item, $this->imagePublicIdField) : null,
+            $item === null,
+            $data[$this->slugField] ?? null,
+        );
+        $data[$this->imageUrlField] = $media['url'];
+        $data[$this->imagePublicIdField] = $media['public_id'];
+
+        unset($data['image_asset_id'], $data['image']);
+
+        return $data;
+    }
+
+    protected function nextSortOrder(?string $group = null): int
+    {
+        $model = $this->model;
+        $query = $model::query();
+        $this->applySortOrderScope($query, $group);
+
+        // Every group starts at 1. The previous -1 fallback made a new group
+        // start at 0, which did not match the admin ordering shown to users.
+        return ((int) ($query->max('sort_order') ?? 0)) + 1;
+    }
+
+    /** @param array<string, mixed> $data */
+    protected function sortOrderGroup(array $data): ?string
+    {
+        return null;
+    }
+
+    protected function sortOrderGroupForItem(object $item): ?string
+    {
+        return null;
+    }
+
+    protected function autoAssignSortOrderOnCreate(): bool
+    {
+        return false;
+    }
+
+    protected function autoAssignSortOrderOnGroupChange(): bool
+    {
+        return false;
+    }
+
+    /** @param array<string, mixed> $data */
+    protected function applyAutomaticSortOrder(array &$data, ?object $current = null): void
+    {
+        $group = $this->sortOrderGroup($data);
+
+        if ($current === null && $this->autoAssignSortOrderOnCreate()) {
+            $data['sort_order'] = $this->nextSortOrder($group);
+
+            return;
+        }
+
+        if ($current !== null
+            && $this->autoAssignSortOrderOnGroupChange()
+            && $group !== $this->sortOrderGroupForItem($current)) {
+            $data['sort_order'] = $this->nextSortOrder($group);
+        }
+    }
+
+    protected function defaultSortOrderGroup(): ?string
+    {
+        return null;
+    }
+
+    /** @param mixed $query */
+    protected function applySortOrderScope($query, ?string $group): void
+    {
+        // Resources without groups (for example genres) keep a global order.
+    }
+
+    /** @return array<string, int> */
+    protected function sortOrderSuggestions(): array
+    {
+        $group = $this->defaultSortOrderGroup();
+
+        return $group === null ? [] : [$group => $this->nextSortOrder($group)];
+    }
+
+    /** @param array<string, mixed> $data */
+    protected function validateSortOrder(array $data, ?object $current): void
+    {
+        if (! array_key_exists('sort_order', $data)) {
+            return;
+        }
+
+        $sortOrder = (int) $data['sort_order'];
+        $model = $this->model;
+        $query = $model::query()->where('sort_order', $sortOrder);
+        $this->applySortOrderScope($query, $this->sortOrderGroup($data));
+        $hasConflict = $query
+            ->get()
+            ->contains(function (object $item) use ($current): bool {
+                return $current === null
+                    || (string) $item->getKey() !== (string) $current->getKey();
+            });
+
+        if ($hasConflict) {
+            throw ValidationException::withMessages([
+                'sort_order' => 'Thứ tự hiển thị này đã được sử dụng trong cùng nhóm. Vui lòng chọn số khác.',
+            ]);
+        }
+    }
+
+    protected function normalizeRequest(Request $request): void
+    {
+        $this->normalizeSortOrderInput($request);
+    }
+
+    protected function normalizeSortOrderInput(Request $request): void
+    {
+        $value = trim((string) $request->input('sort_order', ''));
+
+        if ($value !== '' && preg_match('/^\d+$/', $value) === 1) {
+            $request->merge(['sort_order' => (int) $value]);
+        }
+    }
+
+    protected function normalizePayload(array $data, Request $request): array
+    {
+        foreach ($this->formFields as $name => $field) {
+            if (($field['type'] ?? '') === 'checkbox') {
+                $data[$name] = $request->boolean($name);
+            }
+        }
+
+        return $data;
+    }
+
+    protected function afterDelete(object $item): void
+    {
+    }
+
+    protected function resolveSlug(?string $provided, string $name, mixed $ignoreId = null): string
+    {
+        $providedSlug = filled($provided);
+        $slug = Str::slug($provided ?: $name);
+
+        if ($slug === '') {
+            throw ValidationException::withMessages([
+                $this->slugField => 'Không thể tạo slug từ tên này.',
+            ]);
+        }
+
+        $query = function (string $candidate) use ($ignoreId): bool {
+            $existing = ($this->model)::query()->where($this->slugField, $candidate)->first();
+
+            return $existing !== null
+                && ($ignoreId === null || (string) $existing->getKey() !== (string) $ignoreId);
+        };
+
+        if (! $query($slug)) {
+            return $slug;
+        }
+
+        if ($providedSlug) {
+            throw ValidationException::withMessages([
+                $this->slugField => 'Slug này đã tồn tại, vui lòng chọn slug khác.',
+            ]);
+        }
+
+        $base = $slug;
+        $suffix = 2;
+        do {
+            $slug = $base.'-'.$suffix++;
+        } while ($query($slug));
+
+        return $slug;
+    }
+
+    protected function resolvedFields(): array
+    {
+        return collect($this->formFields)->map(function (array $field): array {
+            if (! isset($field['option_model'])) {
+                return $field;
+            }
+
+            $model = $field['option_model'];
+            $label = $field['option_label'] ?? 'name';
+            $field['options'] = $model::query()->orderBy($label)->get()->mapWithKeys(
+                fn ($item): array => [(string) $item->getKey() => (string) data_get($item, $label)]
+            )->all();
+
+            return $field;
+        })->all();
+    }
+
+    protected function viewData(array $data): array
+    {
+        return array_merge([
+            'resource' => $this->resource,
+            'resourceTitle' => $this->title,
+            'fields' => $this->formFields,
+            'columns' => $this->columns,
+            'imageUrlField' => $this->imageUrlField,
+            'imagePublicIdField' => $this->imagePublicIdField,
+        ], $data);
+    }
+}

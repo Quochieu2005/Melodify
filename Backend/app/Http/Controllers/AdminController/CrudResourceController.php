@@ -1,0 +1,236 @@
+<?php
+
+namespace App\Http\Controllers\AdminController;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\AdminResourceRequest;
+use App\Rules\PlainText;
+use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
+
+abstract class CrudResourceController extends Controller
+{
+    protected string $model;
+
+    protected string $resource;
+
+    protected string $title;
+
+    protected array $fields = [];
+
+    protected array $columns = [];
+
+    /** @var array<int, string> */
+    protected array $searchable = [];
+
+    /** @var array<int, string> */
+    protected array $indexWith = [];
+
+    protected string $viewDirectory = 'Admin.crud';
+
+    public function index(?Request $request = null): View
+    {
+        $request ??= request();
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+        ]);
+        $search = trim((string) ($filters['q'] ?? ''));
+        $query = ($this->model)::query();
+
+        if ($this->indexWith !== []) {
+            $query->with($this->indexWith);
+        }
+
+        if ($search !== '' && $this->searchable !== []) {
+            $query->where(function ($nestedQuery) use ($search): void {
+                foreach ($this->searchable as $index => $field) {
+                    $method = $index === 0 ? 'where' : 'orWhere';
+                    $nestedQuery->{$method}($field, 'like', "%{$search}%");
+                }
+            });
+        }
+
+        $items = $query->latest()->paginate(10)->withQueryString();
+        $view = view()->exists("{$this->viewDirectory}.index")
+            ? "{$this->viewDirectory}.index"
+            : 'Admin.crud.index';
+
+        return view($view, $this->viewData(compact('items', 'search')));
+    }
+
+    public function create(): View
+    {
+        return view("{$this->viewDirectory}.create", $this->viewData([
+            'item' => null,
+            'fields' => $this->resolvedFields(),
+        ]));
+    }
+
+    public function store(AdminResourceRequest $request): RedirectResponse
+    {
+        $data = $this->normalize($request->validated());
+        ($this->model)::query()->create($data);
+
+        return redirect()->route("admin.{$this->resource}.index")
+            ->with('success', "Đã tạo {$this->title} thành công.");
+    }
+
+    public function edit(string $id): View|RedirectResponse
+    {
+        $item = ($this->model)::query()->findOrFail($id);
+
+        return view("{$this->viewDirectory}.edit", $this->viewData([
+            'item' => $item,
+            'fields' => $this->resolvedFields(),
+        ]));
+    }
+
+    public function update(AdminResourceRequest $request, string $id): RedirectResponse
+    {
+        $item = ($this->model)::query()->findOrFail($id);
+        $item->update($this->normalize($request->validated(), $item->getKey()));
+
+        return redirect()->route("admin.{$this->resource}.index")
+            ->with('success', "Đã cập nhật {$this->title}.");
+    }
+
+    public function destroy(string $id): RedirectResponse
+    {
+        $item = ($this->model)::query()->findOrFail($id);
+        $item->delete();
+
+        return back()->with('success', "Đã xóa {$this->title}.");
+    }
+
+    public function destroyBulk(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:50'],
+            'ids.*' => ['required', 'string', 'max:64', 'distinct'],
+        ], [
+            'ids.required' => "Hãy chọn ít nhất một {$this->title} để xóa.",
+            'ids.array' => 'Danh sách được chọn không hợp lệ.',
+            'ids.min' => "Hãy chọn ít nhất một {$this->title} để xóa.",
+            'ids.max' => 'Bạn chỉ được xóa tối đa 50 mục mỗi lần.',
+            'ids.*.distinct' => 'Các mục được chọn không được trùng lặp.',
+        ]);
+
+        $keyName = (new $this->model())->getKeyName();
+        $items = ($this->model)::query()
+            ->whereIn($keyName, array_values($data['ids']))
+            ->get();
+
+        if ($items->isEmpty()) {
+            return back()->withErrors([
+                'ids' => "Không tìm thấy {$this->title} nào phù hợp để xóa.",
+            ]);
+        }
+
+        foreach ($items as $item) {
+            $item->delete();
+        }
+
+        return back()->with('success', "Đã xóa {$items->count()} {$this->title} đã chọn.");
+    }
+
+    public function destroyAll(): RedirectResponse
+    {
+        $items = ($this->model)::query()->get();
+
+        if ($items->isEmpty()) {
+            return back()->with('warning', "Hiện chưa có {$this->title} nào để xóa.");
+        }
+
+        foreach ($items as $item) {
+            $item->delete();
+        }
+
+        return back()->with('success', "Đã xóa toàn bộ {$items->count()} {$this->title}.");
+    }
+
+    protected function normalize(array $data, mixed $ignoreId = null): array
+    {
+        foreach ($this->fields as $name => $field) {
+            if (($field['type'] ?? '') === 'checkbox') {
+                $data[$name] = request()->boolean($name);
+            }
+        }
+
+        if (array_key_exists('password', $data)) {
+            if (blank($data['password'])) {
+                unset($data['password']);
+            } else {
+                $data['password'] = Hash::driver('bcrypt')->make($data['password']);
+            }
+        }
+
+        unset($data['password_confirmation']);
+
+        if (array_key_exists('slug', $data)) {
+            $name = (string) ($data['name'] ?? $data['title'] ?? '');
+            $providedSlug = trim((string) ($data['slug'] ?? ''));
+            $baseSlug = Str::slug($providedSlug !== '' ? $providedSlug : $name);
+
+            if ($baseSlug === '') {
+                throw ValidationException::withMessages([
+                    'slug' => 'Không thể tạo slug từ tên này.',
+                ]);
+            }
+
+            $slugExists = function (string $candidate) use ($ignoreId): bool {
+                $existing = ($this->model)::query()->where('slug', $candidate)->first();
+
+                return $existing !== null
+                    && ($ignoreId === null || (string) $existing->getKey() !== (string) $ignoreId);
+            };
+
+            if ($slugExists($baseSlug) && $providedSlug !== '') {
+                throw ValidationException::withMessages([
+                    'slug' => 'Slug này đã tồn tại, vui lòng chọn slug khác.',
+                ]);
+            }
+
+            $slug = $baseSlug;
+            $suffix = 2;
+            while ($slugExists($slug)) {
+                $slug = $baseSlug.'-'.$suffix++;
+            }
+
+            $data['slug'] = $slug;
+        }
+
+        return $data;
+    }
+
+    protected function resolvedFields(): array
+    {
+        return collect($this->fields)->map(function (array $field): array {
+            if (! isset($field['option_model'])) {
+                return $field;
+            }
+
+            $model = $field['option_model'];
+            $label = $field['option_label'] ?? 'name';
+            $field['options'] = $model::query()->orderBy($label)->get()->mapWithKeys(
+                fn ($item): array => [(string) $item->getKey() => (string) data_get($item, $label)]
+            )->all();
+
+            return $field;
+        })->all();
+    }
+
+    protected function viewData(array $data): array
+    {
+        return array_merge([
+            'resource' => $this->resource,
+            'resourceTitle' => $this->title,
+            'fields' => $this->fields,
+            'columns' => $this->columns,
+            'searchable' => $this->searchable,
+        ], $data);
+    }
+}

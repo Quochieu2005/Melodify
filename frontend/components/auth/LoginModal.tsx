@@ -1,0 +1,711 @@
+'use client';
+
+import Image from 'next/image';
+import { useEffect, useState, type FormEvent } from 'react';
+import PasswordResetForm from './PasswordResetForm';
+import {
+  ApiError,
+  getQrLoginStatus,
+  loginWithPassword,
+  loginWithPhone,
+  loginWithSocial,
+  requestPhoneOtp,
+  saveAuthSession,
+  startQrLogin,
+  type AuthResponse,
+  type QrLoginStartResponse,
+  type SocialProvider,
+} from '@/lib/api';
+
+type LoginModalProps = {
+  onClose: () => void;
+  onLoginSuccess?: (auth: AuthResponse) => void;
+  variant?: 'default' | 'vip';
+};
+
+type LoginMethod = 'username' | 'phone';
+
+type GoogleTokenResponse = {
+  access_token?: string;
+  error?: string;
+  error_description?: string;
+};
+
+declare global {
+  interface Window {
+    FB?: {
+      init: (options: { appId: string; cookie: boolean; xfbml: boolean; version: string }) => void;
+      login: (
+        callback: (response: { authResponse?: { accessToken?: string } }) => void,
+        options: { scope: string; return_scopes: boolean },
+      ) => void;
+    };
+    google?: {
+      accounts?: {
+        oauth2?: {
+          initTokenClient: (options: {
+            client_id: string;
+            scope: string;
+            callback: (response: GoogleTokenResponse) => void;
+          }) => { requestAccessToken: (options?: { prompt?: string }) => void };
+        };
+      };
+    };
+  }
+}
+
+const loadedScripts = new Map<string, Promise<void>>();
+let facebookInitialized = false;
+
+function loadScript(id: string, src: string): Promise<void> {
+  const current = loadedScripts.get(id);
+  if (current) return current;
+
+  const existing = document.getElementById(id);
+  if (existing) return Promise.resolve();
+
+  const promise = new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script');
+    script.id = id;
+    script.src = src;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Không thể tải bộ đăng nhập bên thứ ba.'));
+    document.head.appendChild(script);
+  });
+
+  loadedScripts.set(id, promise);
+  return promise;
+}
+
+async function requestGoogleAccessToken(): Promise<string> {
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
+  if (!clientId) {
+    throw new Error('Chưa cấu hình NEXT_PUBLIC_GOOGLE_CLIENT_ID cho frontend.');
+  }
+
+  await loadScript('google-identity-services', 'https://accounts.google.com/gsi/client');
+
+  if (!window.google?.accounts?.oauth2) {
+    throw new Error('Google Login chưa sẵn sàng. Vui lòng thử lại.');
+  }
+
+  return new Promise((resolve, reject) => {
+    const tokenClient = window.google?.accounts?.oauth2?.initTokenClient({
+      client_id: clientId,
+      scope: 'openid email profile',
+      callback: (response) => {
+        if (response.access_token) {
+          resolve(response.access_token);
+          return;
+        }
+
+        reject(new Error(response.error_description || 'Không lấy được token Google.'));
+      },
+    });
+
+    tokenClient?.requestAccessToken({ prompt: 'select_account' });
+  });
+}
+
+async function requestFacebookAccessToken(): Promise<string> {
+  const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+
+  if (!appId) {
+    throw new Error('Chưa cấu hình NEXT_PUBLIC_FACEBOOK_APP_ID cho frontend.');
+  }
+
+  await loadScript('facebook-jssdk', 'https://connect.facebook.net/en_US/sdk.js');
+
+  if (!window.FB) {
+    throw new Error('Facebook Login chưa sẵn sàng. Vui lòng thử lại.');
+  }
+
+  if (!facebookInitialized) {
+    window.FB.init({
+      appId,
+      cookie: true,
+      xfbml: false,
+      version: process.env.NEXT_PUBLIC_FACEBOOK_GRAPH_VERSION || 'v22.0',
+    });
+    facebookInitialized = true;
+  }
+
+  return new Promise((resolve, reject) => {
+    window.FB?.login((response) => {
+      const accessToken = response.authResponse?.accessToken;
+
+      if (accessToken) {
+        resolve(accessToken);
+        return;
+      }
+
+      reject(new Error('Bạn đã hủy hoặc Facebook không cấp quyền đăng nhập.'));
+    }, { scope: 'public_profile,email', return_scopes: true });
+  });
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return 'Đã xảy ra lỗi. Vui lòng thử lại.';
+}
+
+const darkCheckboxClass = "relative size-[18px] shrink-0 appearance-none rounded-[4px] border border-white/35 bg-[#353535] transition-colors checked:border-cyan-400 checked:bg-cyan-400 after:absolute after:left-[5px] after:top-[2px] after:h-[8px] after:w-[4px] after:rotate-45 after:border-b-2 after:border-r-2 after:border-[#07363a] after:opacity-0 after:content-[''] checked:after:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#242424]";
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-none stroke-current stroke-[1.8]">
+      <path d="m6.5 6.5 11 11m0-11-11 11" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function EyeIcon({ visible }: { visible: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[21px] fill-none stroke-current stroke-[1.8]">
+      {visible ? (
+        <>
+          <path d="M2.5 12s3.35-5.5 9.5-5.5 9.5 5.5 9.5 5.5-3.35 5.5-9.5 5.5-9.5-5.5-9.5-5.5Z" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="12" cy="12" r="2.4" />
+        </>
+      ) : (
+        <>
+          <path d="M10.6 6.7A10.6 10.6 0 0 1 12 6.5c6.15 0 9.5 5.5 9.5 5.5a15.2 15.2 0 0 1-2.35 3.05M6.3 7.55C3.75 9.2 2.5 12 2.5 12s3.35 5.5 9.5 5.5c1.15 0 2.2-.2 3.15-.52" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="m4 4 16 16" strokeLinecap="round" />
+          <path d="M10.15 10.15a2.6 2.6 0 0 0 3.7 3.7" strokeLinecap="round" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function SocialIcon({ type }: { type: 'facebook' | 'google' | 'phone' | 'qr' }) {
+  if (type === 'facebook') {
+    return (
+      <svg viewBox="0 0 28 28" aria-hidden="true" className="size-7 shrink-0">
+        <circle cx="14" cy="14" r="14" fill="#1877F2" />
+        <path fill="white" d="M15.7 23v-8h2.7l.4-3.1h-3.1v-2c0-.9.25-1.5 1.55-1.5h1.65V5.6a21 21 0 0 0-2.4-.13c-2.4 0-4.05 1.47-4.05 4.17v2.26h-2.72V15h2.72v8h3.25Z" />
+      </svg>
+    );
+  }
+
+  if (type === 'google') {
+    return (
+      <svg viewBox="0 0 48 48" aria-hidden="true" className="size-[25px] shrink-0">
+        <path fill="#4285F4" d="M43.6 24.5c0-1.4-.12-2.8-.36-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5.1h6.6c3.9-3.6 6.1-8.8 6.1-15Z" />
+        <path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.9l-6.6-5.1c-1.8 1.2-4.1 1.9-6.9 1.9-5.3 0-9.8-3.6-11.4-8.4H5.8v5.3A20 20 0 0 0 24 44Z" />
+        <path fill="#FBBC05" d="M12.6 27.5a12 12 0 0 1 0-7v-5.3H5.8a20 20 0 0 0 0 17.6l6.8-5.3Z" />
+        <path fill="#EA4335" d="M24 12.1c3 0 5.7 1 7.8 3.1l5.9-5.9C34.1 6.1 29.5 4 24 4A20 20 0 0 0 5.8 15.2l6.8 5.3c1.6-4.8 6.1-8.4 11.4-8.4Z" />
+      </svg>
+    );
+  }
+
+  if (type === 'phone') {
+    return (
+      <svg viewBox="0 0 28 28" aria-hidden="true" className="size-7 shrink-0 fill-none stroke-cyan-300 stroke-[1.8]">
+        <rect x="7.5" y="2.75" width="13" height="22.5" rx="3" />
+        <path d="M11.5 6h5M12.5 21h3" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 28 28" aria-hidden="true" className="size-7 shrink-0 stroke-cyan-300 text-cyan-300">
+      <path d="M3.5 3.5h7v7h-7zM17.5 3.5h7v7h-7zM3.5 17.5h7v7h-7z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M6 6h2v2H6zM20 6h2v2h-2zM6 20h2v2H6z" fill="currentColor" stroke="none" />
+      <path d="M15 14h3v3h-3zM21 14h3v3h-3zM15 20h3v3h-3zM21 20h3v3h-3zM18 17h3v3h-3z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export default function LoginModal({ onClose, onLoginSuccess, variant = 'default' }: LoginModalProps) {
+  const [method, setMethod] = useState<LoginMethod>('username');
+  const [showPassword, setShowPassword] = useState(false);
+  const [identifier, setIdentifier] = useState('');
+  const [forgotPassword, setForgotPassword] = useState(false);
+  const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [phoneCode, setPhoneCode] = useState('');
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [remember, setRemember] = useState(variant === 'vip');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [qrSession, setQrSession] = useState<QrLoginStartResponse | null>(null);
+  const [qrImage, setQrImage] = useState<string | null>(null);
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    document.body.classList.add('overflow-hidden');
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!qrSession) return;
+
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const response = await getQrLoginStatus(qrSession.session_id, qrSession.poll_token);
+
+        if (cancelled) return;
+
+        if (response.status === 'completed' && response.token && response.user) {
+          const auth: AuthResponse = {
+            message: response.message || 'Đăng nhập QR thành công.',
+            token: response.token,
+            token_type: response.token_type || 'Bearer',
+            expires_at: response.expires_at || qrSession.expires_at,
+            remembered: response.remembered,
+            user: response.user,
+          };
+          saveAuthSession(auth);
+          onLoginSuccess?.(auth);
+          onClose();
+          return;
+        }
+
+        if (response.status === 'expired') {
+          setError('Mã QR đã hết hạn. Vui lòng tạo mã mới.');
+          setQrSession(null);
+          setQrImage(null);
+        }
+      } catch (pollError) {
+        if (!cancelled) setError(getErrorMessage(pollError));
+      }
+    };
+
+    void poll();
+    const interval = window.setInterval(() => { void poll(); }, Math.max(2, qrSession.poll_interval_seconds) * 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [onClose, onLoginSuccess, qrSession]);
+
+  async function completeLogin(auth: AuthResponse) {
+    saveAuthSession(auth);
+    onLoginSuccess?.(auth);
+    onClose();
+  }
+
+  function validateTerms() {
+    if (termsAccepted) return true;
+
+    setError('Vui lòng đồng ý với điều khoản sử dụng để tiếp tục.');
+    return false;
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+
+    if (!validateTerms()) return;
+
+    try {
+      if (method === 'phone') {
+        if (!phoneOtpSent) {
+          setLoadingAction('phone-otp');
+          const response = await requestPhoneOtp(phone);
+          setPhoneOtpSent(true);
+          setNotice(`${response.message} Kiểm tra tin nhắn để lấy mã xác thực.`);
+          return;
+        }
+
+        setLoadingAction('phone-login');
+        await completeLogin(await loginWithPhone(phone, phoneCode, remember));
+        return;
+      }
+
+      setLoadingAction('password');
+      await completeLogin(await loginWithPassword(identifier, password, remember));
+    } catch (submitError) {
+      setError(getErrorMessage(submitError));
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function handleSocialLogin(provider: SocialProvider) {
+    setError(null);
+    setNotice(null);
+
+    if (!validateTerms()) return;
+
+    try {
+      setLoadingAction(provider);
+      const accessToken = provider === 'google'
+        ? await requestGoogleAccessToken()
+        : await requestFacebookAccessToken();
+      await completeLogin(await loginWithSocial(provider, accessToken, remember));
+    } catch (socialError) {
+      setError(getErrorMessage(socialError));
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function handleQrLogin() {
+    setError(null);
+    setNotice(null);
+
+    if (!validateTerms()) return;
+
+    try {
+      setLoadingAction('qr');
+      const [session, qrCodeModule] = await Promise.all([
+        startQrLogin(remember),
+        import('qrcode'),
+      ]);
+      const QRCode = qrCodeModule.default;
+      const image = await QRCode.toDataURL(session.qr_payload, {
+        width: 240,
+        margin: 2,
+        color: { dark: '#111111', light: '#ffffff' },
+      });
+      setQrSession(session);
+      setQrImage(image);
+      setNotice('Mở ứng dụng Melodify trên điện thoại, quét mã và xác nhận đăng nhập.');
+    } catch (qrError) {
+      setError(getErrorMessage(qrError));
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  function resetQrMode() {
+    setQrSession(null);
+    setQrImage(null);
+    setError(null);
+    setNotice(null);
+  }
+
+  const isLoading = loadingAction !== null;
+
+  if (forgotPassword) {
+    return <div className="fixed inset-0 z-[100] grid place-items-center bg-black/75 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-label="Khôi phục mật khẩu" className={`relative max-h-[90vh] w-full max-w-[480px] overflow-y-auto rounded-2xl p-6 shadow-2xl sm:p-8 ${variant === 'vip' ? 'bg-white' : 'bg-[#242424]'}`}>
+        <button type="button" aria-label="Đóng" onClick={onClose} className={`absolute right-3 top-3 grid size-8 place-items-center rounded-full ${variant === 'vip' ? 'text-slate-500 hover:bg-slate-100' : 'text-white/60 hover:bg-white/10'}`}><CloseIcon /></button>
+        <PasswordResetForm initialEmail={identifier} light={variant === 'vip'} onBack={() => setForgotPassword(false)} />
+      </section>
+    </div>;
+  }
+
+  if (variant === 'vip') {
+    return (
+      <div
+        className="fixed inset-0 z-[60] grid place-items-center bg-black/40 p-4"
+        role="presentation"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
+      >
+        <section
+          aria-labelledby="vip-login-dialog-title"
+          aria-modal="true"
+          className="relative h-[561px] max-h-[calc(100dvh-2rem)] w-full max-w-[556px] overflow-y-auto rounded-md bg-white px-5 pb-5 pt-7 text-[#18232b] shadow-[0_22px_70px_rgba(0,0,0,0.2)] sm:flex sm:flex-col sm:justify-center sm:px-9 sm:pb-6"
+          role="dialog"
+        >
+          <button
+            type="button"
+            aria-label="Đóng hộp thoại đăng nhập"
+            onClick={onClose}
+            className="absolute right-4 top-4 rounded-full p-1 text-[#66737b] outline-none transition-colors hover:bg-[#f1f5f7] hover:text-[#17232b] focus-visible:ring-2 focus-visible:ring-[#299be8]"
+          >
+            <CloseIcon />
+          </button>
+
+          <h2 id="vip-login-dialog-title" className="text-center text-[24px] font-extrabold tracking-[0.015em] sm:text-[26px]">
+            {qrSession ? 'Đăng nhập bằng mã QR' : 'ĐĂNG NHẬP'}
+          </h2>
+
+          {qrSession ? (
+            <div className="mt-6 flex flex-col items-center text-center">
+              {qrImage ? <Image src={qrImage} alt="Mã QR đăng nhập" width={224} height={224} unoptimized className="size-56 rounded-lg border border-black/10 bg-white p-2" /> : null}
+              <p className="mt-4 max-w-[380px] text-sm leading-6 text-[#71808b]">
+                Dùng ứng dụng Melodify để quét mã. Trang sẽ tự động đăng nhập sau khi bạn xác nhận.
+              </p>
+              {notice ? <p role="status" className="mt-3 text-sm text-[#168bd8]">{notice}</p> : null}
+              {error ? <p role="alert" className="mt-3 text-sm text-red-600">{error}</p> : null}
+              <button type="button" disabled={isLoading} onClick={handleQrLogin} className="mt-5 h-11 rounded-full bg-gradient-to-r from-[#3187ed] to-[#06b6e7] px-6 text-sm font-bold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60">
+                {isLoading ? 'Đang tạo mã...' : 'Tạo mã QR mới'}
+              </button>
+              <button type="button" onClick={resetQrMode} className="mt-3 text-sm font-semibold text-[#249be8] hover:underline">
+                Quay lại đăng nhập
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="mx-auto mt-2 max-w-[430px] text-center text-sm leading-5 text-[#303b42] sm:text-[15px]">
+                Đăng nhập tài khoản Melodify để tiếp tục
+                <br className="hidden sm:block" /> mua VIP hoặc xem lịch sử giao dịch.
+              </p>
+
+              <form onSubmit={handleSubmit} className="mt-4">
+                <div className="mx-auto max-w-[450px]">
+                  <label className="flex h-[48px] items-center border-b border-[#d9dfe3] focus-within:border-[#249be8]">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" className="ml-3 size-5 shrink-0 fill-none stroke-[#81909a] stroke-[1.6]">
+                      <circle cx="12" cy="8" r="3.5" />
+                      <path d="M4.5 20c.4-4 3-6 7.5-6s7.1 2 7.5 6" strokeLinecap="round" />
+                    </svg>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={identifier}
+                      onChange={(event) => setIdentifier(event.target.value)}
+                      placeholder="Tên đăng nhập"
+                      aria-label="Tên đăng nhập"
+                      autoComplete="username"
+                      required
+                      className="h-full min-w-0 flex-1 bg-transparent px-4 text-[15px] text-[#26343c] outline-none placeholder:text-[#87939b]"
+                    />
+                  </label>
+                  <label className="flex h-[48px] items-center border-b border-[#d9dfe3] focus-within:border-[#249be8]">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" className="ml-3 size-5 shrink-0 fill-none stroke-[#81909a] stroke-[1.6]">
+                      <rect x="3" y="6" width="18" height="12" rx="1.5" />
+                      <path d="M6 9h1m2 0h1m2 0h1m2 0h1m2 0h1M7 12h1m2 0h1m2 0h1m2 0h1M8 15h8" strokeLinecap="round" />
+                    </svg>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="Mật khẩu"
+                      aria-label="Mật khẩu"
+                      autoComplete="current-password"
+                      required
+                      className="h-full min-w-0 flex-1 bg-transparent px-4 text-[15px] text-[#26343c] outline-none placeholder:text-[#87939b]"
+                    />
+                  </label>
+                </div>
+
+                <div className="mx-auto mt-3 flex max-w-[450px] items-center justify-between gap-4 text-xs text-[#74818a] sm:text-[13px]">
+                  <label className="flex cursor-pointer items-center gap-2.5">
+                    <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="relative size-5 shrink-0 appearance-none rounded-[3px] border border-[#a8b2b9] bg-white transition-colors checked:border-[#299fe8] checked:bg-[#299fe8] after:absolute after:left-[6px] after:top-[2px] after:h-[10px] after:w-[5px] after:rotate-45 after:border-b-2 after:border-r-2 after:border-white after:opacity-0 after:content-[''] checked:after:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#299fe8]/40" />
+                    Ghi nhớ mật khẩu
+                  </label>
+                  <button type="button" onClick={() => setForgotPassword(true)} className="shrink-0 font-medium text-[#168df0] hover:underline">
+                    Quên mật khẩu?
+                  </button>
+                </div>
+
+                <label className="mx-auto mt-3 flex max-w-[450px] cursor-pointer items-start gap-2.5 text-xs leading-[1.45] text-[#74818a] sm:text-[13px]">
+                  <input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className="relative mt-0.5 size-5 shrink-0 appearance-none rounded-[3px] border border-[#a8b2b9] bg-white transition-colors checked:border-[#299fe8] checked:bg-[#299fe8] after:absolute after:left-[6px] after:top-[2px] after:h-[10px] after:w-[5px] after:rotate-45 after:border-b-2 after:border-r-2 after:border-white after:opacity-0 after:content-[''] checked:after:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#299fe8]/40" />
+                  <span>
+                    Tôi đã đọc, hiểu rõ và tự nguyện đồng ý các điều khoản về việc thu thập, xử lý dữ liệu cá nhân, quyền và nghĩa vụ của tôi được quy định tại{' '}
+                    <span className="text-[#168df0]">Chính sách bảo mật</span> và{' '}
+                    <span className="text-[#168df0]">Thỏa thuận sử dụng</span>.
+                  </span>
+                </label>
+
+                {error ? <p role="alert" className="mx-auto mt-3 max-w-[450px] text-sm text-red-600">{error}</p> : null}
+                {notice ? <p role="status" className="mx-auto mt-3 max-w-[450px] text-sm text-[#168bd8]">{notice}</p> : null}
+
+                <button type="submit" disabled={isLoading} className="mx-auto mt-4 block h-12 w-full max-w-[450px] rounded-full bg-gradient-to-r from-[#3485ed] to-[#03b6e5] text-sm font-bold text-white outline-none transition-[filter] hover:brightness-105 focus-visible:ring-2 focus-visible:ring-[#176dc6] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
+                  {loadingAction === 'password' ? 'Đang đăng nhập...' : 'Đăng nhập'}
+                </button>
+              </form>
+
+              <div className="mx-auto my-4 flex max-w-[450px] items-center gap-3 text-xs text-[#8a959c]">
+                <span className="h-px flex-1 bg-[#e1e5e8]" />
+                <span className="whitespace-nowrap">Hoặc đăng nhập bằng</span>
+                <span className="h-px flex-1 bg-[#e1e5e8]" />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button type="button" disabled={isLoading} onClick={() => { void handleSocialLogin('facebook'); }} className="flex h-11 items-center gap-2 rounded-full bg-white px-3 text-xs text-[#6f7a81] shadow-[0_5px_18px_rgba(0,0,0,0.13)] outline-none transition hover:bg-[#f8fbfd] focus-visible:ring-2 focus-visible:ring-[#299fe8] disabled:opacity-60 sm:px-4 sm:text-sm">
+                  <SocialIcon type="facebook" /> Facebook
+                </button>
+                <button type="button" disabled={isLoading} onClick={() => { void handleSocialLogin('google'); }} className="flex h-11 items-center gap-2 rounded-full bg-white px-3 text-xs text-[#6f7a81] shadow-[0_5px_18px_rgba(0,0,0,0.13)] outline-none transition hover:bg-[#f8fbfd] focus-visible:ring-2 focus-visible:ring-[#299fe8] disabled:opacity-60 sm:px-4 sm:text-sm">
+                  <SocialIcon type="google" /> Google
+                </button>
+                <button type="button" disabled={isLoading} onClick={() => { void handleQrLogin(); }} className="flex h-11 items-center gap-2 rounded-full bg-white px-3 text-xs text-[#6f7a81] shadow-[0_5px_18px_rgba(0,0,0,0.13)] outline-none transition hover:bg-[#f8fbfd] focus-visible:ring-2 focus-visible:ring-[#299fe8] disabled:opacity-60 sm:px-4 sm:text-sm">
+                  <SocialIcon type="qr" /> QR code
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        aria-labelledby="login-dialog-title"
+        aria-modal="true"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-[630px] overflow-y-auto rounded-lg border border-white/10 bg-[#242424] p-6 text-white shadow-2xl sm:p-7"
+        role="dialog"
+      >
+        <div className="flex items-center justify-between">
+          <h2 id="login-dialog-title" className="text-2xl font-extrabold tracking-[-0.03em] sm:text-[26px]">
+            {qrSession ? 'Đăng nhập bằng mã QR' : 'Đăng nhập bằng mật khẩu'}
+          </h2>
+          <button type="button" aria-label="Đóng hộp thoại đăng nhập" onClick={onClose} className="rounded-full p-1 text-white/60 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-cyan-300">
+            <CloseIcon />
+          </button>
+        </div>
+
+        {qrSession ? (
+          <div className="mt-7 flex flex-col items-center text-center">
+            {qrImage ? <Image src={qrImage} alt="Mã QR đăng nhập Melodify" width={240} height={240} unoptimized className="size-60 rounded-xl bg-white p-3" /> : null}
+            <p className="mt-5 max-w-[360px] text-sm leading-6 text-white/70">
+              Dùng ứng dụng Melodify trên điện thoại để quét mã này. Trang sẽ tự động đăng nhập sau khi bạn xác nhận.
+            </p>
+            {notice ? <p className="mt-3 text-sm text-cyan-300">{notice}</p> : null}
+            {error ? <p role="alert" className="mt-3 text-sm text-red-300">{error}</p> : null}
+            <button type="button" disabled={isLoading} onClick={handleQrLogin} className="mt-6 h-11 rounded-full bg-cyan-400 px-6 text-sm font-bold text-[#07363a] transition-colors hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
+              {isLoading ? 'Đang tạo mã...' : 'Tạo mã QR mới'}
+            </button>
+            <button type="button" onClick={resetQrMode} className="mt-3 text-sm text-white/60 hover:text-white">
+              Quay lại các cách đăng nhập
+            </button>
+          </div>
+        ) : (
+          <>
+            <form onSubmit={handleSubmit} className="mt-5">
+              <div className="grid grid-cols-2 border-b border-white/10">
+                {(['username', 'phone'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => {
+                      setMethod(tab);
+                      setError(null);
+                      setNotice(null);
+                    }}
+                    className={[
+                      'border-b-4 py-3 text-sm font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-inset',
+                      method === tab ? 'border-cyan-400 text-white' : 'border-transparent text-white/45 hover:text-white/75',
+                    ].join(' ')}
+                  >
+                    {tab === 'username' ? 'Tên đăng nhập' : 'Số điện thoại'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-6 space-y-4">
+                {method === 'username' ? (
+                  <>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={identifier}
+                      onChange={(event) => setIdentifier(event.target.value)}
+                      placeholder="Tên đăng nhập hoặc email"
+                      aria-label="Tên đăng nhập hoặc email"
+                      required
+                      className="h-12 w-full rounded bg-[#3a3a3a] px-4 text-sm text-white outline-none placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
+                    />
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="Mật khẩu"
+                        aria-label="Mật khẩu"
+                        required
+                        className="h-12 w-full rounded bg-[#3a3a3a] px-4 pr-12 text-sm text-white outline-none placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
+                      />
+                      <button type="button" aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} onClick={() => setShowPassword((visible) => !visible)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/55 outline-none hover:text-white focus-visible:text-cyan-300">
+                        <EyeIcon visible={showPassword} />
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      autoFocus
+                      type="tel"
+                      value={phone}
+                      onChange={(event) => setPhone(event.target.value)}
+                      placeholder="Số điện thoại, ví dụ 090..."
+                      aria-label="Số điện thoại"
+                      required
+                      className="h-12 w-full rounded bg-[#3a3a3a] px-4 text-sm text-white outline-none placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
+                    />
+                    {phoneOtpSent ? (
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={phoneCode}
+                        onChange={(event) => setPhoneCode(event.target.value)}
+                        placeholder="Nhập mã xác thực"
+                        aria-label="Mã xác thực qua SMS"
+                        required
+                        className="h-12 w-full rounded bg-[#3a3a3a] px-4 text-sm tracking-[0.35em] text-white outline-none placeholder:tracking-normal placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
+                      />
+                    ) : null}
+                  </>
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center justify-between text-xs">
+                <label className="flex cursor-pointer items-center gap-2 text-white/85">
+                  <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className={darkCheckboxClass} />
+                  Ghi nhớ đăng nhập
+                </label>
+                {method === 'username' ? <button type="button" onClick={() => setForgotPassword(true)} className="font-bold text-cyan-400 hover:text-cyan-300">Quên mật khẩu?</button> : null}
+              </div>
+
+              <label className="mt-4 flex cursor-pointer items-start gap-2 text-[11px] leading-[1.45] text-white/85">
+                <input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className={`${darkCheckboxClass} mt-0.5`} />
+                <span>
+                  Tôi đã đọc, hiểu và đồng ý với <button type="button" className="text-cyan-400 hover:underline">Chính sách bảo mật</button> và <button type="button" className="text-cyan-400 hover:underline">Điều khoản sử dụng</button> của Melodify.
+                </span>
+              </label>
+
+              {error ? <p role="alert" className="mt-4 text-sm text-red-300">{error}</p> : null}
+              {notice ? <p role="status" className="mt-4 text-sm text-cyan-300">{notice}</p> : null}
+
+              <button type="submit" disabled={isLoading} className="mt-6 h-14 w-full rounded-full bg-cyan-400 text-base font-bold text-[#07363a] outline-none transition-colors hover:bg-cyan-300 focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-60">
+                {loadingAction === 'phone-otp' ? 'Đang gửi mã...' : loadingAction === 'phone-login' ? 'Đang đăng nhập...' : loadingAction === 'password' ? 'Đang đăng nhập...' : method === 'phone' && !phoneOtpSent ? 'Gửi mã xác thực' : 'Đăng nhập'}
+              </button>
+            </form>
+
+            <div className="my-6 flex items-center gap-3 text-xs text-white/55">
+              <span className="h-px flex-1 bg-white/10" />
+              <span>Hoặc đăng nhập bằng</span>
+              <span className="h-px flex-1 bg-white/10" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <button type="button" disabled={isLoading} onClick={() => { void handleSocialLogin('facebook'); }} className="flex h-11 items-center gap-3 rounded bg-[#3a3a3a] px-3 text-sm font-bold text-white outline-none transition-colors hover:bg-[#464646] focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
+                <SocialIcon type="facebook" /> Facebook
+              </button>
+              <button type="button" disabled={isLoading} onClick={() => { void handleSocialLogin('google'); }} className="flex h-11 items-center gap-3 rounded bg-[#3a3a3a] px-3 text-sm font-bold text-white outline-none transition-colors hover:bg-[#464646] focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
+                <SocialIcon type="google" /> Google
+              </button>
+              <button type="button" disabled={isLoading} onClick={() => setMethod('phone')} className="flex h-11 items-center gap-3 rounded bg-[#3a3a3a] px-3 text-sm font-bold text-white outline-none transition-colors hover:bg-[#464646] focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
+                <SocialIcon type="phone" /> Số điện thoại
+              </button>
+              <button type="button" disabled={isLoading} onClick={() => { void handleQrLogin(); }} className="flex h-11 items-center gap-3 rounded bg-[#3a3a3a] px-3 text-sm font-bold text-white outline-none transition-colors hover:bg-[#464646] focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
+                <SocialIcon type="qr" /> Mã QR
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}

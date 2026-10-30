@@ -1,0 +1,62 @@
+.rankingSection {
+  container-type: inline-size;
+}
+
+.boardScroller {
+  width: 100%;
+}
+
+.boardTrack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 16px;
+  width: 100%;
+  align-items: stretch;
+  overflow: visible;
+}
+
+.boardTrack > :nth-child(n + 2) {
+  display: none;
+}
+
+@container (min-width: 640px) {
+  .boardTrack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .boardTrack > :nth-child(-n + 2) {
+    display: block;
+  }
+}
+
+@container (min-width: 1000px) {
+  .boardTrack {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .boardTrack > :nth-child(-n + 3) {
+    display: block;
+  }
+}
+
+@container (min-width: 1300px) {
+  .boardTrack {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .boardTrack > :nth-child(-n + 4) {
+    display: block;
+  }
+}
+
+@container (min-width: 1500px) {
+  .boardTrack {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .boardTrack > :nth-child(-n + 5) {
+    display: block;
+  }
+}

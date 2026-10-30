@@ -4,7 +4,7 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "vite": "vite"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
@@ -15,5 +15,13 @@
     },
     "optionalDependencies": {
         "@laravel/multiplex": "^0.4.1"
+    },
+    "dependencies": {
+        "@ant-design/icons": "^6.3.4",
+        "@vitejs/plugin-react": "^6.1.1",
+        "antd": "^6.6.5",
+        "music-metadata": "^12.2.3",
+        "react": "^19.3.0",
+        "react-dom": "^19.3.0"
     }
 }

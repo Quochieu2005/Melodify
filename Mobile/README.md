@@ -16,16 +16,26 @@
 ```bash
 npm install
 copy .env.example .env
-npx expo start
+npm start
 ```
 
-Tạo `Mobile/.env`:
+Khi chạy development build bằng LAN, app mặc định dùng Backend trên máy chạy Metro (cổng 8000). `Mobile/.env` luôn được ưu tiên nếu có cấu hình:
 
 ```env
-EXPO_PUBLIC_API_URL=http://<LAN-IP-cua-may>:8000/api
+EXPO_PUBLIC_API_URL=http://localhost:8000/api
+EXPO_PUBLIC_OAUTH_BASE_URL=http://localhost:8000
 ```
 
-Khi chạy trên điện thoại thật, không dùng `localhost`. Điện thoại và máy tính chạy backend phải cùng mạng Wi-Fi.
+Khi chạy trên điện thoại thật bằng Expo LAN, app tự thay `localhost` bằng địa chỉ máy đang chạy Expo. Điện thoại và máy tính chạy Backend phải cùng Wi-Fi. Nếu dùng Expo Tunnel hoặc app không tìm được địa chỉ máy, hãy thay `localhost` bằng IP LAN hiện tại của máy tính (không dùng IP cũ sau khi đổi mạng).
+
+Nếu chạy Laravel bằng development server, cần bind backend vào giao diện mạng để điện thoại truy cập được:
+
+```bash
+cd Backend
+composer dev:mobile
+```
+
+Backend phải lắng nghe địa chỉ LAN. Sau khi sửa `.env`, khởi động lại Expo; chỉ mở cổng Backend trên mạng riêng tin cậy.
 
 Các lệnh:
 
@@ -36,6 +46,41 @@ npm run ios
 npm run web
 npm run lint
 ```
+
+### Đăng nhập email/số điện thoại và OAuth
+
+Mobile dùng SDK lấy access token rồi gửi tới API backend. Expo Go không hỗ trợ SDK này; dùng development build đã cài trên điện thoại.
+
+#### Development build dùng SDK
+
+`npm start` mở Metro ở chế độ development client cho SDK Google/Facebook.
+Trên Windows có Android SDK/JDK và điện thoại Android bật USB debugging, dùng
+`npm run android:local` để build và cài bản local. `npm run ios:local` dành cho
+máy Mac có Xcode và thiết bị iOS đã cấu hình ký. Chạy backend LAN bằng
+`composer dev:mobile` trong terminal riêng. Sau lần cài đầu, các thay đổi
+JavaScript thông thường dùng Metro; thay đổi thư viện native/config cần build lại.
+
+Đăng nhập mật khẩu gọi `POST /api/v1/auth/login`; OTP gọi `/api/v1/auth/phone/request-otp` và `/api/v1/auth/phone/verify`. Trên iOS/Android, SDK Google/Facebook cấp access token; Mobile gửi `{ provider, access_token, device_name, remember }` tới `POST /api/v1/auth/social`, lưu phiên Melodify rồi mở `/me`. Native không dùng callback web của backend hoặc ngrok.
+
+SDK cần development build, không hoạt động trong Expo Go. `Mobile/.env` cần Google Web Client ID, Google iOS Client ID, Facebook App ID và Facebook Client Token theo `.env.example`. Client Token của Facebook khác App Secret; không đưa Client Secret/App Secret vào Mobile. Google iOS Client phải khớp Bundle ID. Android OAuth Client phải khớp package và SHA-1 của chứng chỉ ký. Các giá trị Bundle ID/package mặc định là `com.melodify.mobile`, có thể đổi qua biến môi trường trước khi build.
+
+`composer dev:mobile` chạy PHP trên LAN và bật OPcache riêng cho tiến trình local (vẫn kiểm tra thay đổi file). Khi IP máy đổi, cập nhật origin Expo Web tương ứng trong `Backend/.env` → `CORS_ALLOWED_ORIGINS`.
+
+Kiểm tra và build:
+
+```bash
+npm run auth:check -- ios
+npm run build:ios
+# hoặc npm run build:android
+# Cài bản build lên điện thoại, sau đó:
+npm start -- --clear
+```
+
+Build iOS từ Windows sử dụng EAS và cần tài khoản Expo, Apple signing cho iPhone thật. Cấu hình các biến SDK tương ứng trong môi trường EAS vì `.env` không được commit. Thay đổi Client ID, Bundle ID hoặc plugin cần build lại ứng dụng.
+
+Facebook iOS: API hiện chỉ nhận Graph access token. Khi người dùng từ chối ATT, Facebook Limited Login trả OIDC token không tương thích với API này; Mobile hiển thị thông báo và cho phép dùng Google/mật khẩu, không gửi OIDC token như access token. Hỗ trợ đầy đủ Limited Login cần thay đổi backend riêng.
+
+Expo Web vẫn dùng luồng OAuth trình duyệt qua `EXPO_PUBLIC_OAUTH_BASE_URL` và `/oauth/callback`; callback của backend cần được đăng ký trong Google/Meta. Luồng web độc lập với SDK native ở trên.
 
 ## 3. Nguyên tắc tổ chức component
 
@@ -182,16 +227,19 @@ EXPO_PUBLIC_API_URL=http://127.0.0.1:8000/api
 Local trên điện thoại thật:
 
 ```env
-EXPO_PUBLIC_API_URL=http://192.168.x.x:8000/api
+EXPO_PUBLIC_API_URL=http://localhost:8000/api
 ```
 
-Production:
+Trong Expo LAN, app tự thay `localhost` bằng host Metro. Nếu không dùng Expo LAN, thay bằng IP LAN hiện tại của máy chạy Backend.
+
+Production (đặt cả hai URL về Backend production):
 
 ```env
 EXPO_PUBLIC_API_URL=https://<backend-service>.onrender.com/api
+EXPO_PUBLIC_OAUTH_BASE_URL=https://<backend-service>.onrender.com
 ```
 
-Chỉ các biến bắt đầu bằng `EXPO_PUBLIC_` mới được đưa vào bundle client. Không đặt secret server vào các biến này.
+Sau khi tạo/sửa `Mobile/.env`, khởi động lại Metro (có thể dùng `npx expo start --clear`) để Expo nạp biến mới. Chỉ các biến bắt đầu bằng `EXPO_PUBLIC_` mới được đưa vào bundle client. Không đặt secret server vào các biến này.
 
 ## 7. Kiểm tra và build
 

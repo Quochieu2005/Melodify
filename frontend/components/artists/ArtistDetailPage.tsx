@@ -1,0 +1,428 @@
+'use client';
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+
+import { usePlayerControls } from '@/components/player';
+import { PlayGlyph } from '@/components/icons/PlayGlyph';
+import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
+import { AddSongsToPlaylistDialog } from '@/components/playlists/AddSongsToPlaylistDialog';
+import FollowButton from '@/components/follow/FollowButton';
+import {
+  getArtist,
+  getVisitorId,
+  recordArtistView,
+  type AlbumRecord,
+  type ArtistDetail,
+  type Playlist,
+  type Song,
+  type SongVideo,
+} from '@/lib/api';
+import { downloadSongFiles, setSongFavorites } from '@/lib/song-actions';
+
+import styles from '@/components/albums/AlbumDetailPage.module.css';
+import { ArtistNames, type ArtistReference } from './ArtistLink';
+import { recentAlbumItem, recentPlaylistItem, recentVideoItem, recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
+
+const fallbackCover = '/images/cover-placeholder.svg';
+
+function PauseIcon() {
+  return <span aria-hidden="true" className="flex gap-1"><span className="h-4 w-1.5 rounded-sm bg-current" /><span className="h-4 w-1.5 rounded-sm bg-current" /></span>;
+}
+
+function ClockIcon() {
+  return <span aria-hidden="true" className="grid size-5 place-items-center text-[18px] leading-none">◷</span>;
+}
+
+function SelectionCheckbox({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
+  return (
+    <label className="grid size-6 shrink-0 cursor-pointer place-items-center">
+      <input type="checkbox" checked={checked} onChange={onChange} aria-label={label} className="peer sr-only" />
+      <span aria-hidden="true" className="grid size-5 place-items-center rounded-[4px] border border-white/45 text-[13px] font-bold text-transparent transition-colors peer-checked:border-white peer-checked:bg-white peer-checked:text-[#202020] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-cyan-300 peer-focus-visible:outline-offset-2">✓</span>
+    </label>
+  );
+}
+
+function PlaylistAddIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[18px] shrink-0 fill-none stroke-current stroke-[1.8]"><path d="M4 6h11M4 11h11M4 16h7m8-4v8m-4-4h8" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+function HeartIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[18px] shrink-0 fill-current"><path d="M12 21.1 3.4 12.7a5.8 5.8 0 0 1 8.2-8.2l.4.4.4-.4a5.8 5.8 0 0 1 8.2 8.2L12 21.1Z" /></svg>;
+}
+
+function DownloadIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[18px] shrink-0 fill-none stroke-current stroke-[1.8]"><path d="M12 3v11m0 0 4-4m-4 4-4-4M4 20h16" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+function ChevronIcon() {
+  return <span aria-hidden="true" className="inline-block size-2.5 rotate-45 border-r-2 border-t-2 border-current" />;
+}
+
+function CloseIcon() {
+  return <span aria-hidden="true" className="relative block size-6"><span className="absolute left-1/2 top-1/2 h-7 w-0.5 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-current" /><span className="absolute left-1/2 top-1/2 h-7 w-0.5 -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-current" /></span>;
+}
+
+function formatDuration(seconds: number | null | undefined) {
+  if (seconds === null || seconds === undefined) return '--:--';
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = String(seconds % 60).padStart(2, '0');
+  return `${String(minutes).padStart(2, '0')}:${remainingSeconds}`;
+}
+
+function formatCount(count: number) {
+  return new Intl.NumberFormat('vi-VN').format(Math.max(0, count));
+}
+
+function songArtists(song: Song): ArtistReference[] {
+  if (song.artists?.length) return song.artists;
+  return song.artist ? [song.artist] : [];
+}
+
+function SectionHeading({ title, href }: { title: string; href?: string }) {
+  return (
+    <div className="mb-4 flex items-center justify-between gap-4">
+      <h2 className="text-[25px] font-bold text-white sm:text-[28px]">{title}</h2>
+      {href ? <Link href={href} className="text-[13px] font-bold text-white/70 transition-colors hover:text-[#00d3e5]">Thêm</Link> : null}
+    </div>
+  );
+}
+
+function ArtistSongRow({ song, index, artist, checked, onToggle, onPlay, onStatus, isCurrentTrack, isPlaying }: { song: Song; index: number; artist: ArtistDetail; checked: boolean; onToggle: () => void; onPlay: () => void; onStatus: (message: string) => void; isCurrentTrack: boolean; isPlaying: boolean }) {
+  const imageUrl = song.cover_url || artist.avatar_url || fallbackCover;
+  const artists = songArtists(song);
+  const checkboxVisibility = checked ? 'opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100';
+
+  return (
+    <li className={`${styles.songRow} song-row-menu-host group grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 rounded-lg px-2 py-2.5 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px_32px] sm:gap-4`}>
+      <div className="relative grid size-6 place-items-center justify-self-center">
+        <span className={`text-[13px] text-white/70 ${checked ? 'hidden' : 'group-hover:hidden'}`}>{index + 1}</span>
+        <div className={`absolute inset-0 grid place-items-center ${checkboxVisibility}`}>
+          <SelectionCheckbox checked={checked} label={`Chọn ${song.title}`} onChange={onToggle} />
+        </div>
+      </div>
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="group/cover relative size-11 shrink-0 overflow-hidden rounded-[4px]">
+          <div role="img" aria-label={`Ảnh bìa ${song.title}`} className="size-full bg-cover" style={{ backgroundImage: `url("${imageUrl}")`, backgroundPosition: 'center 25%' }} />
+          <button type="button" aria-label={isCurrentTrack && isPlaying ? `Tạm dừng ${song.title}` : `Phát ${song.title}`} onClick={onPlay} className={`absolute inset-0 grid place-items-center bg-black/45 text-white ${isCurrentTrack ? 'opacity-100' : 'opacity-0 group-hover/cover:opacity-100 group-focus-within/cover:opacity-100'}`}>
+            {isCurrentTrack && isPlaying ? <span className={`${styles.equalizer} ${styles.equalizerOnCover}`}><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /><span className={styles.equalizerBar} /></span> : <PlayGlyph className="ml-0.5 size-4" />}
+          </button>
+        </div>
+        <Link href={songPath(song)} onClick={() => recordRecentItem(recentSongItem(song))} className={`truncate text-[14px] font-bold transition-colors hover:text-[#00d3e5] ${isCurrentTrack ? 'text-[#00d3e5]' : 'text-white'}`}>{song.title}</Link>
+      </div>
+      <ArtistNames artists={artists} className="hidden truncate text-[13px] text-white/65 sm:block" />
+      <span className="text-right text-[13px] text-white/75">{formatDuration(song.duration_seconds)}</span>
+      <SongRowActionMenu song={song} onStatus={onStatus} buttonClassName="pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100" />
+    </li>
+  );
+}
+
+function AlbumCard({ album }: { album: AlbumRecord }) {
+  const href = `/album/${encodeURIComponent(album.slug || album.id)}`;
+
+  return (
+    <article className="min-w-0">
+      <Link href={href} aria-label={`Xem album ${album.title}`} onClick={() => recordRecentItem(recentAlbumItem(album))} className="group block">
+        <div role="img" aria-label={`Ảnh bìa ${album.title}`} className="aspect-square w-full overflow-hidden rounded-lg bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.02]" style={{ backgroundImage: `url("${album.cover_url || fallbackCover}")` }} />
+        <h3 className="mt-3 truncate text-[14px] font-bold text-white">{album.title}</h3>
+      </Link>
+      <p className="mt-1 truncate text-[13px] text-white/65">{album.artist?.name || 'Album'}</p>
+    </article>
+  );
+}
+
+function PlaylistCard({ playlist }: { playlist: Playlist }) {
+  const href = `/playlist/${encodeURIComponent(playlist.slug || playlist.id)}`;
+  const artistNames = playlist.artists ?? [];
+
+  return (
+    <article className="min-w-0">
+      <Link href={href} aria-label={`Xem playlist ${playlist.name}`} onClick={() => recordRecentItem(recentPlaylistItem(playlist))} className="group block">
+        <div role="img" aria-label={`Ảnh bìa ${playlist.name}`} className="aspect-square w-full overflow-hidden rounded-lg bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.02]" style={{ backgroundImage: `url("${playlist.cover_url || fallbackCover}")` }} />
+        <h3 className="mt-3 truncate text-[14px] font-bold text-white">{playlist.name}</h3>
+      </Link>
+      {artistNames.length > 0 ? <ArtistNames artists={artistNames} className="mt-1 block truncate text-[13px] text-white/65" /> : <p className="mt-1 truncate text-[13px] text-white/65">{playlist.type_custom || playlist.type || 'Playlist'}</p>}
+    </article>
+  );
+}
+
+function VideoCard({ video }: { video: SongVideo }) {
+  const card = (
+    <div className="group block min-w-0">
+      <div className="relative aspect-video overflow-hidden rounded-lg bg-[#30443f]">
+        <div role="img" aria-label={`Ảnh video ${video.title}`} className="size-full bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.02]" style={{ backgroundImage: `url("${video.thumbnail_url || fallbackCover}")` }} />
+        {video.duration_seconds !== null && video.duration_seconds !== undefined ? <span className="absolute bottom-2 right-2 rounded bg-black/85 px-1.5 py-0.5 text-[11px] font-bold text-white">{formatDuration(video.duration_seconds)}</span> : null}
+        {video.watch_url || video.video_url ? <span className="absolute inset-0 grid place-items-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/35 group-hover:opacity-100"><span className="grid size-11 place-items-center rounded-full bg-[#00cfe3] text-[#07363a]"><PlayGlyph className="ml-0.5 size-4" /></span></span> : null}
+      </div>
+      <h3 className="mt-3 truncate text-[14px] font-bold text-white">{video.title}</h3>
+    </div>
+  );
+
+  return video.watch_url || video.video_url ? <a href={video.watch_url || video.video_url || '#'} target="_blank" rel="noreferrer" onClick={() => recordRecentItem(recentVideoItem(video))} aria-label={`Xem video ${video.title}`}>{card}</a> : card;
+}
+
+function ArtistBioCard({ artist, onViewMore }: { artist: ArtistDetail; onViewMore: () => void }) {
+  if (!artist.bio?.trim()) return null;
+  const realName = artist.real_name || artist.name;
+
+  return (
+    <section className="rounded-lg bg-[#272727] p-5 sm:p-6" aria-labelledby="artist-bio-heading">
+      <div className="grid gap-6 sm:grid-cols-[300px_minmax(0,1fr)] sm:items-center">
+        <div role="img" aria-label={`Ảnh giới thiệu ${artist.name}`} className="aspect-square w-full rounded-lg bg-cover bg-center" style={{ backgroundImage: `url("${artist.avatar_url || fallbackCover}")`, backgroundPosition: 'center 18%' }} />
+        <div className="min-w-0">
+          <h2 id="artist-bio-heading" className="text-[26px] font-bold text-white">{artist.name}</h2>
+          <p className="mt-5 text-[14px] font-semibold leading-6 text-white">Họ và tên: {realName}</p>
+          <p className="mt-1 text-[14px] font-semibold leading-6 text-white">Nghệ sĩ Việt Nam</p>
+          <p className="mt-5 max-h-24 overflow-hidden text-[14px] font-semibold leading-6 text-white/90">{artist.bio}</p>
+          <button type="button" onClick={onViewMore} className="mt-3 inline-flex items-center gap-3 text-[14px] text-white/75 transition-colors hover:text-white">Xem thêm <ChevronIcon /></button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ArtistBioModal({ artist, onClose }: { artist: ArtistDetail; onClose: () => void }) {
+  const realName = artist.real_name || artist.name;
+
+  return (
+    <div role="presentation" className="fixed inset-0 z-[80] grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="artist-bio-modal-heading" className="relative max-h-[90vh] w-full max-w-[650px] overflow-y-auto rounded-xl bg-[#242424] p-6 text-white shadow-2xl sm:p-8">
+        <button type="button" aria-label="Đóng thông tin nghệ sĩ" onClick={onClose} className="absolute right-5 top-5 text-white transition-colors hover:text-[#00d3e5]"><CloseIcon /></button>
+        <div className="grid gap-6 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-start">
+          <div role="img" aria-label={`Ảnh nghệ sĩ ${artist.name}`} className="aspect-square w-full rounded-lg bg-cover bg-center" style={{ backgroundImage: `url("${artist.avatar_url || fallbackCover}")`, backgroundPosition: 'center 18%' }} />
+          <div className="min-w-0 pt-2">
+            <h2 id="artist-bio-modal-heading" className="text-[26px] font-bold">{artist.name}</h2>
+            <p className="mt-4 font-semibold">Họ và tên: {realName}</p>
+            <p className="mt-1 font-semibold">Quốc tịch: Việt Nam</p>
+          </div>
+        </div>
+        <p className="mt-7 whitespace-pre-line text-[14px] font-semibold leading-6 text-white/90">{artist.bio}</p>
+      </div>
+    </div>
+  );
+}
+
+export default function ArtistDetailPage({ slug }: { slug: string }) {
+  const router = useRouter();
+  const { track, isPlaying, isPremium, requestVipAccess, playSong, togglePlay } = usePlayerControls();
+  const artistHeroRef = useRef<HTMLElement | null>(null);
+  const [request, setRequest] = useState({ slug: '', artist: null as ArtistDetail | null, isLoading: true, error: '' });
+  const [updatedFollowers, setUpdatedFollowers] = useState<number | null>(null);
+  const [isBioOpen, setIsBioOpen] = useState(false);
+  const [showCompactSongsHeader, setShowCompactSongsHeader] = useState(false);
+  const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
+  const [isPlaylistDialogOpen, setIsPlaylistDialogOpen] = useState(false);
+  const [songActionStatus, setSongActionStatus] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getArtist(slug)
+      .then((response) => {
+        const artist = response.data;
+
+        // Keep old ID-based links working, but replace them with the canonical slug URL.
+        if (!cancelled && artist.slug && artist.slug !== slug) {
+          router.replace(`/artist/${encodeURIComponent(artist.slug)}`);
+          return;
+        }
+
+        if (!cancelled) {
+          setRequest({ slug, artist, isLoading: false, error: '' });
+          setUpdatedFollowers(null);
+          setIsBioOpen(false);
+          setSelectedSongIds([]);
+          setSongActionStatus('');
+          void recordArtistView(artist.id).catch(() => {
+            // Analytics must not prevent the artist page from loading.
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRequest({ slug, artist: null, isLoading: false, error: 'Không thể tải thông tin nghệ sĩ lúc này.' });
+      });
+
+    return () => { cancelled = true; };
+  }, [slug, router]);
+
+  useEffect(() => {
+    if (!isBioOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [isBioOpen]);
+
+  const artist = request.slug === slug ? request.artist : null;
+  const isLoading = request.slug !== slug || request.isLoading;
+
+  useEffect(() => {
+    const hero = artistHeroRef.current;
+    if (!hero) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      setShowCompactSongsHeader(!entry.isIntersecting);
+    }, { rootMargin: '-80px 0px 0px 0px', threshold: 0 });
+
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, [artist]);
+
+  if (isLoading) {
+    return <main className="min-h-[calc(100vh-80px)] bg-[#202a28] px-5 pb-20 pt-7 sm:px-8 lg:px-7"><div className="h-[420px] animate-pulse rounded-2xl bg-[#30443f]" /></main>;
+  }
+
+  if (request.error || !artist) {
+    return (
+      <main className="min-h-[calc(100vh-80px)] bg-[#202a28] px-5 pb-20 pt-7 text-white sm:px-8 lg:px-7">
+        <Link href="/home" className="text-sm text-white/70 transition-colors hover:text-white">← Quay lại khám phá</Link>
+        <p role="alert" className="mt-8 rounded-lg bg-[#30443f] px-4 py-3 text-sm text-white/75">{request.error || 'Không tìm thấy nghệ sĩ.'}</p>
+      </main>
+    );
+  }
+
+  const songs = artist.songs ?? artist.featured_songs ?? [];
+  const selectedSongs = songs.filter((song) => selectedSongIds.includes(song.id));
+  const allSongsSelected = songs.length > 0 && selectedSongs.length === songs.length;
+  const albums = artist.albums ?? [];
+  const playlists = artist.playlists ?? [];
+  const videos = artist.videos ?? [];
+  const artistIsPlaying = Boolean(track && isPlaying && songs.some((song) => song.id === track.id));
+  const artistHasCurrentTrack = Boolean(track && songs.some((song) => song.id === track.id));
+  const followerCount = updatedFollowers ?? artist.followers_count ?? 0;
+  const backgroundImage = artist.avatar_url || fallbackCover;
+
+  const handlePlayAll = () => {
+    if (songs.length === 0) return;
+    if (artistHasCurrentTrack) {
+      togglePlay();
+      return;
+    }
+
+    playSong(songs[0], songs);
+  };
+
+  const handlePlaySong = (song: Song) => {
+    if (track?.id === song.id) {
+      togglePlay();
+      return;
+    }
+
+    playSong(song, songs);
+  };
+
+  const toggleSongSelection = (songId: string) => {
+    setSelectedSongIds((current) => current.includes(songId) ? current.filter((id) => id !== songId) : [...current, songId]);
+  };
+
+  const toggleAllSongs = () => {
+    setSelectedSongIds(allSongsSelected ? [] : songs.map((song) => song.id));
+  };
+
+  const handleAddSelectedToFavorites = async () => {
+    const results = await setSongFavorites(selectedSongs, true, getVisitorId());
+    const addedCount = results.filter((result) => result.status === 'fulfilled').length;
+    const failedCount = results.length - addedCount;
+    setSongActionStatus(failedCount === 0
+      ? `Đã thêm ${addedCount} bài vào Yêu thích.`
+      : `Đã thêm ${addedCount} bài; ${failedCount} bài chưa cập nhật được.`);
+  };
+
+  const handleDownloadSelected = () => {
+    if (!isPremium && selectedSongs.some((song) => song.premium_only)) {
+      requestVipAccess();
+      return;
+    }
+    downloadSongFiles(selectedSongs);
+    setSongActionStatus(`Đang tải ${selectedSongs.length} bài hát.`);
+  };
+
+  return (
+    <>
+      {showCompactSongsHeader ? (
+        <div className="fixed inset-x-0 top-[80px] z-20 h-[60px] border-b border-white/10 bg-[#ffffff3d] px-5 py-2 shadow-[0_12px_30px_rgba(0,0,0,0.25)] backdrop-blur-md sm:px-8 lg:left-[248px] lg:px-7">
+          <div className="mx-auto flex max-w-[1582px] items-center gap-4">
+            <button type="button" aria-label={`Phát tất cả bài hát của ${artist.name}`} onClick={handlePlayAll} disabled={songs.length === 0} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#00cfe3] text-[#07363a] transition-colors hover:bg-[#34dbea] disabled:cursor-not-allowed disabled:opacity-50">{artistIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}</button>
+            <h2 className="truncate text-[22px] font-bold text-white sm:text-[25px]">Bài hát của {artist.name}</h2>
+          </div>
+        </div>
+      ) : null}
+
+      <main className="min-h-[calc(100vh-80px)] overflow-x-hidden bg-[#121616] pb-20 text-white">
+      <section ref={artistHeroRef} className="relative -mx-5 overflow-hidden sm:-mx-8 lg:-mx-7" aria-labelledby="artist-title">
+        <div aria-hidden="true" className="absolute inset-0 bg-cover opacity-60 blur-[1px]" style={{ backgroundImage: `url("${backgroundImage}")`, backgroundPosition: 'center 18%' }} />
+        <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(180deg,rgba(24,48,44,0.12)_0%,rgba(18,22,22,0.42)_58%,#121616_100%)]" />
+        <div className="relative mx-auto flex min-h-[370px] w-full max-w-[1582px] items-end gap-5 px-5 pb-8 pt-14 sm:gap-7 sm:px-8 lg:px-7">
+          <div role="img" aria-label={`Ảnh nghệ sĩ ${artist.name}`} className="size-36 shrink-0 rounded-full border border-white/45 bg-cover shadow-[0_14px_40px_rgba(0,0,0,0.32)] sm:size-44" style={{ backgroundImage: `url("${backgroundImage}")`, backgroundPosition: 'center 18%' }} />
+          <div className="min-w-0 pb-1">
+            <h1 id="artist-title" className="truncate text-[34px] font-bold leading-tight text-white sm:text-[44px]">{artist.name}</h1>
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-[14px] font-bold text-white">
+              <span>{formatCount(followerCount)} người theo dõi</span>
+              <FollowButton id={artist.id} onChanged={(_, count) => setUpdatedFollowers(count)} />
+            </div>
+            <button type="button" onClick={handlePlayAll} disabled={songs.length === 0} className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[#00cfe3] px-6 text-[14px] font-bold text-[#07363a] transition-colors hover:bg-[#34dbea] disabled:cursor-not-allowed disabled:opacity-50">
+              {artistIsPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}
+              {artistIsPlaying ? 'Tạm dừng' : 'Phát tất cả'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-[1582px] px-5 pt-8 sm:px-8 lg:px-7" aria-label={`Bài hát của ${artist.name}`}>
+        <h2 className="mb-4 text-[26px] font-bold text-white sm:text-[30px]">Bài hát</h2>
+        {selectedSongIds.length > 0 ? (
+          <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] items-center gap-3 border-b border-white/10 px-2 pb-2 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px_32px] sm:gap-4" aria-label="Thao tác với bài hát đã chọn">
+            <SelectionCheckbox checked={allSongsSelected} onChange={toggleAllSongs} label="Chọn tất cả bài hát" />
+            <div className="col-span-3 flex min-w-0 flex-wrap items-center gap-2 sm:col-span-4">
+              <button type="button" onClick={() => setIsPlaylistDialogOpen(true)} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><PlaylistAddIcon />Thêm vào playlist</button>
+              <button type="button" onClick={() => void handleAddSelectedToFavorites()} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><HeartIcon />Thêm vào Yêu thích</button>
+              <button type="button" onClick={handleDownloadSelected} className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"><DownloadIcon />Tải về</button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-[32px_minmax(0,1fr)_56px_28px] gap-3 border-b border-white/10 px-2 pb-3 text-[13px] font-bold text-white/60 sm:grid-cols-[40px_minmax(0,1.15fr)_minmax(180px,1fr)_64px_32px] sm:gap-4">
+            <span>#</span>
+            <span>Tiêu đề</span>
+            <span className="hidden sm:block">Nghệ sĩ</span>
+            <span className="justify-self-end"><ClockIcon /></span>
+            <span aria-hidden="true" />
+          </div>
+        )}
+        {songs.length > 0 ? (
+          <ol className="mt-2 space-y-0.5">
+            {songs.map((song, index) => <ArtistSongRow key={song.id} song={song} index={index} artist={artist} checked={selectedSongIds.includes(song.id)} onToggle={() => toggleSongSelection(song.id)} onStatus={setSongActionStatus} onPlay={() => handlePlaySong(song)} isCurrentTrack={track?.id === song.id} isPlaying={isPlaying && track?.id === song.id} />)}
+          </ol>
+        ) : (
+          <p className="mt-8 rounded-lg bg-[#30443f] px-4 py-5 text-sm text-white/70">Nghệ sĩ chưa có bài hát nào.</p>
+        )}
+        <span className="sr-only" aria-live="polite">{songActionStatus}</span>
+        <AddSongsToPlaylistDialog songs={selectedSongs} open={isPlaylistDialogOpen} onClose={() => setIsPlaylistDialogOpen(false)} onAdded={setSongActionStatus} />
+      </section>
+
+      <section className="mx-auto w-full max-w-[1582px] px-5 pt-12 sm:px-8 lg:px-7" aria-labelledby="artist-albums-heading">
+        <SectionHeading title="Album" href="/album" />
+        {albums.length > 0 ? <div id="artist-albums-heading" className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-4 lg:grid-cols-7 lg:gap-x-6">{albums.map((album) => <AlbumCard key={album.id} album={album} />)}</div> : <p className="rounded-lg bg-[#202a28] px-4 py-5 text-sm text-white/60">Nghệ sĩ chưa có album nào.</p>}
+      </section>
+
+      <section className="mx-auto w-full max-w-[1582px] px-5 pt-12 sm:px-8 lg:px-7" aria-labelledby="artist-playlists-heading">
+        <SectionHeading title="Playlist" href="/playlist" />
+        {playlists.length > 0 ? <div id="artist-playlists-heading" className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-4 lg:grid-cols-7 lg:gap-x-6">{playlists.map((playlist) => <PlaylistCard key={playlist.id} playlist={playlist} />)}</div> : <p className="rounded-lg bg-[#202a28] px-4 py-5 text-sm text-white/60">Nghệ sĩ chưa có playlist nào.</p>}
+      </section>
+
+      <section className="mx-auto w-full max-w-[1582px] px-5 pt-12 sm:px-8 lg:px-7" aria-labelledby="artist-videos-heading">
+        <SectionHeading title="Video" />
+        {videos.length > 0 ? <div id="artist-videos-heading" className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">{videos.map((video) => <VideoCard key={video.id} video={video} />)}</div> : <p className="rounded-lg bg-[#202a28] px-4 py-5 text-sm text-white/60">Nghệ sĩ chưa có video nào.</p>}
+      </section>
+
+      <section className="mx-auto w-full max-w-[1582px] px-5 pt-12 sm:px-8 lg:px-7">
+        <ArtistBioCard artist={artist} onViewMore={() => setIsBioOpen(true)} />
+      </section>
+
+      {isBioOpen ? <ArtistBioModal artist={artist} onClose={() => setIsBioOpen(false)} /> : null}
+      </main>
+      <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 bottom-0 z-40 h-[100px] bg-[#121616]" />
+    </>
+  );
+}

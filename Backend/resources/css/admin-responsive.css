@@ -1,0 +1,404 @@
+/* Shared search toolbars and responsive rules for Admin list pages. */
+.admin-table-filter-form {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    min-width: 0;
+}
+
+.admin-table-search {
+    align-items: center;
+    background: var(--admin-surface-soft, #fafafa);
+    border: 1px solid var(--admin-border-strong, #d9d9d9);
+    border-radius: 8px;
+    color: var(--admin-text-muted, #8c8c8c);
+    display: flex;
+    gap: 8px;
+    min-width: 250px;
+    padding: 0 11px;
+    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.admin-table-search:focus-within {
+    background: var(--admin-surface, #fff);
+    border-color: var(--admin-accent);
+    box-shadow: 0 0 0 3px rgb(0 168 184 / 12%);
+}
+
+.admin-table-search .anticon,
+.admin-table-search svg {
+    flex: 0 0 auto;
+    height: 16px;
+    width: 16px;
+}
+
+.admin-table-search input {
+    background: transparent;
+    border: 0;
+    color: var(--admin-text);
+    font: inherit;
+    min-width: 0;
+    outline: 0;
+    padding: 9px 0;
+    width: 100%;
+}
+
+.admin-table-search input::placeholder {
+    color: var(--admin-text-muted, #8c8c8c);
+}
+
+.admin-table-filter-form .ant-btn {
+    white-space: nowrap;
+}
+
+.admin-table-toolbar > .admin-table-filter-form {
+    flex: 1 1 460px;
+    max-width: 720px;
+}
+
+.admin-table-toolbar > .admin-table-filter-form .admin-table-search {
+    flex: 1 1 260px;
+}
+
+.admin-table-toolbar > .admin-table-filter-form .admin-action-link {
+    white-space: nowrap;
+}
+
+.admin-page-header-actions {
+    max-width: 100%;
+}
+
+.admin-page-header-actions > * {
+    max-width: 100%;
+}
+
+.admin-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Keep each page inside the space left by the sidebar and let complex forms
+   reflow before their columns become too narrow to use. */
+.admin-layout-main,
+.admin-content,
+.admin-page,
+.admin-page-header-main,
+.admin-table-card,
+.admin-table-wrapper,
+.admin-form-page,
+.admin-catalog-form,
+.admin-catalog-form-layout,
+.admin-artist-form-layout {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.admin-table-scroll,
+.admin-table-wrapper {
+    overscroll-behavior-inline: contain;
+}
+
+.admin-table-scroll > table,
+.admin-table-wrapper > table {
+    min-width: 760px;
+}
+
+.admin-page img,
+.admin-page video,
+.admin-page iframe {
+    max-width: 100%;
+}
+
+.admin-mobile-toggle {
+    display: none !important;
+}
+
+@media (max-width: 1100px) {
+    .admin-content,
+    .ant-layout-content {
+        padding-inline: 20px;
+    }
+
+    .admin-catalog-form-layout,
+    .admin-artist-form-layout,
+    .admin-banner-form-layout {
+        gap: 20px;
+        grid-template-columns: minmax(0, 1fr);
+        padding: 22px;
+    }
+
+    .admin-catalog-form-layout > .admin-media-library,
+    .admin-artist-form-sidebar {
+        grid-row: 1;
+        position: static;
+    }
+}
+
+@media (max-width: 980px) {
+    .admin-table-toolbar {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .admin-table-toolbar > div:first-child {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .admin-table-toolbar > .admin-table-filter-form,
+    .admin-table-toolbar > .admin-topic-filters {
+        flex: 1 1 100%;
+        justify-content: flex-start;
+        max-width: none;
+        width: 100%;
+    }
+
+    .admin-header,
+    .ant-layout-header {
+        gap: 10px;
+        padding-inline: 16px;
+    }
+
+    .admin-header-search {
+        width: min(360px, 42vw);
+    }
+}
+
+@media (max-width: 767px) {
+    .admin-sidebar-toggle {
+        display: none !important;
+    }
+
+    .admin-mobile-toggle {
+        display: inline-flex !important;
+    }
+
+    .admin-content,
+    .ant-layout-content {
+        padding: 14px 12px;
+    }
+
+    .admin-header,
+    .ant-layout-header {
+        gap: 8px;
+        padding-inline: 10px;
+    }
+
+    .admin-header-left {
+        flex: 1 1 auto;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .admin-mobile-toggle {
+        align-items: center;
+        display: inline-flex !important;
+        flex: 0 0 36px;
+        height: 36px;
+        justify-content: center;
+        margin: 0;
+        padding: 0;
+        width: 36px;
+    }
+
+    .admin-header-search {
+        display: flex !important;
+        flex: 1 1 auto;
+        max-width: 320px;
+        min-width: 0;
+        width: auto;
+    }
+
+    .admin-header-right {
+        flex: 0 0 auto;
+        min-width: 0;
+    }
+
+    .admin-header-right .admin-api-docs-btn {
+        display: none;
+    }
+
+    .admin-catalog-form-layout,
+    .admin-artist-form-layout,
+    .admin-banner-form-layout {
+        gap: 16px;
+        padding: 16px;
+    }
+
+    .admin-artist-field-grid,
+    .admin-banner-form-fields,
+    .admin-settings-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .admin-resource-form-actions,
+    .admin-banner-form .admin-resource-form-actions {
+        align-items: stretch;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .admin-resource-form-actions .ant-btn,
+    .admin-banner-form .admin-resource-form-actions .ant-btn {
+        flex: 1 1 140px;
+    }
+
+    .admin-selection-panel,
+    .admin-media-library,
+    .ant-card {
+        min-width: 0;
+    }
+}
+
+@media (max-width: 767px) {
+    .admin-content,
+    .ant-layout-content {
+        padding-inline: 12px;
+    }
+
+    .admin-page-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .admin-page-header-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+    }
+
+    .admin-page-header-actions > * {
+        width: 100%;
+    }
+
+    .admin-page-header-actions .admin-create-btn {
+        grid-column: 1 / -1;
+    }
+
+    .admin-table-toolbar {
+        gap: 12px;
+    }
+
+    .admin-table-toolbar > .admin-table-filter-form,
+    .admin-table-toolbar > .admin-topic-filters {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        width: 100%;
+    }
+
+    .admin-table-toolbar .admin-table-search,
+    .admin-table-toolbar .admin-topic-search {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .admin-table-toolbar .admin-action-link {
+        grid-column: 1 / -1;
+    }
+
+    .admin-data-table,
+    .admin-table {
+        min-width: 760px;
+    }
+
+    .admin-form-grid,
+    .admin-resource-form .admin-form-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .admin-form-span {
+        grid-column: auto !important;
+    }
+
+    .admin-log-filters {
+        grid-template-columns: 1fr !important;
+    }
+
+    .admin-header,
+    .ant-layout-header {
+        min-height: 58px;
+        padding-inline: 10px;
+    }
+
+    .admin-header-left {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .admin-header-right {
+        gap: 4px;
+    }
+
+    .admin-header-search {
+        flex: 1 1 auto;
+        width: auto;
+    }
+
+    .admin-header-link {
+        padding-inline: 8px;
+    }
+
+    .admin-header-link span:not(.anticon) {
+        display: none;
+    }
+}
+
+@media (max-width: 520px) {
+    .admin-content,
+    .ant-layout-content {
+        padding: 12px 10px;
+    }
+
+    .admin-catalog-form-layout,
+    .admin-artist-form-layout,
+    .admin-banner-form-layout {
+        padding: 12px;
+    }
+
+    .admin-header-search {
+        max-width: none;
+    }
+
+    .admin-account-btn {
+        gap: 0;
+        padding: 2px;
+    }
+
+    .admin-table-toolbar > .admin-table-filter-form,
+    .admin-table-toolbar > .admin-topic-filters {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-table-filter-form .ant-btn,
+    .admin-topic-filters .ant-btn {
+        width: 100%;
+    }
+
+    .admin-table-toolbar .admin-action-link {
+        grid-column: auto;
+    }
+
+    .admin-page-header-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-page-header-actions .admin-create-btn {
+        grid-column: auto;
+    }
+
+    .admin-header-search {
+        max-width: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
+}

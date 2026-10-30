@@ -1,0 +1,69 @@
+/* Notification center: compact popup, bounded scrolling, and full-page list. */
+.admin-notifications-dropdown {
+    width: min(380px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+}
+
+.admin-notifications-dropdown .notification-panel {
+    width: 100%;
+}
+
+.admin-notifications-dropdown .notification-list {
+    max-height: 336px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.notification-panel-header {
+    min-height: 50px;
+}
+
+.admin-mark-read-form {
+    margin: 0;
+}
+
+.admin-notification-empty {
+    color: var(--admin-text-muted);
+    padding: 28px 16px;
+    text-align: center;
+}
+
+.admin-notification-page-list {
+    max-height: min(680px, calc(100vh - 280px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.admin-notification-page-item {
+    color: inherit;
+    min-height: 76px;
+    padding: 17px 22px;
+    text-decoration: none;
+}
+
+.admin-notifications-unread-count {
+    color: var(--admin-accent);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+[data-admin-theme="dark"] .notification-panel,
+[data-admin-theme="dark"] .notification-item {
+    background: var(--admin-surface);
+}
+
+@media (max-width: 520px) {
+    .admin-notifications-dropdown {
+        position: fixed;
+        right: 12px;
+        top: 66px;
+    }
+
+    .admin-notification-page-list {
+        max-height: none;
+    }
+
+    .admin-notification-page-item {
+        padding-inline: 16px;
+    }
+}

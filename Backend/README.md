@@ -457,17 +457,17 @@ Mở:
 http://127.0.0.1:8000/api/docs
 ```
 
-Swagger UI dùng OpenAPI 3.0.3 và load spec từ `resources/api-docs/openapi.json` thông qua route bảo vệ; file không còn nằm trong `public/`.
+Swagger UI dùng OpenAPI 3.0.3 và load spec từ `resources/api-docs/openapi.json` thông qua route tài liệu; file không nằm trong `public/`. Spec gồm `GET /api/health` và toàn bộ operation đang khai báo dưới `/api/v1`, được chia theo nhóm Auth, Music, Playlists, Favorites, Library, Uploads, Engagement, Charts, VIP Payments, Videos và các nhóm catalog/discovery.
 
-Hiện spec có:
+Các thao tác cá nhân như tạo/sửa/xóa playlist, yêu thích, theo dõi, thư viện, upload và giao dịch VIP được đánh dấu Bearer bắt buộc. Các route đọc công khai hỗ trợ Bearer tùy chọn để cá nhân hóa. Callback MoMo, VNPay và ZaloPay không dùng Bearer; backend xác minh callback bằng chữ ký/dữ liệu từ cổng thanh toán.
 
-- Group `System`.
-- Group `Auth` placeholder.
-- Group `Music` placeholder.
-- Bearer `Authorize` scheme.
-- `GET /api/health`.
+Để đồng bộ tài liệu sau khi thêm route Laravel, chạy từ thư mục `Backend`:
 
-Khi thêm API mới, cập nhật cả route Laravel và OpenAPI JSON để endpoint xuất hiện trong giao diện.
+```bash
+python scripts/sync_openapi.py
+```
+
+Script lấy route trực tiếp từ `php artisan route:list --path=api/v1 --json`, giữ lại mô tả thủ công hiện có, bổ sung operation còn thiếu, path parameter và chính sách xác thực vào `resources/api-docs/openapi.json`.
 
 ## 13. File cấu hình Laravel
 
@@ -556,12 +556,21 @@ Backend hiện mới hoàn thiện nền tảng và model layer. Các phần sau
 - Upload image controller route public.
 - Upload audio và streaming protection.
 - Search/filter/pagination API.
-- Payment gateway callback/webhook.
+- Đối soát/gia hạn subscription tự động và hoàn tiền.
 - Subscription renewal/cancellation.
 - Notification delivery.
 - Recommendation generation.
 - Request validation classes và API Resources.
 - Automated feature tests cho các resource.
+
+### Checkout VIP qua MoMo và VNPAY
+
+- Frontend lấy phương thức khả dụng từ `GET /api/v1/vip/payment-methods`, tạo đơn qua `POST /api/v1/vip/checkout` và chuyển người dùng tới `checkout_url` do Backend trả về.
+- Backend chỉ kích hoạt VIP sau IPN có chữ ký hợp lệ, đúng mã đơn và đúng số tiền. URL Return chỉ đưa người dùng về trang kết quả; không dùng tham số trình duyệt để xác nhận đã trả tiền.
+- MoMo cần `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY`, `MOMO_API_URL`, `MOMO_REDIRECT_URL` và `MOMO_IPN_URL`.
+- VNPAY cần `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `VNPAY_PAYMENT_URL`, `VNPAY_RETURN_URL` và `VNPAY_IPN_URL`. Đăng ký URL IPN với VNPAY trong cấu hình merchant; đặt `PAYMENT_RETURN_URL` thành trang kết quả frontend.
+- Dùng credentials/endpoint sandbox để kiểm thử; trước khi production, thay bằng endpoint/credentials live và dùng callback HTTPS công khai. Không commit merchant secrets; chỉ thêm vào biến môi trường của Backend.
+- VNPAY là luồng checkout ngân hàng/thẻ/QR qua merchant gateway, không phải tích hợp API trực tiếp từng ngân hàng. Các phương thức chưa được cấu hình sẽ trả `enabled: false` và không cho checkout.
 
 ## 17. Bảo mật bắt buộc
 

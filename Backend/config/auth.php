@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Admin;
 use App\Models\User;
 
 return [
@@ -42,6 +43,10 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+        'admin' => [
+            'driver' => 'session',
+            'provider' => 'admins',
+        ],
     ],
 
     /*
@@ -65,6 +70,10 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', User::class),
+        ],
+        'admins' => [
+            'driver' => 'eloquent',
+            'model' => Admin::class,
         ],
 
         // 'users' => [
@@ -99,6 +108,12 @@ return [
             'expire' => 60,
             'throttle' => 60,
         ],
+        'admins' => [
+            'provider' => 'admins',
+            'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
+            'expire' => 30,
+            'throttle' => 60,
+        ],
     ],
 
     /*
@@ -113,5 +128,23 @@ return [
     */
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
+
+    'api_token_ttl_days' => env('API_TOKEN_TTL_DAYS', 30),
+    'api_token_session_ttl_days' => env('API_TOKEN_SESSION_TTL_DAYS', 1),
+    'api_token_remember_ttl_days' => env('API_TOKEN_REMEMBER_TTL_DAYS', 30),
+
+    'phone_otp' => [
+        'driver' => env('PHONE_OTP_DRIVER', 'log'),
+        'ttl_minutes' => env('PHONE_OTP_TTL_MINUTES', 5),
+        'resend_seconds' => env('PHONE_OTP_RESEND_SECONDS', 60),
+        'max_attempts' => env('PHONE_OTP_MAX_ATTEMPTS', 5),
+    ],
+
+    'password_reset' => [
+        'ttl_minutes' => env('API_PASSWORD_RESET_TTL_MINUTES', 5),
+        'resend_seconds' => env('API_PASSWORD_RESET_RESEND_SECONDS', 60),
+        'max_attempts' => env('API_PASSWORD_RESET_MAX_ATTEMPTS', 5),
+        'token_ttl_minutes' => env('API_PASSWORD_RESET_TOKEN_TTL_MINUTES', 10),
+    ],
 
 ];

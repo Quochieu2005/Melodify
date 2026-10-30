@@ -1,5 +1,5 @@
-import MelodifyHomeScreen from '@/components/home/MelodifyHomeScreen';
+import HomeScreen from '@/screens/HomeScreen';
 
 export default function WebHomeRoute() {
-  return <MelodifyHomeScreen />;
+  return <HomeScreen />;
 }
