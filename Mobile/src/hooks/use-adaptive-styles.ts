@@ -67,14 +67,14 @@ function adaptStyle(style: StyleRecord, palette: Palette, styleName = ''): Style
 }
 
 /** Converts the existing light/dark literals in a screen's StyleSheet into shared time-based tokens. */
-export function useAdaptiveStyles<T extends StyleSheet.NamedStyles<T>>(baseStyles: T): T {
+export function useAdaptiveStyles<T extends Record<string, unknown>>(baseStyles: T): T {
   const palette = useTheme();
   return useMemo(() => {
     const themed = Object.fromEntries(Object.entries(baseStyles).map(([key, value]) => {
       const flattened = StyleSheet.flatten(value as never) as StyleRecord | undefined;
       return [key, flattened ? adaptStyle(flattened, palette, key) : value];
     }));
-    return StyleSheet.create(themed as StyleSheet.NamedStyles<T>) as T;
+    return StyleSheet.create(themed as never) as T;
   }, [baseStyles, palette]);
 }
 

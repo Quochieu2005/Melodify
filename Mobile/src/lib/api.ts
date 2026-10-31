@@ -44,11 +44,14 @@ type CachedApiResponse = { apiUrl: string; path: string; savedAt: number; value:
 const apiResponseCache = new Map<string, CachedApiResponse>();
 const API_RESPONSE_CACHE_PREFIX = 'melodify_api_response_v1:';
 const API_RESPONSE_FRESH_MS = 45_000;
+const API_RESPONSE_CATALOG_STALE_MS = 10 * 60_000;
+const API_RESPONSE_ACTIVITY_STALE_MS = 90_000;
 const API_RESPONSE_CACHE_MAX_ENTRIES = 80;
 let apiResponseCacheGeneration = 0;
 let apiCacheStorageTask: Promise<unknown> = Promise.resolve();
 
 let tokenValue: string | null | undefined;
+let tokenRequest: Promise<string | null> | null = null;
 let visitorIdValue: string | null = null;
 let visitorIdRequest: Promise<string> | null = null;
 
@@ -203,6 +206,19 @@ export type Chart = {
   songs: ChartSong[];
 };
 
+export type Banner = {
+  id: string;
+  title: string;
+  slug: string | null;
+  image_url: string | null;
+  link_url: string | null;
+};
+
+export type HomeDiscovery = {
+  single_new_releases: Song[];
+  popular_songs: Song[];
+};
+
 export type HomeBootstrap = {
   banners: { id: string; title: string; slug: string | null; image_url: string | null; link_url: string | null }[];
   charts: Chart[];
@@ -227,9 +243,11 @@ type CachedHomeBootstrap = {
 
 const HOME_BOOTSTRAP_CACHE_KEY = 'melodify_home_bootstrap_cache_v1';
 const HOME_BOOTSTRAP_FRESH_MS = 60_000;
+const HOME_BOOTSTRAP_STALE_MS = 7 * 24 * 60 * 60 * 1_000;
 let homeBootstrapCache: CachedHomeBootstrap | null | undefined;
 let homeBootstrapCacheRead: Promise<CachedHomeBootstrap | null> | null = null;
 let homeBootstrapRequest: Promise<HomeBootstrapResponse> | null = null;
+const homeBootstrapListeners = new Set<(value: HomeBootstrapResponse) => void>();
 
 function isCachedHomeBootstrap(value: unknown): value is CachedHomeBootstrap {
   if (!value || typeof value !== 'object') return false;
@@ -307,14 +325,13 @@ export type SubscriptionPlanRecord = {
   unlimited_skip: boolean;
 };
 
-export type VipPaymentMethod =
-  | 'card'
-  | 'shopeepay'
-  | 'atm'
-  | 'momo'
-  | 'zalopay'
-  | 'vnpay'
-  | 'viettelpay';
+export type VipPaymentMethod = 'momo' | 'vnpay' | 'zalopay';
+
+export type VipPaymentGatewayOption = {
+  id: VipPaymentMethod;
+  label: string;
+  enabled: boolean;
+};
 
 export type VipCheckoutOrder = {
   payment_id: string;
@@ -323,8 +340,19 @@ export type VipCheckoutOrder = {
   currency: string;
   method: VipPaymentMethod;
   status: 'pending' | string;
+  checkout_url: string;
   plan: { id: string; name: string };
-  requires_gateway_confirmation: boolean;
+};
+
+export type VipPaymentStatus = {
+  payment_code: string;
+  status: 'pending' | 'processing' | 'success' | 'failed' | 'cancelled' | string;
+  amount: number;
+  currency: string;
+  method: VipPaymentMethod;
+  plan_name: string;
+  paid_at: string | null;
+  vip_expires_at: string | null;
 };
 
 export type VipTransactionRecord = {
@@ -338,6 +366,8 @@ export type VipTransactionRecord = {
   plan_name: string;
   transaction_code: string;
   gateway: string;
+  paid_at?: string | null;
+  vip_expires_at?: string | null;
 };
 
 export type VipTransactionHistory = {
@@ -351,8 +381,19 @@ async function getAuthToken(): Promise<string | null> {
   if (tokenValue !== undefined) {
     return tokenValue;
   }
-  tokenValue = await readAppValue(AUTH_TOKEN_STORAGE_KEY);
-  return tokenValue;
+  if (!tokenRequest) {
+    const request = readAppValue(AUTH_TOKEN_STORAGE_KEY)
+      .then((value) => {
+        if (tokenRequest !== request) return tokenValue ?? null;
+        tokenValue = value;
+        return value;
+      })
+      .finally(() => {
+        if (tokenRequest === request) tokenRequest = null;
+      });
+    tokenRequest = request;
+  }
+  return tokenRequest;
 }
 
 export async function getVisitorId(): Promise<string> {
@@ -382,6 +423,7 @@ export async function saveAuthSession(auth: AuthResponse): Promise<void> {
   pendingGets.clear();
   apiResponseCache.clear();
   tokenValue = auth.token;
+  tokenRequest = null;
   await writeAppValue(AUTH_TOKEN_STORAGE_KEY, auth.token);
   await writeAppValue(AUTH_USER_STORAGE_KEY, JSON.stringify(auth.user));
 }
@@ -391,6 +433,7 @@ export async function clearAuthSession(): Promise<void> {
   pendingGets.clear();
   apiResponseCache.clear();
   tokenValue = null;
+  tokenRequest = null;
   await Promise.all([
     removeAppValue(AUTH_TOKEN_STORAGE_KEY),
     removeAppValue(AUTH_USER_STORAGE_KEY),
@@ -407,6 +450,12 @@ export async function getSavedAuthUser(): Promise<AuthUser | null> {
   } catch {
     return null;
   }
+}
+
+export async function refreshSavedAuthUser(): Promise<AuthUser> {
+  const response = await apiFetch<{ user: AuthUser }>('/v1/auth/me', { cache: 'no-store' });
+  await writeAppValue(AUTH_USER_STORAGE_KEY, JSON.stringify(response.user));
+  return response.user;
 }
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -434,6 +483,8 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     apiResponseCache.delete(requestKey);
   }
 
+  // Only explicitly allowlisted public catalog endpoints are persisted. Their
+  // response payloads are identical with or without an Authorization header.
   if (canPersistApiResponse(path)) {
     const generation = apiResponseCacheGeneration;
     const diskCached = await readApiResponseCache(path);
@@ -445,6 +496,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
         if (oldestKey) apiResponseCache.delete(oldestKey);
       }
       if (age < API_RESPONSE_FRESH_MS) return diskCached.value as T;
+      if (age < getApiResponsePersistedStaleMs(path)) {
+        void loadApiGet<T>(path, token, requestKey, memoryTtl).catch(() => undefined);
+        return diskCached.value as T;
+      }
     }
   }
 
@@ -460,10 +515,14 @@ async function fetchApiResponse<T>(path: string, init: RequestInit, method: stri
   }
 
   const controller = new AbortController();
-  const abortFromCaller = () => controller?.abort();
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort();
   if (init.signal?.aborted) abortFromCaller();
   else init.signal?.addEventListener('abort', abortFromCaller, { once: true });
-  const timeoutId = controller ? setTimeout(() => controller.abort(), 15_000) : null;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 15_000);
   try {
     const response = await fetch(baseUrl.replace(/\/+$/, '') + path, {
       ...init,
@@ -483,12 +542,24 @@ async function fetchApiResponse<T>(path: string, init: RequestInit, method: stri
     if (response.status === 204) return undefined as T;
     return await response.json() as T;
   } catch (reason) {
-    if (controller?.signal.aborted && !init.signal?.aborted) {
-      throw new Error('Máy chủ phản hồi quá lâu (15 giây). Vui lòng kiểm tra kết nối và thử lại.');
+    if (timedOut && !init.signal?.aborted) {
+      throw new Error(`API phản hồi quá lâu tại ${baseUrl} (15 giây). Kiểm tra máy chủ và thử lại.`);
+    }
+    if (reason instanceof TypeError) {
+      let hostname = baseUrl;
+      try {
+        hostname = new URL(baseUrl).hostname;
+      } catch {
+        // Keep the configured API address if it is not a valid absolute URL.
+      }
+      const isPrivateHost = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(hostname);
+      throw new Error(isPrivateHost
+        ? `Không kết nối được API ${baseUrl}. Trên điện thoại, chạy Backend bằng "composer run dev:mobile", dùng cùng Wi‑Fi và cho phép cổng 8000 qua tường lửa.`
+        : `Không kết nối được máy chủ API (${hostname}). Kiểm tra Internet hoặc trạng thái máy chủ rồi thử lại.`);
     }
     throw reason;
   } finally {
-    if (timeoutId) clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
     init.signal?.removeEventListener('abort', abortFromCaller);
   }
 }
@@ -496,12 +567,23 @@ async function fetchApiResponse<T>(path: string, init: RequestInit, method: stri
 function getApiResponseMemoryTtl(path: string): number {
   const pathname = path.split('?')[0];
   if (pathname === '/v1/search') return 8_000;
-  return /^\/v1\/(topics|genres|albums|playlists|artists|artists\/trending|charts(?:\/[^/]+)?|subscription-plans)$/.test(pathname)
+  return /^\/v1\/(banners|home\/discovery|topics|genres|albums|playlists|artists|artists\/trending|charts(?:\/[^/]+)?|subscription-plans)$/.test(pathname)
     ? API_RESPONSE_FRESH_MS : 0;
 }
 
 function canPersistApiResponse(path: string): boolean {
   const [pathname, query = ''] = path.split('?');
+  if (pathname === '/v1/home/discovery' || pathname === '/v1/charts' || pathname === '/v1/artists/trending') {
+    return query === '';
+  }
+  if (pathname === '/v1/banners') {
+    if (!query) return true;
+    const params = new URLSearchParams(query);
+    for (const [key, value] of params.entries()) {
+      if (!['daily', 'limit', 'per_page'].includes(key) || !/^\d+$/.test(value)) return false;
+    }
+    return true;
+  }
   if (!/^\/v1\/(topics|genres|albums|playlists|artists)$/.test(pathname)
     && pathname !== '/v1/subscription-plans') {
     return false;
@@ -519,6 +601,12 @@ function canPersistApiResponse(path: string): boolean {
   return true;
 }
 
+function getApiResponsePersistedStaleMs(path: string): number {
+  return /^\/v1\/(home\/discovery|charts|artists\/trending)(?:\?|$)/.test(path)
+    ? API_RESPONSE_ACTIVITY_STALE_MS
+    : API_RESPONSE_CATALOG_STALE_MS;
+}
+
 function isCachedApiResponse(value: unknown, path: string): value is CachedApiResponse {
   if (!value || typeof value !== 'object') return false;
   const cached = value as Partial<CachedApiResponse>;
@@ -530,7 +618,10 @@ function isCachedApiResponse(value: unknown, path: string): value is CachedApiRe
 
 async function readApiResponseCache(path: string): Promise<CachedApiResponse | null> {
   try {
-    const raw = await queueApiCacheStorage(() => AsyncStorage.getItem(API_RESPONSE_CACHE_PREFIX + encodeURIComponent(API_URL + path)));
+    // Reads stay independent so simultaneous screen requests do not queue behind
+    // one another. Writes and invalidation remain serialized, and the generation
+    // check in apiFetch discards a read that raced with a mutation.
+    const raw = await AsyncStorage.getItem(API_RESPONSE_CACHE_PREFIX + encodeURIComponent(API_URL + path));
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     return isCachedApiResponse(parsed, path) ? parsed : null;
@@ -622,6 +713,7 @@ export function getHomeBootstrap() {
             const next: CachedHomeBootstrap = { apiUrl: API_URL, savedAt: Date.now(), value };
             homeBootstrapCache = next;
             void AsyncStorage.setItem(HOME_BOOTSTRAP_CACHE_KEY, JSON.stringify(next)).catch(() => undefined);
+            homeBootstrapListeners.forEach((listener) => listener(value));
             return value;
           })
           .finally(() => {
@@ -631,12 +723,21 @@ export function getHomeBootstrap() {
       return homeBootstrapRequest;
     };
 
-    if (cached && Date.now() - cached.savedAt < HOME_BOOTSTRAP_FRESH_MS) {
+    const cacheAge = cached ? Date.now() - cached.savedAt : Number.POSITIVE_INFINITY;
+    if (cached && cacheAge <= HOME_BOOTSTRAP_STALE_MS) {
+      if (cacheAge >= HOME_BOOTSTRAP_FRESH_MS) {
+        void refresh().catch(() => undefined);
+      }
       return cached.value;
     }
 
     return refresh();
   })();
+}
+
+export function subscribeHomeBootstrap(listener: (value: HomeBootstrapResponse) => void): () => void {
+  homeBootstrapListeners.add(listener);
+  return () => homeBootstrapListeners.delete(listener);
 }
 
 export function listSongs(options: { query?: string; perPage?: number } = {}) {
@@ -672,6 +773,19 @@ export function recordSongView(identifier: string, visitorId: string) {
 
 export function listCharts() {
   return apiFetch<{ data: Chart[]; meta: { date: string; refresh_minutes: number } }>('/v1/charts');
+}
+
+export function listBanners(options: { perPage?: number; daily?: boolean; limit?: number } = {}) {
+  const params = new URLSearchParams();
+  if (options.perPage) params.set('per_page', String(options.perPage));
+  if (options.daily) params.set('daily', '1');
+  if (options.limit) params.set('limit', String(options.limit));
+  const query = params.toString();
+  return apiFetch<Page<Banner>>('/v1/banners' + (query ? '?' + query : ''));
+}
+
+export function getHomeDiscovery() {
+  return apiFetch<{ data: HomeDiscovery; meta: { date: string; refresh_minutes: number } }>('/v1/home/discovery');
 }
 
 export function getChart(slug: string) {
@@ -800,10 +914,10 @@ export function listUserPlaylists() {
   return apiFetch<{ data: { id: string; name: string; slug: string; cover_url: string | null; song_count: number }[] }>('/v1/me/playlists');
 }
 
-export function createUserPlaylist(name: string) {
+export function createUserPlaylist(name: string, visibility: 'public' | 'private' = 'public') {
   return apiFetch<{ data: { id: string; name: string; slug: string; cover_url: string | null; song_count: number } }>(
     '/v1/me/playlists',
-    jsonRequest({ name }),
+    jsonRequest({ name, visibility }),
   );
 }
 
@@ -874,16 +988,27 @@ export function verifyPhoneLoginOtp(phone: string, code: string) {
   );
 }
 
-export async function getAudioSource(song: Song, qualityId?: string | null) {
+export async function getAudioSource(
+  song: Song,
+  qualityId?: string | null,
+  purpose: 'stream' | 'download' = 'stream',
+) {
   const identifier = song.slug || song.id;
   const qualities = song.audio_qualities ?? [];
   const authUser = await getSavedAuthUser();
   const isPremium = Number(authUser?.is_premium ?? 0) === 1;
   const selectedQuality = qualityId
     ? qualities.find((quality) => quality.quality_id === qualityId)
-    : qualities.find((quality) => quality.available !== false && !quality.premium_only)
+    : qualities.find((quality) => quality.available !== false && !quality.premium_only
+      && (purpose === 'download' ? Boolean(quality.download_url || quality.audio_url) : Boolean(quality.audio_url)))
       ?? (isPremium ? qualities.find((quality) => quality.available !== false) : undefined);
-  if (selectedQuality?.available === false || (qualityId && selectedQuality && !selectedQuality.audio_url)) {
+  const selectedQualityUrl = purpose === 'download'
+    ? selectedQuality?.download_url || selectedQuality?.audio_url
+    : selectedQuality?.audio_url;
+  if (qualityId && !selectedQuality) {
+    throw new Error('Không tìm thấy chất lượng âm thanh đã chọn.');
+  }
+  if (selectedQuality?.available === false || (qualityId && selectedQuality && !selectedQualityUrl)) {
     throw new Error('NCT có thông tin chất lượng VIP nhưng chưa trả luồng phát/tải cho yêu cầu này.');
   }
   if (selectedQuality?.premium_only && !isPremium) {
@@ -892,14 +1017,19 @@ export async function getAudioSource(song: Song, qualityId?: string | null) {
   if (song.premium_only && !isPremium && !song.preview_url) {
     throw new Error('Bài hát này yêu cầu tài khoản VIP để nghe đầy đủ.');
   }
+  if (purpose === 'download' && song.premium_only && !isPremium) {
+    throw new Error('Tải bài hát này cần tài khoản VIP.');
+  }
   if (qualities.some((quality) => quality.available !== false)
     && !qualities.some((quality) => quality.available !== false && !quality.premium_only)
     && !isPremium && !song.preview_url) {
     throw new Error('Bài hát này chỉ có chất lượng VIP.');
   }
-  let uri = song.premium_only && !isPremium
-    ? song.preview_url
-    : selectedQuality?.audio_url || song.audio_url || song.stream_url || song.source_url || song.preview_url;
+  let uri = purpose === 'download'
+    ? selectedQualityUrl || song.download_url || song.audio_url || song.stream_url || song.source_url
+    : song.premium_only && !isPremium
+      ? song.preview_url
+      : selectedQualityUrl || song.audio_url || song.stream_url || song.source_url || song.preview_url;
   if (!uri) {
     uri = API_URL + '/v1/songs/' + encodeURIComponent(identifier) + '/audio';
   } else if (uri.startsWith('/v1/')) {
@@ -937,6 +1067,10 @@ export function getSubscriptionPlans() {
   return apiFetch<{ data: SubscriptionPlanRecord[] }>('/v1/subscription-plans');
 }
 
+export function getVipPaymentMethods() {
+  return apiFetch<{ data: VipPaymentGatewayOption[] }>('/v1/vip/payment-methods', { cache: 'no-store' });
+}
+
 export function createVipCheckout(planId: string, method: VipPaymentMethod) {
   return apiFetch<{ message: string; data: VipCheckoutOrder }>(
     '/v1/vip/checkout',
@@ -945,5 +1079,12 @@ export function createVipCheckout(planId: string, method: VipPaymentMethod) {
 }
 
 export function getVipTransactions(page = 1) {
-  return apiFetch<VipTransactionHistory>('/v1/vip/transactions?page=' + page);
+  return apiFetch<VipTransactionHistory>('/v1/vip/transactions?page=' + page, { cache: 'no-store' });
+}
+
+export function getVipPaymentStatus(paymentCode: string) {
+  return apiFetch<{ data: VipPaymentStatus }>(
+    '/v1/vip/transactions/' + encodeURIComponent(paymentCode),
+    { cache: 'no-store' },
+  );
 }

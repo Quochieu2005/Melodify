@@ -24,7 +24,7 @@ import {
   type Topic,
 } from '@/lib/api';
 import { formatTime } from '@/lib/lyrics';
-import { getRecentSongs, type RecentSong } from '@/lib/recent-history';
+import { listDownloadedSongs, toOfflineSong } from '@/lib/downloads';
 
 type QueueTab = 'queue' | 'related' | 'topics' | 'saved';
 
@@ -72,7 +72,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
 
   // Saved / Offline state
   const [savedSongs, setSavedSongs] = useState<Song[]>([]);
-  const [savedFilter, setSavedFilter] = useState<'recent' | 'favorites'>('recent');
+  const [savedFilter, setSavedFilter] = useState<'downloads' | 'favorites'>('downloads');
   const [loadingSaved, setLoadingSaved] = useState(false);
 
   // Load related songs based on current track
@@ -133,28 +133,19 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
     }
   }, [loadTopicSongs]);
 
-  // Load saved (recent offline & favorites)
-  const loadSaved = useCallback(async (filter: 'recent' | 'favorites') => {
+  // Load songs saved on this device or the user's favorites.
+  const loadSaved = useCallback(async (filter: 'downloads' | 'favorites') => {
     setLoadingSaved(true);
     try {
-      if (filter === 'recent') {
-        const recent: RecentSong[] = await getRecentSongs();
-        const mapped: Song[] = recent.map((r) => ({
-          id: r.id,
-          title: r.title,
-          slug: r.slug,
-          duration_seconds: r.duration_seconds,
-          artist: r.artist,
-          artists: r.artists,
-          publisher: r.publisher,
-          preview_url: r.preview_url,
-          cover_url: r.cover_url,
-          audio_url: r.audio_url,
-          stream_url: r.stream_url,
-          source_url: r.source_url,
-          is_favorite: r.is_favorite,
-        }));
-        setSavedSongs(mapped);
+      if (filter === 'downloads') {
+        const downloads = await listDownloadedSongs();
+        const uniqueSongs = new Map<string, Song>();
+        downloads.forEach((download) => {
+          if (!uniqueSongs.has(download.song.id)) {
+            uniqueSongs.set(download.song.id, toOfflineSong(download));
+          }
+        });
+        setSavedSongs(Array.from(uniqueSongs.values()));
       } else {
         const visitorId = await getVisitorId();
         const res = await listFavoriteSongs(visitorId);
@@ -198,7 +189,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
     void loadTopicSongs(t.slug, t.name);
   };
 
-  const handleSavedFilterChange = (filter: 'recent' | 'favorites') => {
+  const handleSavedFilterChange = (filter: 'downloads' | 'favorites') => {
     setSavedFilter(filter);
     void loadSaved(filter);
   };
@@ -661,19 +652,19 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
           {/* Subfilter Pills */}
           <View style={styles.savedFilterRow}>
             <Pressable
-              onPress={() => handleSavedFilterChange('recent')}
+              onPress={() => handleSavedFilterChange('downloads')}
               style={[
                 styles.savedFilterBtn,
-                savedFilter === 'recent' && styles.savedFilterBtnActive,
+                savedFilter === 'downloads' && styles.savedFilterBtnActive,
               ]}
             >
               <Text
                 style={[
                   styles.savedFilterText,
-                  savedFilter === 'recent' && styles.savedFilterTextActive,
+                  savedFilter === 'downloads' && styles.savedFilterTextActive,
                 ]}
               >
-                Đã nghe / Đã lưu offline
+                Đã tải về
               </Text>
             </Pressable>
 
@@ -707,13 +698,13 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
             ) : filterList(savedSongs).length === 0 ? (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>
-                  {savedFilter === 'recent'
-                    ? 'Chưa có bài hát đã lưu trên thiết bị'
+                  {savedFilter === 'downloads'
+                    ? 'Chưa có bài hát tải về'
                     : 'Chưa có bài hát yêu thích'}
                 </Text>
                 <Text style={styles.emptySub}>
-                  {savedFilter === 'recent'
-                    ? 'Các bài hát bạn nghe sẽ tự động được lưu offline vào bộ nhớ tạm của máy!'
+                  {savedFilter === 'downloads'
+                    ? 'Bài hát chỉ xuất hiện ở đây sau khi bạn tải về thiết bị.'
                     : 'Bấm biểu tượng trái tim khi đang nghe để lưu bài hát vào đây.'}
                 </Text>
               </View>

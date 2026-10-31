@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
-import { getHomeBootstrap } from '@/lib/api';
+import { listGenres, listTopics, subscribeCatalogResponse } from '@/lib/api';
 import {
   genreRecordToCard,
   pickDailyTopics,
@@ -22,18 +22,37 @@ export default function HomeTopicsSection() {
 
   useEffect(() => {
     let cancelled = false;
+    let genres: TopicCard[] = [];
+    let topicsFromApi: TopicCard[] = [];
+
+    const publishTopics = () => {
+      if (cancelled) return;
+      setTopics(pickDailyTopics([...genres, ...topicsFromApi], 12, dateKey));
+      setError('');
+      setIsLoading(false);
+    };
+
+    const unsubscribeGenres = subscribeCatalogResponse<Awaited<ReturnType<typeof listGenres>>>(
+      '/v1/genres?per_page=20',
+      (response) => { genres = response.data.map(genreRecordToCard); publishTopics(); },
+    );
+    const unsubscribeTopics = subscribeCatalogResponse<Awaited<ReturnType<typeof listTopics>>>(
+      '/v1/topics?per_page=20',
+      (response) => { topicsFromApi = response.data.map(topicRecordToCard); publishTopics(); },
+    );
 
     const loadDailyTopics = async () => {
       try {
-        const response = await getHomeBootstrap();
-        const allTopics = [
-          ...response.data.genres.map(genreRecordToCard),
-          ...response.data.topics.map(topicRecordToCard),
-        ];
+        const [genresResult, topicsResult] = await Promise.allSettled([
+          listGenres({ perPage: 20 }),
+          listTopics({ perPage: 20 }),
+        ]);
+        if (genresResult.status === 'fulfilled') genres = genresResult.value.data.map(genreRecordToCard);
+        if (topicsResult.status === 'fulfilled') topicsFromApi = topicsResult.value.data.map(topicRecordToCard);
 
         if (!cancelled) {
-          setTopics(pickDailyTopics(allTopics, 12, dateKey));
-          setError('');
+          setTopics(pickDailyTopics([...genres, ...topicsFromApi], 12, dateKey));
+          setError(genresResult.status === 'rejected' && topicsResult.status === 'rejected' ? 'Không thể tải chủ đề lúc này.' : '');
         }
       } catch {
         if (!cancelled) {
@@ -46,7 +65,11 @@ export default function HomeTopicsSection() {
     };
 
     void loadDailyTopics();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      unsubscribeGenres();
+      unsubscribeTopics();
+    };
   }, [dateKey]);
 
   return (

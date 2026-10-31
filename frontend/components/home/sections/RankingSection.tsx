@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { ChartCard } from '@/components/charts';
-import { getHomeBootstrap, type ChartRecord } from '@/lib/api';
+import { listCharts, subscribeCatalogResponse, type ChartRecord } from '@/lib/api';
 
 import styles from './RankingSection.module.css';
 
@@ -15,10 +15,14 @@ export default function RankingSection() {
 
   useEffect(() => {
     let cancelled = false;
-    getHomeBootstrap()
-      .then((response) => { if (!cancelled) setRequest({ charts: response.data.charts || [], loading: false, error: '' }); })
+    const unsubscribe = subscribeCatalogResponse<Awaited<ReturnType<typeof listCharts>>>(
+      '/v1/charts',
+      (response) => { if (!cancelled) setRequest({ charts: response.data || [], loading: false, error: '' }); },
+    );
+    listCharts()
+      .then((response) => { if (!cancelled) setRequest({ charts: response.data || [], loading: false, error: '' }); })
       .catch(() => { if (!cancelled) setRequest({ charts: [], loading: false, error: 'Không thể tải bảng xếp hạng.' }); });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; unsubscribe(); };
   }, []);
 
   if (!request.loading && !request.error && populatedCharts.length === 0) return null;

@@ -26,7 +26,7 @@ class VipPaymentGatewayService
         $required = match ($gateway) {
             'momo' => ['partner_code', 'access_key', 'secret_key', 'api_url', 'ipn_url', 'redirect_url'],
             'vnpay' => ['tmn_code', 'hash_secret', 'payment_url', 'return_url', 'ipn_url'],
-            'zalopay' => ['app_id', 'key1', 'key2', 'create_url', 'callback_url'],
+            'zalopay' => ['app_id', 'key1', 'key2', 'create_url', 'query_url', 'callback_url'],
             default => [],
         };
 
@@ -59,9 +59,13 @@ class VipPaymentGatewayService
             $providerUrl = match ($gateway) {
                 'momo' => $settings['api_url'] ?? '',
                 'vnpay' => $settings['payment_url'] ?? '',
+                'zalopay' => $settings['create_url'] ?? '',
                 default => $settings['create_url'] ?? '',
             };
-            foreach ([...$callbackUrls, $payments['return_url'], $providerUrl] as $url) {
+            $providerUrls = $gateway === 'zalopay'
+                ? [$providerUrl, $settings['query_url'] ?? '']
+                : [$providerUrl];
+            foreach ([...$callbackUrls, $payments['return_url'], ...$providerUrls] as $url) {
                 if (parse_url((string) $url, PHP_URL_SCHEME) !== 'https') {
                     return false;
                 }
@@ -296,6 +300,38 @@ class VipPaymentGatewayService
         }
 
         return hash_equals(hash_hmac('sha256', $data, (string) $settings['key2']), $provided);
+    }
+
+    /**
+     * Query the provider's canonical order status. A browser redirect alone is
+     * never treated as proof of payment; only a signed callback or this server
+     * to server result may settle a ZaloPay order.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function queryZaloPayOrder(Payment $payment): ?array
+    {
+        if ($payment->method !== 'zalopay'
+            || blank($payment->gateway_order_id)
+            || ! $this->isConfigured('zalopay')) {
+            return null;
+        }
+
+        $settings = config('services.zalopay');
+        $appId = (string) $settings['app_id'];
+        $appTransId = (string) $payment->gateway_order_id;
+        $signatureData = implode('|', [$appId, $appTransId, (string) $settings['key1']]);
+        $payload = [
+            'app_id' => (int) $settings['app_id'],
+            'app_trans_id' => $appTransId,
+            'mac' => hash_hmac('sha256', $signatureData, (string) $settings['key1']),
+        ];
+
+        $response = Http::asJson()->acceptJson()->connectTimeout(4)->timeout(10)
+            ->post((string) $settings['query_url'], $payload);
+        $body = $response->json();
+
+        return $response->successful() && is_array($body) ? $body : null;
     }
 
     private function signMomoCreate(array $payload, string $accessKey, string $secretKey): string

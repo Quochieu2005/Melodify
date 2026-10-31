@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   Image,
   ImageBackground,
@@ -13,10 +14,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { useRouter } from 'expo-router';
 
-import { useMusic } from '@/components/music';
+import { useMusic, useMusicControls } from '@/components/music';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { getVisitorId, toggleSongFavorite } from '@/lib/api';
+import { downloadSong } from '@/lib/downloads';
 import { formatTime } from '@/lib/lyrics';
 import { QueueBottomSheet } from './QueueBottomSheet';
 import { SyncedLyricsView } from './SyncedLyricsView';
@@ -36,7 +39,9 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
   const styles = useAdaptiveStyles(baseStyles);
   const theme = useTheme();
   const mode = useThemeMode();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { selectedQualityId } = useMusicControls();
   const {
     track,
     isPlaying,
@@ -55,6 +60,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
   const [queueSheetOpen, setQueueSheetOpen] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [activeTopTab, setActiveTopTab] = useState<'forYou' | 'downloaded'>('forYou');
+  const [downloadBusy, setDownloadBusy] = useState(false);
 
   if (!track) {
     return null;
@@ -87,6 +93,19 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
       // Keep state
     } finally {
       setFavoriteBusy(false);
+    }
+  };
+
+  const handleDownloadTrack = async () => {
+    if (!track || downloadBusy) return;
+    setDownloadBusy(true);
+    try {
+      const downloaded = await downloadSong(track, selectedQualityId);
+      Alert.alert('Đã tải về', `${track.title} đã được lưu trên thiết bị (${downloaded.qualityLabel}).`);
+    } catch (error) {
+      Alert.alert('Không thể tải bài hát', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+    } finally {
+      setDownloadBusy(false);
     }
   };
 
@@ -282,7 +301,13 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                     </Text>
                   </Pressable>
 
-                  <Pressable onPress={() => setActiveTopTab('downloaded')}>
+                  <Pressable
+                    onPress={() => {
+                      setActiveTopTab('downloaded');
+                      onClose();
+                      router.push('/downloads' as never);
+                    }}
+                  >
                     <Text
                       style={[
                         styles.topTabLabel,
@@ -418,8 +443,15 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                 {/* Right group: Download & 3-Gạch Menu Button */}
                 <View style={styles.actionGroupRight}>
                   {/* Download */}
-                  <Pressable style={styles.actionIconBtn}>
-                    <AppIcon name="download" color={theme.text} size={22} />
+                  <Pressable
+                    accessibilityLabel="Tải bài hát về thiết bị"
+                    disabled={downloadBusy}
+                    onPress={() => void handleDownloadTrack()}
+                    style={[styles.actionIconBtn, downloadBusy && { opacity: 0.6 }]}
+                  >
+                    {downloadBusy
+                      ? <ActivityIndicator color={theme.text} size="small" />
+                      : <AppIcon name="download" color={theme.text} size={22} />}
                   </Pressable>
 
                   {/* 3-Gạch Hamburger Menu Button (Mở Bottom Sheet Ảnh 3) */}

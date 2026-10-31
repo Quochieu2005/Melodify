@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 
-import { getHomeBootstrap } from '@/lib/api';
+import { listAlbums, subscribeCatalogResponse } from '@/lib/api';
 import { albumRecordToCard, pickDailyAlbums, type AlbumCard } from '@/lib/album-data';
 import { ArtistLink } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
@@ -38,13 +38,19 @@ export default function AlbumHotSection() {
 
   useEffect(() => {
     let cancelled = false;
+    const applyAlbums = (response: Awaited<ReturnType<typeof listAlbums>>) => {
+      const cards = response.data.map(albumRecordToCard);
+      if (!cancelled) setAlbums(pickDailyAlbums(cards, 6, dateKey));
+    };
+    const unsubscribe = subscribeCatalogResponse<Awaited<ReturnType<typeof listAlbums>>>(
+      '/v1/albums?per_page=12',
+      applyAlbums,
+    );
 
     const loadDailyAlbums = async () => {
       try {
-        const response = await getHomeBootstrap();
-        const cards = response.data.albums.map(albumRecordToCard);
-
-        if (!cancelled) setAlbums(pickDailyAlbums(cards, 6, dateKey));
+        const response = await listAlbums({ perPage: 12 });
+        applyAlbums(response);
       } catch {
         if (!cancelled) setAlbums([]);
       } finally {
@@ -53,7 +59,7 @@ export default function AlbumHotSection() {
     };
 
     void loadDailyAlbums();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; unsubscribe(); };
   }, [dateKey]);
 
   if (!isLoading && albums.length === 0) return null;

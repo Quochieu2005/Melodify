@@ -420,20 +420,160 @@ export const AUTH_TOKEN_STORAGE_KEY = "melodify_access_token";
 export const AUTH_USER_STORAGE_KEY = "melodify_auth_user";
 export const AUTH_REQUIRED_EVENT = "melodify-auth-required";
 const LIBRARY_IMPORT_SESSION_KEY = "melodify_library_imported";
+const HOME_BOOTSTRAP_PERSISTED_CACHE_KEY = `melodify:public-cache:v1:${API_URL}:home-bootstrap`;
+const HOME_BOOTSTRAP_PERSISTED_MAX_AGE = 24 * 60 * 60 * 1_000;
+const CATALOG_PERSISTED_CACHE_PREFIX = `melodify:public-cache:v1:${API_URL}:endpoint:`;
+const CATALOG_PERSISTED_MAX_AGE = 24 * 60 * 60 * 1_000;
+const CATALOG_PERSISTED_MAX_ENTRIES = 12;
+const CATALOG_PERSISTED_MAX_CHARS = 1_500_000;
+const CATALOG_RESPONSE_EVENT = "melodify-catalog-response";
+const PERSISTED_CATALOG_PATHS = new Set([
+  "/v1/banners?daily=1&limit=5",
+  "/v1/topics?per_page=20",
+  "/v1/genres?per_page=20",
+  "/v1/albums?per_page=12",
+  "/v1/playlists?per_page=20",
+  "/v1/home/discovery",
+  "/v1/charts",
+  "/v1/artists/trending",
+]);
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
-const catalogResponseCache = new Map<string, { expiresAt: number; value: unknown }>();
+const catalogResponseCache = new Map<string, { expiresAt: number; staleUntil: number; value: unknown }>();
 let catalogCacheGeneration = 0;
 
 function clearCatalogResponseCache() {
   catalogCacheGeneration += 1;
   catalogResponseCache.clear();
   inFlightGetRequests.clear();
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(HOME_BOOTSTRAP_PERSISTED_CACHE_KEY);
+    } catch {
+      // Browser storage may be disabled or full; the in-memory cache still works.
+    }
+  }
+}
+
+function readPersistedHomeBootstrapCache(): { savedAt: number; value: unknown } | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(HOME_BOOTSTRAP_PERSISTED_CACHE_KEY);
+    if (!raw) return null;
+
+    const cached = JSON.parse(raw) as { savedAt?: unknown; value?: unknown };
+    if (typeof cached.savedAt !== "number" || !("value" in cached)) {
+      window.localStorage.removeItem(HOME_BOOTSTRAP_PERSISTED_CACHE_KEY);
+      return null;
+    }
+
+    if (Date.now() - cached.savedAt > HOME_BOOTSTRAP_PERSISTED_MAX_AGE) {
+      window.localStorage.removeItem(HOME_BOOTSTRAP_PERSISTED_CACHE_KEY);
+      return null;
+    }
+
+    return { savedAt: cached.savedAt, value: cached.value };
+  } catch {
+    return null;
+  }
+}
+
+function persistHomeBootstrapCache(value: unknown) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(HOME_BOOTSTRAP_PERSISTED_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      value,
+    }));
+  } catch {
+    // Browser storage may be disabled or full; the in-memory cache still works.
+  }
+}
+
+function canPersistCatalogPath(path: string): boolean {
+  return PERSISTED_CATALOG_PATHS.has(path);
+}
+
+function persistedCatalogCacheKey(path: string): string {
+  return CATALOG_PERSISTED_CACHE_PREFIX + encodeURIComponent(path);
+}
+
+function readPersistedCatalogCache(path: string): { savedAt: number; value: unknown } | null {
+  if (typeof window === "undefined" || !canPersistCatalogPath(path)) return null;
+  const key = persistedCatalogCacheKey(path);
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { savedAt?: unknown; value?: unknown };
+    if (typeof cached.savedAt !== "number" || !("value" in cached)) {
+      window.localStorage.removeItem(key);
+      return null;
+    }
+    if (Date.now() - cached.savedAt > CATALOG_PERSISTED_MAX_AGE) {
+      window.localStorage.removeItem(key);
+      return null;
+    }
+    return { savedAt: cached.savedAt, value: cached.value };
+  } catch {
+    return null;
+  }
+}
+
+function persistCatalogCache(path: string, value: unknown) {
+  if (typeof window === "undefined" || !canPersistCatalogPath(path)) return;
+  try {
+    const serialized = JSON.stringify({ savedAt: Date.now(), value });
+    if (serialized.length > CATALOG_PERSISTED_MAX_CHARS) return;
+    window.localStorage.setItem(persistedCatalogCacheKey(path), serialized);
+
+    const keys: string[] = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key?.startsWith(CATALOG_PERSISTED_CACHE_PREFIX)) keys.push(key);
+    }
+    if (keys.length > CATALOG_PERSISTED_MAX_ENTRIES) {
+      const entries = keys.map((key) => {
+        try {
+          const item = JSON.parse(window.localStorage.getItem(key) || "null") as { savedAt?: number } | null;
+          return { key, savedAt: typeof item?.savedAt === "number" ? item.savedAt : 0 };
+        } catch {
+          return { key, savedAt: 0 };
+        }
+      }).sort((left, right) => left.savedAt - right.savedAt);
+      for (const entry of entries.slice(0, keys.length - CATALOG_PERSISTED_MAX_ENTRIES)) {
+        window.localStorage.removeItem(entry.key);
+      }
+    }
+  } catch {
+    // Browser storage can be disabled or full; in-memory and network paths remain available.
+  }
+}
+
+export function subscribeCatalogResponse<T>(path: string, listener: (value: T) => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const handleResponse = (event: Event) => {
+    const detail = (event as CustomEvent<{ path: string; value: unknown }>).detail;
+    if (detail?.path === path) listener(detail.value as T);
+  };
+  window.addEventListener(CATALOG_RESPONSE_EVENT, handleResponse);
+  return () => window.removeEventListener(CATALOG_RESPONSE_EVENT, handleResponse);
 }
 
 function catalogCacheTtl(path: string): number {
   const pathname = path.split('?')[0];
   if (pathname === '/v1/search') return 8_000;
-  return /^\/v1\/(home\/bootstrap|topics|genres|albums|playlists|artists|artists\/trending|charts(?:\/[^/]+)?|subscription-plans)$/.test(pathname) ? 30_000 : 0;
+  return /^\/v1\/(banners|home\/bootstrap|topics|genres|albums|playlists|artists|artists\/trending|charts(?:\/[^/]+)?|subscription-plans)$/.test(pathname) ? 30_000 : 0;
+}
+
+function catalogCacheStaleWindow(path: string): number {
+  if (path.split('?')[0] === '/v1/home/bootstrap') return HOME_BOOTSTRAP_PERSISTED_MAX_AGE;
+  if (/^\/v1\/(topics|genres)(\?|$)/.test(path)) return 24 * 60 * 60 * 1_000;
+  if (path.startsWith('/v1/banners?daily=1')) return 6 * 60 * 60 * 1_000;
+  if (/^\/v1\/(albums|playlists)(\?|$)/.test(path)) return 30 * 60 * 1_000;
+  if (path === '/v1/charts' || path === '/v1/home/discovery') return 5 * 60 * 1_000;
+  if (path === '/v1/artists/trending') return 15 * 60 * 1_000;
+  return 30_000;
 }
 const songFavoriteStates = new Map<string, boolean>();
 const importedLibraries = new Map<string, Promise<void>>();
@@ -614,22 +754,51 @@ export async function apiFetch<T>(
   const shareRequest = method === "GET" && !Object.keys(init ?? {}).some((key) => key !== 'method');
   const ttl = shareRequest && typeof window !== "undefined" ? catalogCacheTtl(path) : 0;
   const generation = catalogCacheGeneration;
+  let hasStaleValue = false;
+  let staleValue: unknown;
 
   if (ttl > 0) {
-    const cached = catalogResponseCache.get(requestKey);
+    let cached = catalogResponseCache.get(requestKey);
+    if (!cached && method === "GET" && path === "/v1/home/bootstrap") {
+      const persisted = readPersistedHomeBootstrapCache();
+      if (persisted) {
+        cached = {
+          expiresAt: persisted.savedAt + ttl,
+          staleUntil: persisted.savedAt + HOME_BOOTSTRAP_PERSISTED_MAX_AGE,
+          value: persisted.value,
+        };
+        catalogResponseCache.set(requestKey, cached);
+      }
+    }
+    if (!cached && method === "GET" && canPersistCatalogPath(path)) {
+      const persisted = readPersistedCatalogCache(path);
+      if (persisted) {
+        cached = {
+          expiresAt: persisted.savedAt + ttl,
+          staleUntil: persisted.savedAt + ttl + catalogCacheStaleWindow(path),
+          value: persisted.value,
+        };
+        catalogResponseCache.set(requestKey, cached);
+      }
+    }
     if (cached && cached.expiresAt > Date.now()) return cached.value as T;
-    catalogResponseCache.delete(requestKey);
+    if (cached && cached.staleUntil > Date.now()) {
+      hasStaleValue = true;
+      staleValue = cached.value;
+    } else {
+      catalogResponseCache.delete(requestKey);
+    }
   }
   if (shareRequest) {
     const pending = inFlightGetRequests.get(requestKey);
-    if (pending) return pending as Promise<T>;
+    if (pending) return hasStaleValue ? staleValue as T : pending as Promise<T>;
   }
 
   const request = (async () => {
     if (storedToken && (/^\/v1\/(me\/library|favorites\/songs)/.test(path) || /\/(favorite)(\?|$)/.test(path) || /^\/v1\/(songs|albums|playlists)\/[^/]+(?:\?|$)/.test(path))) {
       await importLegacyLibrary(storedToken);
     }
-    const response = await fetch(`${API_URL}${path}`, {
+    const requestInit: RequestInit = {
       ...init,
       cache: "no-store",
       headers: {
@@ -637,7 +806,10 @@ export async function apiFetch<T>(
         ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
         ...init?.headers,
       },
-    });
+    };
+    const response = method === "GET"
+      ? await fetchWithApiTimeout(`${API_URL}${path}`, requestInit, init?.signal)
+      : await fetch(`${API_URL}${path}`, requestInit);
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -664,7 +836,21 @@ export async function apiFetch<T>(
     const payload = await response.json() as T;
     if (method !== "GET" && !/\/view(?:\?|$)/.test(path)) clearCatalogResponseCache();
     if (ttl > 0 && generation === catalogCacheGeneration) {
-      catalogResponseCache.set(requestKey, { expiresAt: Date.now() + ttl, value: payload });
+      const expiresAt = Date.now() + ttl;
+      catalogResponseCache.set(requestKey, {
+        expiresAt,
+        staleUntil: expiresAt + catalogCacheStaleWindow(path),
+        value: payload,
+      });
+      if (method === "GET" && path === "/v1/home/bootstrap") {
+        persistHomeBootstrapCache(payload);
+      }
+      if (method === "GET" && canPersistCatalogPath(path)) {
+        persistCatalogCache(path, payload);
+      }
+      if (method === "GET" && ttl > 0 && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(CATALOG_RESPONSE_EVENT, { detail: { path, value: payload } }));
+      }
       if (catalogResponseCache.size > 80) catalogResponseCache.delete(catalogResponseCache.keys().next().value!);
     }
     if (method !== "GET" && (/\/(favorite|follow)(\?|$)/.test(path) || path.startsWith("/v1/me/playlists"))) notifyLibraryChanged();
@@ -674,12 +860,47 @@ export async function apiFetch<T>(
   if (!shareRequest) return request;
 
   inFlightGetRequests.set(requestKey, request);
+  if (hasStaleValue) {
+    void request.finally(() => {
+      if (inFlightGetRequests.get(requestKey) === request) {
+        inFlightGetRequests.delete(requestKey);
+      }
+    }).catch(() => undefined);
+    return staleValue as T;
+  }
   try {
     return await request;
   } finally {
     if (inFlightGetRequests.get(requestKey) === request) {
       inFlightGetRequests.delete(requestKey);
     }
+  }
+}
+
+async function fetchWithApiTimeout(url: string, init: RequestInit, callerSignal?: AbortSignal | null) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort();
+  if (callerSignal?.aborted) abortFromCaller();
+  else callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 15_000);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (reason) {
+    if (timedOut && !callerSignal?.aborted) {
+      throw new Error(`API phản hồi quá lâu (15 giây): ${url}. Kiểm tra Backend rồi thử lại.`);
+    }
+    if (reason instanceof TypeError) {
+      throw new Error(`Không kết nối được API (${API_URL}). Kiểm tra mạng và trạng thái Backend rồi thử lại.`);
+    }
+    throw reason;
+  } finally {
+    clearTimeout(timeoutId);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
   }
 }
 

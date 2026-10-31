@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Modal,
   Pressable,
@@ -13,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMusicControls } from '@/components/music';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { getVisitorId, listSongs, toggleSongFavorite, type Song } from '@/lib/api';
+import { downloadSong } from '@/lib/downloads';
 import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -26,6 +29,7 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
   const theme = useTheme();
   const {
     track,
+    selectedQualityId,
     queue,
     currentIndex,
     repeatMode,
@@ -36,6 +40,7 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
 
   const [favorite, setFavorite] = useState(Boolean(track?.is_favorite));
   const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [downloadBusy, setDownloadBusy] = useState(false);
   const [suggestions, setSuggestions] = useState<Song[]>([]);
 
   // Load recommended suggestions if queue is short
@@ -62,6 +67,19 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
       // Keep state
     } finally {
       setFavoriteBusy(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!track || downloadBusy) return;
+    setDownloadBusy(true);
+    try {
+      const downloaded = await downloadSong(track, selectedQualityId);
+      Alert.alert('Đã tải về', `${track.title} đã được lưu trên thiết bị (${downloaded.qualityLabel}).`);
+    } catch (error) {
+      Alert.alert('Không thể tải bài hát', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+    } finally {
+      setDownloadBusy(false);
     }
   };
 
@@ -159,11 +177,18 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
             </Pressable>
 
             {/* Download */}
-            <Pressable style={styles.actionBtn}>
+            <Pressable
+              accessibilityLabel="Tải bài hát về thiết bị"
+              disabled={downloadBusy}
+              onPress={() => void handleDownload()}
+              style={[styles.actionBtn, downloadBusy && { opacity: 0.55 }]}
+            >
               <View style={styles.circleIcon}>
-                <AppIcon name="download" color={theme.textSecondary} size={20} />
+                {downloadBusy
+                  ? <ActivityIndicator color={theme.primary} size="small" />
+                  : <AppIcon name="download" color={theme.textSecondary} size={20} />}
               </View>
-              <Text style={styles.actionLabel}>Tải về</Text>
+              <Text style={styles.actionLabel}>{downloadBusy ? 'Đang tải' : 'Tải về'}</Text>
             </Pressable>
           </View>
 

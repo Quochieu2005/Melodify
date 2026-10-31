@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   TextInput,
@@ -28,6 +29,7 @@ import {
   type AuthUser,
 } from '@/lib/api';
 import { getRecentSongs } from '@/lib/recent-history';
+import { listDownloadedSongs } from '@/lib/downloads';
 import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -43,7 +45,8 @@ export function MyProfileScreen() {
   const [authChecking, setAuthChecking] = useState(true);
   const [activeTab, setActiveTab] = useState<ProfileTab>('created');
   const [recentCount, setRecentCount] = useState<number>(0);
-  const profileScrollRef = useRef<ScrollView | null>(null);
+  const [downloadCount, setDownloadCount] = useState<number>(0);
+  const profileScrollRef = useRef<ScrollViewInstance | null>(null);
   const profileSectionOffsets = useRef<Record<ProfileTab, number>>({
     created: 0,
     favorite_playlists: 0,
@@ -61,6 +64,7 @@ export function MyProfileScreen() {
   // Create playlist modal
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [newPlaylistVisibility, setNewPlaylistVisibility] = useState<'public' | 'private'>('public');
   const [creatingBusy, setCreatingBusy] = useState(false);
 
   // Settings & search
@@ -89,6 +93,11 @@ export function MyProfileScreen() {
         setRecentCount(items.length);
       }
     });
+    void listDownloadedSongs().then((items) => {
+      if (active) setDownloadCount(items.length);
+    }).catch(() => {
+      if (active) setDownloadCount(0);
+    });
     return () => {
       active = false;
     };
@@ -107,8 +116,9 @@ export function MyProfileScreen() {
     if (!name) return;
     setCreatingBusy(true);
     try {
-      await createUserPlaylist(name);
+      await createUserPlaylist(name, newPlaylistVisibility);
       setNewPlaylistName('');
+      setNewPlaylistVisibility('public');
       setCreateModalOpen(false);
       await reload();
       Alert.alert('Thành công', `Đã tạo playlist "${name}"`);
@@ -276,7 +286,7 @@ export function MyProfileScreen() {
               </Pressable>
 
               <Pressable
-                onPress={() => Alert.alert('Nhạc Đã Tải', 'Bạn chưa có track nào đã tải.')}
+                onPress={() => router.push('/downloads' as never)}
                 style={[styles.actionCard, styles.grayCard]}
               >
                 <View style={styles.cardIconBox}>
@@ -284,7 +294,7 @@ export function MyProfileScreen() {
                 </View>
                 <View style={styles.cardTextBox}>
                   <Text numberOfLines={1} style={styles.cardTitle}>Nhạc Đã Tải</Text>
-                  <Text numberOfLines={1} style={styles.cardSubtitle}>0 track</Text>
+                  <Text numberOfLines={1} style={styles.cardSubtitle}>{downloadCount} bài hát</Text>
                 </View>
               </Pressable>
 
@@ -634,11 +644,11 @@ export function MyProfileScreen() {
                   <Text numberOfLines={1} style={styles.cardSubtitle}>Khám phá sự kiện</Text>
                 </View>
               </Pressable>
-              <Pressable onPress={() => Alert.alert('Nhạc đã tải', 'Bạn chưa có track nào đã tải.')} style={[styles.actionCard, styles.grayCard]}>
+              <Pressable onPress={() => router.push('/downloads' as never)} style={[styles.actionCard, styles.grayCard]}>
                 <View style={styles.cardIconBox}><AppIcon name="download" color="#00A8B5" size={24} /></View>
                 <View style={styles.cardTextBox}>
                   <Text numberOfLines={1} style={styles.cardTitle}>Nhạc Đã Tải</Text>
-                  <Text numberOfLines={1} style={styles.cardSubtitle}>0 track</Text>
+                  <Text numberOfLines={1} style={styles.cardSubtitle}>{downloadCount} bài hát</Text>
                 </View>
               </Pressable>
               <Pressable onPress={() => router.push('/recent' as never)} style={[styles.actionCard, styles.grayCard]}>
@@ -739,6 +749,48 @@ export function MyProfileScreen() {
               placeholderTextColor="#94A3B8"
               style={styles.modalInput}
             />
+            <View style={styles.visibilityOptions}>
+              <Pressable
+                accessibilityRole="radio"
+                accessibilityState={{ checked: newPlaylistVisibility === 'public' }}
+                onPress={() => setNewPlaylistVisibility('public')}
+                style={[
+                  styles.visibilityOption,
+                  newPlaylistVisibility === 'public' && styles.visibilityOptionSelected,
+                ]}
+              >
+                <View style={[
+                  styles.visibilityRadio,
+                  newPlaylistVisibility === 'public' && styles.visibilityRadioSelected,
+                ]}>
+                  {newPlaylistVisibility === 'public' ? <View style={styles.visibilityRadioDot} /> : null}
+                </View>
+                <View style={styles.visibilityCopy}>
+                  <Text style={styles.visibilityTitle}>Công khai</Text>
+                  <Text style={styles.visibilityDescription}>Mọi người có thể tìm và xem playlist</Text>
+                </View>
+              </Pressable>
+              <Pressable
+                accessibilityRole="radio"
+                accessibilityState={{ checked: newPlaylistVisibility === 'private' }}
+                onPress={() => setNewPlaylistVisibility('private')}
+                style={[
+                  styles.visibilityOption,
+                  newPlaylistVisibility === 'private' && styles.visibilityOptionSelected,
+                ]}
+              >
+                <View style={[
+                  styles.visibilityRadio,
+                  newPlaylistVisibility === 'private' && styles.visibilityRadioSelected,
+                ]}>
+                  {newPlaylistVisibility === 'private' ? <View style={styles.visibilityRadioDot} /> : null}
+                </View>
+                <View style={styles.visibilityCopy}>
+                  <Text style={styles.visibilityTitle}>Riêng tư</Text>
+                  <Text style={styles.visibilityDescription}>Chỉ bạn có thể nghe playlist</Text>
+                </View>
+              </Pressable>
+            </View>
             <View style={styles.modalButtonsRow}>
               <Pressable
                 onPress={() => setCreateModalOpen(false)}
@@ -1426,6 +1478,55 @@ const baseStyles = StyleSheet.create({
     paddingHorizontal: 14,
     fontSize: 14,
     color: '#0F172A',
+  },
+  visibilityOptions: {
+    gap: 8,
+  },
+  visibilityOption: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+  },
+  visibilityOptionSelected: {
+    borderColor: '#00B5AD',
+    backgroundColor: '#F0FDFA',
+  },
+  visibilityRadio: {
+    width: 20,
+    height: 20,
+    borderWidth: 1.5,
+    borderColor: '#94A3B8',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  visibilityRadioSelected: {
+    borderColor: '#00B5AD',
+  },
+  visibilityRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#00B5AD',
+  },
+  visibilityCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  visibilityTitle: {
+    color: '#0F172A',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  visibilityDescription: {
+    color: '#64748B',
+    fontSize: 12,
   },
   modalButtonsRow: {
     flexDirection: 'row',

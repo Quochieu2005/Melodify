@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import {
   Alert,
   Modal,
@@ -24,10 +25,14 @@ import {
   createVipCheckout,
   getSavedAuthUser,
   getSubscriptionPlans,
+  getVipPaymentMethods,
+  getVipPaymentStatus,
   getVipTransactions,
+  refreshSavedAuthUser,
   type AuthUser,
   type VipCheckoutOrder,
   type VipPaymentMethod,
+  type VipPaymentStatus,
   type VipTransactionRecord,
 } from '@/lib/api';
 
@@ -50,15 +55,33 @@ const VIP_BENEFITS = [
   },
 ];
 
-const PAYMENT_METHODS: { id: VipPaymentMethod; name: string; icon: string }[] = [
-  { id: 'momo', name: 'Ví MoMo', icon: 'M' },
-  { id: 'zalopay', name: 'ZaloPay', icon: 'Z' },
-  { id: 'vnpay', name: 'VNPAY-QR', icon: 'V' },
-  { id: 'atm', name: 'Thẻ ATM nội địa', icon: 'A' },
-  { id: 'card', name: 'Visa / MasterCard', icon: '💳' },
-  { id: 'viettelpay', name: 'Viettel Money', icon: 'VT' },
-  { id: 'shopeepay', name: 'ShopeePay', icon: 'S' },
-];
+const PAYMENT_METHOD_ICONS: Record<VipPaymentMethod, string> = {
+  momo: 'M',
+  vnpay: 'V',
+  zalopay: 'Z',
+};
+
+function isSuccessfulPayment(status?: string | null) {
+  return ['success', 'paid', 'completed'].includes((status ?? '').toLowerCase());
+}
+
+function paymentStatusLabel(status: string) {
+  switch (status.toLowerCase()) {
+    case 'success':
+    case 'paid':
+    case 'completed':
+      return 'Thanh toán thành công';
+    case 'failed':
+      return 'Thanh toán thất bại';
+    case 'cancelled':
+    case 'canceled':
+      return 'Đã hủy';
+    case 'processing':
+      return 'Đang xác nhận';
+    default:
+      return 'Đang chờ thanh toán';
+  }
+}
 
 function formatPrice(amount: number) {
   return amount.toLocaleString('vi-VN') + ' đ';
@@ -74,6 +97,8 @@ export function VipScreen() {
   const [selectedMethod, setSelectedMethod] = useState<VipPaymentMethod>('momo');
   const [checkingOut, setCheckingOut] = useState(false);
   const [orderResult, setOrderResult] = useState<VipCheckoutOrder | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<VipPaymentStatus | null>(null);
+  const [checkingPaymentCode, setCheckingPaymentCode] = useState('');
   const [checkoutError, setCheckoutError] = useState('');
 
   // Transactions state
@@ -85,9 +110,22 @@ export function VipScreen() {
     void getSavedAuthUser().then(setUser);
   }, []);
 
+  const {
+    data: availablePaymentMethods,
+    loading: loadingMethods,
+    error: methodsError,
+    reload: reloadPaymentMethods,
+  } = useRemoteData(async () => {
+    const response = await getVipPaymentMethods();
+    return response.data.filter((method) => method.id in PAYMENT_METHOD_ICONS);
+  });
+  const paymentMethods = availablePaymentMethods ?? [];
+
   const { data: plans, loading, error, reload } = useRemoteData(
     async () => (await getSubscriptionPlans()).data
   );
+  const selectedGateway = paymentMethods.find((method) => method.id === selectedMethod && method.enabled)
+    ?? paymentMethods.find((method) => method.enabled);
 
   // derived active plan below
 
@@ -102,6 +140,47 @@ export function VipScreen() {
       setHistoryError(err instanceof Error ? err.message : 'Không thể tải lịch sử giao dịch.');
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  const refreshPaymentStatus = async (paymentCode: string) => {
+    const response = await getVipPaymentStatus(paymentCode);
+    setPaymentStatus(response.data);
+    if (isSuccessfulPayment(response.data.status)) {
+      const refreshedUser = await refreshSavedAuthUser();
+      setUser(refreshedUser);
+    }
+    return response.data;
+  };
+
+  const handleCheckPayment = async (paymentCode: string) => {
+    setCheckingPaymentCode(paymentCode);
+    setCheckoutError('');
+    setHistoryError('');
+    try {
+      await refreshPaymentStatus(paymentCode);
+      if (tab === 'history') await loadHistory();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Không thể kiểm tra trạng thái thanh toán.';
+      if (tab === 'history') setHistoryError(message);
+      else setCheckoutError(message);
+    } finally {
+      setCheckingPaymentCode('');
+    }
+  };
+
+  const handleOpenPaymentPage = async (order: VipCheckoutOrder | null = orderResult) => {
+    if (!order?.checkout_url) return;
+    setCheckoutError('');
+    try {
+      await openBrowserAsync(order.checkout_url, {
+        presentationStyle: WebBrowserPresentationStyle.AUTOMATIC,
+      });
+      await handleCheckPayment(order.payment_code);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      if (__DEV__) console.warn('Unable to open VIP checkout page', message);
+      setCheckoutError('Đơn hàng đã được tạo nhưng không mở được cổng thanh toán. Hãy thử mở lại.');
     }
   };
 
@@ -130,11 +209,18 @@ export function VipScreen() {
       return;
     }
 
+    if (!selectedGateway) {
+      setCheckoutError('Phương thức này hiện chưa được cấu hình. Hãy chọn một phương thức đang hoạt động.');
+      return;
+    }
+
     setCheckingOut(true);
     setCheckoutError('');
     try {
-      const response = await createVipCheckout(activePlanId, selectedMethod);
+      const response = await createVipCheckout(activePlanId, selectedGateway.id);
+      setPaymentStatus(null);
       setOrderResult(response.data);
+      void handleOpenPaymentPage(response.data);
     } catch (err) {
       setCheckoutError(err instanceof Error ? err.message : 'Giao dịch không thành công.');
     } finally {
@@ -268,43 +354,59 @@ export function VipScreen() {
             {/* Payment Methods */}
             <View style={styles.section}>
               <SectionHeading title="Phương thức thanh toán" />
-              <View style={styles.methodsGrid}>
-                {PAYMENT_METHODS.map((method) => {
-                  const isSelected = selectedMethod === method.id;
-                  return (
-                    <Pressable
-                      key={method.id}
-                      onPress={() => setSelectedMethod(method.id)}
-                      style={[
-                        styles.methodCard,
-                        isSelected && styles.methodCardActive,
-                        surface.card,
-                      ]}
-                    >
-                      <View
+              {loadingMethods ? (
+                <StateMessage loading />
+              ) : methodsError ? (
+                <StateMessage error={methodsError} onRetry={() => void reloadPaymentMethods()} />
+              ) : paymentMethods.length === 0 ? (
+                <StateMessage empty="Chưa có cổng thanh toán nào được cấu hình." />
+              ) : (
+                <View style={styles.methodsGrid}>
+                  {paymentMethods.map((method) => {
+                    const isSelected = selectedGateway?.id === method.id;
+                    return (
+                      <Pressable
+                        key={method.id}
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: !method.enabled, selected: isSelected }}
+                        disabled={!method.enabled}
+                        onPress={() => setSelectedMethod(method.id)}
                         style={[
-                          styles.methodIconBox,
-                          isSelected && styles.methodIconBoxActive,
+                          styles.methodCard,
+                          isSelected && styles.methodCardActive,
+                          !method.enabled && styles.methodCardDisabled,
+                          surface.card,
                         ]}
                       >
-                        <Text style={styles.methodIconText}>{method.icon}</Text>
-                      </View>
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.methodName,
-                          isSelected && styles.methodNameActive,
-                        ]}
-                      >
-                        {method.name}
-                      </Text>
-                      {isSelected ? (
-                        <Text style={styles.checkMark}>✓</Text>
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
+                        <View
+                          style={[
+                            styles.methodIconBox,
+                            isSelected && styles.methodIconBoxActive,
+                          ]}
+                        >
+                          <Text style={styles.methodIconText}>{PAYMENT_METHOD_ICONS[method.id]}</Text>
+                        </View>
+                        <View style={styles.methodCopy}>
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.methodName,
+                              isSelected && styles.methodNameActive,
+                              !method.enabled && styles.methodNameDisabled,
+                            ]}
+                          >
+                            {method.label}
+                          </Text>
+                          <Text style={styles.methodAvailability}>
+                            {method.enabled ? 'Sẵn sàng thanh toán' : 'Chưa cấu hình merchant'}
+                          </Text>
+                        </View>
+                        {isSelected ? <Text style={styles.checkMark}>✓</Text> : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
             </View>
 
             {checkoutError ? (
@@ -314,7 +416,7 @@ export function VipScreen() {
             {/* Checkout Button */}
             <View style={styles.checkoutWrap}>
               <PrimaryButton
-                disabled={checkingOut || !selectedPlan}
+                disabled={checkingOut || !selectedPlan || !selectedGateway || loadingMethods}
                 label={
                   checkingOut
                     ? 'Đang tạo giao dịch…'
@@ -347,13 +449,15 @@ export function VipScreen() {
                       <View
                         style={[
                           styles.statusBadge,
-                          tx.status === 'completed'
+                          isSuccessfulPayment(tx.status)
                             ? styles.statusSuccess
-                            : styles.statusPending,
+                            : ['failed', 'cancelled', 'canceled'].includes(tx.status.toLowerCase())
+                              ? styles.statusFailure
+                              : styles.statusPending,
                         ]}
                       >
                         <Text style={styles.statusText}>
-                          {tx.status === 'completed' ? 'Thành công' : 'Chờ xác nhận'}
+                          {paymentStatusLabel(tx.status)}
                         </Text>
                       </View>
                     </View>
@@ -366,6 +470,18 @@ export function VipScreen() {
                       </Text>
                       <Text style={styles.txAmount}>{formatPrice(tx.amount)}</Text>
                     </View>
+                    {['pending', 'processing'].includes(tx.status.toLowerCase()) ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={checkingPaymentCode === tx.payment_code}
+                        onPress={() => void handleCheckPayment(tx.payment_code)}
+                        style={styles.txCheckButton}
+                      >
+                        <Text style={styles.txCheckButtonText}>
+                          {checkingPaymentCode === tx.payment_code ? 'Đang kiểm tra…' : 'Kiểm tra thanh toán'}
+                        </Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 ))}
               </View>
@@ -385,9 +501,13 @@ export function VipScreen() {
               <View style={styles.modalCrown}>
                 <AppIcon name="crown" color="#FFC40E" size={32} />
               </View>
-              <Text style={styles.modalTitle}>Tạo yêu cầu thành công!</Text>
+              <Text style={styles.modalTitle}>
+                {isSuccessfulPayment(paymentStatus?.status) ? 'Thanh toán thành công!' : 'Đơn thanh toán đã tạo'}
+              </Text>
               <Text style={styles.modalSub}>
-                Giao dịch nâng cấp VIP của bạn đang chờ hệ thống xác nhận.
+                {paymentStatus
+                  ? paymentStatusLabel(paymentStatus.status)
+                  : 'Hoàn tất thanh toán ở cổng của nhà cung cấp để kích hoạt VIP.'}
               </Text>
 
               <View style={styles.modalInfoBox}>
@@ -408,15 +528,35 @@ export function VipScreen() {
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>Phương thức:</Text>
                   <Text style={styles.modalValue}>
-                    {PAYMENT_METHODS.find((m) => m.id === orderResult?.method)?.name ||
+                    {paymentMethods.find((method) => method.id === orderResult?.method)?.label ||
                       orderResult?.method}
                   </Text>
                 </View>
               </View>
 
               <Text style={styles.modalNotice}>
-                Sau khi xác nhận thanh toán, tài khoản của bạn sẽ tự động được nâng cấp lên VIP.
+                VIP chỉ được kích hoạt sau khi backend xác nhận giao dịch thành công.
               </Text>
+
+              {checkoutError ? <Text style={styles.errorText}>{checkoutError}</Text> : null}
+
+              <View style={styles.modalActionsRow}>
+                <Pressable
+                  onPress={() => void handleOpenPaymentPage()}
+                  style={[styles.modalBtn, styles.modalSecondaryBtn]}
+                >
+                  <Text style={[styles.modalBtnText, styles.modalSecondaryBtnText]}>Mở cổng thanh toán</Text>
+                </Pressable>
+                <Pressable
+                  disabled={checkingPaymentCode === orderResult?.payment_code}
+                  onPress={() => orderResult && void handleCheckPayment(orderResult.payment_code)}
+                  style={styles.modalBtn}
+                >
+                  <Text style={styles.modalBtnText}>
+                    {checkingPaymentCode === orderResult?.payment_code ? 'Đang kiểm tra…' : 'Kiểm tra thanh toán'}
+                  </Text>
+                </Pressable>
+              </View>
 
               <Pressable
                 onPress={() => {
@@ -634,6 +774,13 @@ const baseStyles = StyleSheet.create({
     borderColor: '#00D3E5',
     backgroundColor: '#203332',
   },
+  methodCardDisabled: {
+    opacity: 0.55,
+  },
+  methodCopy: {
+    flex: 1,
+    gap: 3,
+  },
   methodIconBox: {
     width: 32,
     height: 32,
@@ -658,6 +805,13 @@ const baseStyles = StyleSheet.create({
   },
   methodNameActive: {
     color: '#00D3E5',
+  },
+  methodNameDisabled: {
+    color: '#AEB8B3',
+  },
+  methodAvailability: {
+    color: '#8F9994',
+    fontSize: 10,
   },
   checkMark: {
     color: '#00D3E5',
@@ -704,6 +858,9 @@ const baseStyles = StyleSheet.create({
   statusPending: {
     backgroundColor: 'rgba(255, 196, 14, 0.2)',
   },
+  statusFailure: {
+    backgroundColor: 'rgba(255, 100, 100, 0.18)',
+  },
   statusText: {
     color: '#F5F7F6',
     fontSize: 10,
@@ -727,6 +884,18 @@ const baseStyles = StyleSheet.create({
   txAmount: {
     color: '#FFC40E',
     fontSize: 13,
+    fontWeight: '800',
+  },
+  txCheckButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 211, 229, 0.12)',
+  },
+  txCheckButtonText: {
+    color: '#00D3E5',
+    fontSize: 11,
     fontWeight: '800',
   },
   modalOverlay: {
@@ -805,6 +974,10 @@ const baseStyles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 16,
   },
+  modalActionsRow: {
+    width: '100%',
+    gap: 8,
+  },
   modalBtn: {
     width: '100%',
     minHeight: 44,
@@ -818,5 +991,11 @@ const baseStyles = StyleSheet.create({
     color: '#082326',
     fontSize: 14,
     fontWeight: '900',
+  },
+  modalSecondaryBtn: {
+    backgroundColor: '#35413C',
+  },
+  modalSecondaryBtnText: {
+    color: '#F5F7F6',
   },
 });

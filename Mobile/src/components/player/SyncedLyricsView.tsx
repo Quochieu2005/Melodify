@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import {
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   View,
@@ -28,7 +29,7 @@ export function SyncedLyricsView({
   containerHeight = 440,
 }: SyncedLyricsViewProps) {
   const styles = useAdaptiveStyles(baseStyles);
-  const scrollViewRef = useRef<ScrollView | null>(null);
+  const scrollViewRef = useRef<ScrollViewInstance | null>(null);
   const lineOffsets = useRef<{ [index: number]: number }>({});
 
   // Auto-scroll so the active line is pinned down by 1 sentence (Ảnh 3):

@@ -393,7 +393,7 @@ class VipPaymentGatewayTest extends TestCase
             'app_id' => 12345,
             'app_trans_id' => (string) $payment->gateway_order_id,
             'app_time' => now()->valueOf(),
-            'app_user' => 'vip-buyer',
+            'app_user' => (string) $payment->user_id,
             'amount' => $amount,
             'embed_data' => '{}',
             'item' => '[]',

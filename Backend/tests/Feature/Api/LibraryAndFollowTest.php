@@ -325,7 +325,7 @@ class LibraryAndFollowTest extends TestCase
         $this->freezeTime();
         $song = Song::query()->create(['title' => 'Cached Play', 'slug' => 'cached-play', 'status' => 'published']);
         $suffix = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.Cache::store('file')->get('api:catalog-content-revision:v1');
-        $keys = ['api:home-discovery:v2:', 'api:home-bootstrap:v19:', 'api:trending-artists:v8:', 'api:charts:v7:full:'];
+        $keys = ['api:home-discovery:v3:', 'api:home-bootstrap:v20:', 'api:trending-artists:v8:', 'api:charts:v8:5:', 'api:charts:v8:50:'];
         foreach ($keys as $key) {
             Cache::store('file')->put($key.$suffix, ['cached' => true], now()->addMinute());
         }
@@ -383,7 +383,7 @@ class LibraryAndFollowTest extends TestCase
         }
 
         $revision = (string) Cache::store('file')->get('api:catalog-content-revision:v1', 'initial');
-        $cacheKey = 'api:home-bootstrap:v19:'.now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.$revision;
+        $cacheKey = 'api:home-bootstrap:v20:'.now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.$revision;
         $trendingCacheKey = 'api:trending-artists:v8:'.now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.$revision;
         Cache::store('file')->forget($cacheKey);
         Cache::store('file')->forget($trendingCacheKey);
