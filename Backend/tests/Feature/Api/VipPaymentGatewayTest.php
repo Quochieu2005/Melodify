@@ -52,6 +52,10 @@ class VipPaymentGatewayTest extends TestCase
             'services.zalopay.key2' => 'zalopay-test-key2',
             'services.zalopay.create_url' => 'https://sb-openapi.zalopay.vn/v2/create',
             'services.zalopay.callback_url' => 'https://api.example.test/api/v1/vip/payments/zalopay/callback',
+            'services.sepay.merchant_id' => 'MERCHANT_TEST',
+            'services.sepay.secret_key' => 'sepay-test-secret',
+            'services.sepay.checkout_url' => 'https://pay.sepay.vn/v1/checkout/init',
+            'services.sepay.ipn_url' => 'https://api.example.test/api/v1/vip/payments/sepay/ipn',
         ]);
 
         $this->user = User::query()->create([
@@ -104,7 +108,9 @@ class VipPaymentGatewayTest extends TestCase
             ->assertJsonPath('data.1.label', 'VNPAY')
             ->assertJsonPath('data.1.enabled', true)
             ->assertJsonPath('data.2.id', 'zalopay')
-            ->assertJsonPath('data.2.enabled', true);
+            ->assertJsonPath('data.2.enabled', true)
+            ->assertJsonPath('data.3.id', 'sepay')
+            ->assertJsonPath('data.3.enabled', true);
 
         config(['services.vnpay.return_url' => '']);
         $this->getJson('/api/v1/vip/payment-methods')
@@ -143,6 +149,37 @@ class VipPaymentGatewayTest extends TestCase
         ])->assertStatus(503)->assertJsonPath('code', 'payment_gateway_unavailable');
 
         $this->assertSame(0, Payment::query()->count());
+    }
+
+    public function test_sepay_checkout_and_authenticated_ipn_activate_vip(): void
+    {
+        $response = $this->withHeaders($this->headers)->postJson('/api/v1/vip/checkout', [
+            'plan_id' => (string) $this->plan->getKey(), 'method' => 'sepay',
+        ]);
+        $response->assertCreated()->assertJsonPath('data.method', 'sepay');
+        $paymentCode = $response->json('data.payment_code');
+        Http::fake([
+            'https://pgapi.sepay.vn/v1/order*' => Http::response(['data' => []]),
+            'https://pay.sepay.vn/v1/checkout/init' => Http::response('', 302, [
+                'Location' => 'https://pay.sepay.vn/v1/checkout?order_id=SEPAY-ORDER-1',
+            ]),
+        ]);
+        $this->get($response->json('data.checkout_url'))
+            ->assertRedirect('https://pay.sepay.vn/v1/checkout?order_id=SEPAY-ORDER-1');
+        Http::assertSent(fn (HttpRequest $request): bool => $request->url() === 'https://pay.sepay.vn/v1/checkout/init'
+            && $request->method() === 'POST'
+            && ($request->data()['payment_method'] ?? null) === 'BANK_TRANSFER'
+            && filled($request->data()['signature'] ?? null));
+
+        $payload = [
+            'notification_type' => 'ORDER_PAID',
+            'order' => ['order_invoice_number' => $paymentCode, 'order_status' => 'CAPTURED', 'order_currency' => 'VND', 'order_amount' => '12000.00'],
+            'transaction' => ['transaction_status' => 'APPROVED', 'transaction_amount' => '12000', 'transaction_id' => 'SEPAY-TRANS-1'],
+        ];
+        $this->postJson('/api/v1/vip/payments/sepay/ipn', $payload)->assertForbidden();
+        $this->withHeaders(['X-Secret-Key' => 'sepay-test-secret'])->postJson('/api/v1/vip/payments/sepay/ipn', $payload)->assertOk();
+        $this->assertSame('success', Payment::query()->where('payment_code', $paymentCode)->firstOrFail()->status);
+        $this->assertTrue($this->user->fresh()->hasPremiumAccess());
     }
 
     public function test_momo_checkout_creates_signed_provider_request_and_returns_a_trusted_https_pay_url(): void
@@ -206,6 +243,74 @@ class VipPaymentGatewayTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.status', 'success')
             ->assertJsonPath('data.method', 'momo');
+    }
+
+    public function test_new_vip_purchase_extends_existing_manual_vip_expiration(): void
+    {
+        $expiry = now()->addDays(10)->startOfSecond();
+        $this->user->forceFill(['is_premium' => 1, 'vip_expires_at' => $expiry])->save();
+        $payment = $this->pendingPayment('momo');
+
+        $this->postJson('/api/v1/vip/payments/momo/ipn', $this->signedMomoCallback($payment, 0, 'MOMO-EXTEND-1'))
+            ->assertNoContent();
+
+        $subscription = Subscription::query()->where('payment_id', (string) $payment->getKey())->firstOrFail();
+        $this->assertTrue($subscription->start_date->equalTo($expiry));
+        $this->assertTrue($this->user->fresh()->vip_expires_at->equalTo($expiry->copy()->addMonth()));
+    }
+
+    public function test_one_month_purchase_preserves_the_remaining_days_on_active_vip(): void
+    {
+        $expiry = now()->addDays(3)->startOfSecond();
+        $this->user->forceFill(['is_premium' => 1, 'vip_expires_at' => $expiry])->save();
+        Subscription::query()->create([
+            'user_id' => (string) $this->user->getKey(),
+            'plan_id' => (string) $this->plan->getKey(),
+            'start_date' => now()->subDays(27),
+            'end_date' => $expiry,
+            'status' => 'active',
+            'auto_renew' => false,
+            'amount' => 12000,
+        ]);
+        $payment = $this->pendingPayment('momo');
+
+        $this->postJson('/api/v1/vip/payments/momo/ipn', $this->signedMomoCallback($payment, 0, 'MOMO-THREE-DAYS-1'))
+            ->assertNoContent();
+
+        $subscription = Subscription::query()->where('payment_id', (string) $payment->getKey())->firstOrFail();
+        $this->assertTrue($subscription->start_date->equalTo($expiry));
+        $this->assertTrue($subscription->end_date->equalTo($expiry->copy()->addMonth()));
+        $this->assertTrue($this->user->fresh()->vip_expires_at->equalTo($expiry->copy()->addMonth()));
+    }
+
+    public function test_three_month_vip_purchase_stacks_after_existing_one_month_subscription(): void
+    {
+        $firstPayment = $this->pendingPayment('momo');
+        $this->postJson('/api/v1/vip/payments/momo/ipn', $this->signedMomoCallback($firstPayment, 0, 'MOMO-FIRST-1'))
+            ->assertNoContent();
+        $firstEnd = Subscription::query()->where('payment_id', (string) $firstPayment->getKey())->firstOrFail()->end_date;
+
+        $this->plan->forceFill(['billing_months' => 3])->save();
+        $secondPayment = $this->pendingPayment('momo');
+        $this->postJson('/api/v1/vip/payments/momo/ipn', $this->signedMomoCallback($secondPayment, 0, 'MOMO-SECOND-1'))
+            ->assertNoContent();
+
+        $secondSubscription = Subscription::query()->where('payment_id', (string) $secondPayment->getKey())->firstOrFail();
+        $this->assertTrue($secondSubscription->start_date->equalTo($firstEnd));
+        $this->assertTrue($secondSubscription->end_date->equalTo($firstEnd->copy()->addMonths(3)));
+        $this->assertTrue($this->user->fresh()->vip_expires_at->equalTo($firstEnd->copy()->addMonths(3)));
+    }
+
+    public function test_paid_package_does_not_remove_permanent_vip_access(): void
+    {
+        $this->user->forceFill(['is_premium' => 1, 'vip_expires_at' => null])->save();
+        $payment = $this->pendingPayment('momo');
+
+        $this->postJson('/api/v1/vip/payments/momo/ipn', $this->signedMomoCallback($payment, 0, 'MOMO-LIFETIME-1'))
+            ->assertNoContent();
+
+        $this->assertNull($this->user->fresh()->vip_expires_at);
+        $this->assertTrue($this->user->fresh()->hasPremiumAccess());
     }
 
     public function test_vnpay_ipn_checks_signature_and_amount_before_settlement(): void

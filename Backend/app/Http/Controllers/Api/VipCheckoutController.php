@@ -24,6 +24,52 @@ class VipCheckoutController extends Controller
         return response()->json(['data' => $gateways->methods()]);
     }
 
+    public function sePayCheckout(string $paymentCode, VipPaymentGatewayService $gateways)
+    {
+        $payment = Payment::query()->where('payment_code', $paymentCode)->where('method', 'sepay')->firstOrFail();
+        abort_unless($gateways->isConfigured('sepay'), 404);
+        if ($payment->status !== 'pending') {
+            return $this->redirectToResult($paymentCode);
+        }
+
+        try {
+            if ($gateways->querySePayOrder($payment)) {
+                return $this->redirectToResult($paymentCode);
+            }
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return $this->redirectToResult($paymentCode);
+        }
+
+        $checkoutUrl = $gateways->startSePayCheckout($payment);
+        abort_unless($checkoutUrl, 502, 'SePay chưa khởi tạo được đơn. Vui lòng quay lại Melodify và tạo mã thanh toán mới.');
+
+        return redirect()->away($checkoutUrl);
+    }
+
+    public function sePayIpn(Request $request, VipPaymentGatewayService $gateways, VipPaymentSettlementService $settlements): JsonResponse
+    {
+        $payload = $request->all();
+        if (! $gateways->verifySePayIpn($payload, (string) config('services.sepay.secret_key'))) {
+            return response()->json(['message' => 'SePay authentication failed'], 403);
+        }
+        $order = $payload['order'] ?? [];
+        $payment = Payment::query()->where('payment_code', (string) ($order['order_invoice_number'] ?? ''))->where('method', 'sepay')->first();
+        if (! $payment) return response()->json(['message' => 'Order not found'], 404);
+        if (strtoupper((string) ($order['order_currency'] ?? '')) !== 'VND'
+            || (int) round((float) ($order['order_amount'] ?? -1)) !== (int) round((float) $payment->amount)) {
+            return response()->json(['message' => 'Invalid amount or currency'], 409);
+        }
+        if (($payload['notification_type'] ?? '') === 'ORDER_PAID'
+            && ($order['order_status'] ?? '') === 'CAPTURED'
+            && ($payload['transaction']['transaction_status'] ?? '') === 'APPROVED'
+            && (int) round((float) ($payload['transaction']['transaction_amount'] ?? -1)) === (int) round((float) $payment->amount)) {
+            $settlements->markPaid($payment, (string) ($payload['transaction']['transaction_id'] ?? ''), $payload);
+        }
+        return response()->json(['success' => true]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $payments = Payment::query()
@@ -105,6 +151,33 @@ class VipCheckoutController extends Controller
             $payment->refresh()->load(['details.plan', 'subscription']);
         }
 
+        if ($payment->method === 'sepay' && $payment->status === 'pending') {
+            try {
+                if (Cache::add('vip:sepay:query:'.(string) $payment->getKey(), true, 8)) {
+                    $providerOrder = $gateways->querySePayOrder($payment);
+                    $transactions = $providerOrder['transactions'] ?? [];
+                    $approved = collect(is_array($transactions) ? $transactions : [])->first(fn ($transaction) => is_array($transaction)
+                        && ($transaction['transaction_status'] ?? '') === 'APPROVED'
+                        && strtoupper((string) ($transaction['transaction_currency'] ?? '')) === 'VND'
+                        && (int) round((float) ($transaction['transaction_amount'] ?? -1)) === (int) round((float) $payment->amount)
+                        && filled($transaction['id'] ?? $transaction['transaction_id'] ?? null));
+
+                    if (is_array($providerOrder)
+                        && hash_equals((string) $payment->payment_code, (string) ($providerOrder['order_invoice_number'] ?? ''))
+                        && ($providerOrder['order_status'] ?? '') === 'CAPTURED'
+                        && strtoupper((string) ($providerOrder['order_currency'] ?? '')) === 'VND'
+                        && (int) round((float) ($providerOrder['order_amount'] ?? -1)) === (int) round((float) $payment->amount)
+                        && is_array($approved)) {
+                        $settlements->markPaid($payment, (string) ($approved['transaction_id'] ?? $approved['id']), $providerOrder);
+                    }
+                }
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+
+            $payment->refresh()->load(['details.plan', 'subscription']);
+        }
+
         return response()->json(['data' => [
             'payment_code' => (string) $payment->payment_code,
             'status' => (string) $payment->status,
@@ -121,7 +194,7 @@ class VipCheckoutController extends Controller
     {
         $validated = $request->validate([
             'plan_id' => ['required', 'string', 'max:120'],
-            'method' => ['required', 'string', Rule::in(['momo', 'vnpay', 'zalopay'])],
+            'method' => ['required', 'string', Rule::in(['momo', 'vnpay', 'zalopay', 'sepay'])],
         ]);
 
         if (! $gateways->isConfigured($validated['method'])) {

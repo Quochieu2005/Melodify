@@ -75,6 +75,10 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
         ->name('vip.payments.vnpay.return');
     Route::post('/vip/payments/zalopay/callback', [VipCheckoutController::class, 'zalopayCallback'])
         ->name('vip.payments.zalopay.callback');
+    Route::get('/vip/payments/sepay/checkout/{paymentCode}', [VipCheckoutController::class, 'sePayCheckout'])
+        ->where('paymentCode', '[A-Za-z0-9_-]{1,100}')->name('vip.payments.sepay.checkout');
+    Route::post('/vip/payments/sepay/ipn', [VipCheckoutController::class, 'sePayIpn'])
+        ->name('vip.payments.sepay.ipn');
 
     Route::post('/auth/social/browser/start', [BrowserSocialAuthController::class, 'start'])
         ->middleware('throttle:10,1');
