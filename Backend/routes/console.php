@@ -4,6 +4,7 @@ use App\Mail\TestEmail;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -13,3 +14,5 @@ Artisan::command('mail:test {email}', function (string $email) {
     Mail::to($email)->send(new TestEmail($email));
     $this->info("Email sent to {$email}");
 })->purpose('Send a real email to verify SMTP configuration');
+
+Schedule::command('payments:expire-sepay')->everyMinute()->withoutOverlapping();

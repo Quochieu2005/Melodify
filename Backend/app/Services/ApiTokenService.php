@@ -76,6 +76,7 @@ class ApiTokenService
             'phone' => $user->phone,
             'avatar_url' => $user->avatar_url,
             'is_premium' => $user->hasPremiumAccess() ? 1 : 0,
+            'vip_expires_at' => $user->vip_expires_at?->toISOString(),
             'status' => $user->status ?? 'active',
             'created_at' => optional($user->created_at)->toISOString(),
             'google_connected' => filled($user->google_id),

@@ -4,8 +4,8 @@
 <div class="admin-page">
     <div class="admin-page-header">
         <div class="admin-page-header-main">
-            <h2 class="admin-page-title">Lịch sử giao dịch</h2>
-            <p class="admin-page-desc">Tra cứu thanh toán, giao dịch cổng thanh toán và thời hạn gói từ dữ liệu thực tế.</p>
+            <h2 class="admin-page-title">{{ $successfulOnly ? 'Thanh toán thành công' : 'Lịch sử giao dịch' }}</h2>
+            <p class="admin-page-desc">{{ $successfulOnly ? 'Danh sách các khoản thanh toán đã được xác nhận thành công.' : 'Tra cứu thanh toán, giao dịch cổng thanh toán và thời hạn gói từ dữ liệu thực tế.' }}</p>
         </div>
     </div>
 
@@ -19,7 +19,7 @@
     <div class="admin-table-card ant-card">
         <div class="admin-table-toolbar">
             <div><strong>Danh sách thanh toán</strong><span>{{ $payments->total() }} mục</span></div>
-            <form method="GET" action="{{ route('admin.payments.index') }}" class="admin-table-filter-form">
+            <form method="GET" action="{{ $successfulOnly ? route('admin.payments.successful') : route('admin.payments.index') }}" class="admin-table-filter-form">
                 <label class="admin-table-search">
                     <x-anticon name="search" aria-hidden="true" />
                     <input type="search" name="q" value="{{ $search ?? '' }}" maxlength="100" placeholder="Tìm payment, người dùng, gateway..." aria-label="Tìm kiếm thanh toán">

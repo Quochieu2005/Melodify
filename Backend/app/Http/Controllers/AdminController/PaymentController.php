@@ -14,12 +14,25 @@ class PaymentController extends Controller
 {
     public function index(?Request $request = null): View
     {
-        $request ??= request();
+        return $this->listing($request ?? request(), false);
+    }
+
+    public function successful(Request $request): View
+    {
+        return $this->listing($request, true);
+    }
+
+    private function listing(Request $request, bool $successfulOnly): View
+    {
         $filters = $request->validate([
             'q' => ['nullable', 'string', 'max:100', new PlainText()],
         ]);
         $search = trim((string) ($filters['q'] ?? ''));
         $query = Payment::query();
+        $successStatuses = ['success', 'paid', 'completed'];
+        if ($successfulOnly) {
+            $query->whereIn('status', $successStatuses);
+        }
 
         if ($search !== '') {
             $userIds = User::query()
@@ -63,7 +76,6 @@ class PaymentController extends Controller
             ->latest()
             ->paginate(15)
             ->withQueryString();
-        $successStatuses = ['success', 'paid', 'completed'];
         $successfulPayments = Payment::query()
             ->whereIn('status', $successStatuses)
             ->get(['amount']);
@@ -71,7 +83,7 @@ class PaymentController extends Controller
         $totalAmount = (float) $successfulPayments->sum(fn ($payment) => (float) ($payment->amount ?? 0));
         $pendingCount = Payment::query()->whereIn('status', ['pending', 'processing'])->count();
 
-        return view('Admin.payments.index', compact('payments', 'successfulPaymentCount', 'totalAmount', 'pendingCount', 'search'));
+        return view('Admin.payments.index', compact('payments', 'successfulPaymentCount', 'totalAmount', 'pendingCount', 'search', 'successfulOnly'));
     }
 
     public function show(string $id): View

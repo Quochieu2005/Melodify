@@ -133,6 +133,7 @@ Route::prefix('admin')->name('admin.')->middleware('admin.timing')->group(functi
 
         Route::middleware('admin.permission:billing.manage')->group(function () {
             Route::resource('subscriptions', SubscriptionController::class)->except('show');
+            Route::get('/payments/successful', [PaymentController::class, 'successful'])->name('payments.successful');
             Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
             Route::get('/payments/{payment}', [PaymentController::class, 'show'])->name('payments.show');
         });

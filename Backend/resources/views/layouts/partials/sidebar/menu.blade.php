@@ -192,10 +192,16 @@
             </li>
             @endif
             @if($currentAdmin?->hasAdminResourcePermission('payments', 'view'))
-            <li class="ant-menu-item {{ request()->is('admin/payments*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+            <li class="ant-menu-item {{ request()->routeIs('admin.payments.index') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
                 <a href="{{ url('/admin/payments') }}" class="ant-menu-title-content">
                     <x-anticon name="file-text" class="ant-menu-item-icon" />
                     <span class="ant-menu-title-text">Lịch sử giao dịch</span>
+                </a>
+            </li>
+            <li class="ant-menu-item {{ request()->is('admin/payments/successful') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
+                <a href="{{ route('admin.payments.successful') }}" class="ant-menu-title-content">
+                    <x-anticon name="check" class="ant-menu-item-icon" />
+                    <span class="ant-menu-title-text">Thanh toán thành công</span>
                 </a>
             </li>
             @endif

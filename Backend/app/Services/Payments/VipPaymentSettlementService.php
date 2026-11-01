@@ -48,9 +48,13 @@ class VipPaymentSettlementService
                     ->where('end_date', '>', $now)
                     ->orderByDesc('end_date')
                     ->first();
+                $currentExpiry = $user->hasPremiumAccess() ? $user->vip_expires_at : null;
                 $start = $latestActive?->end_date && $latestActive->end_date->greaterThan($now)
                     ? $latestActive->end_date->copy()
                     : $now->copy();
+                if ($currentExpiry && $currentExpiry->greaterThan($start)) {
+                    $start = $currentExpiry->copy();
+                }
                 $months = max(1, (int) ($plan->billing_months ?: 1));
                 $existing = Subscription::query()->create([
                     'user_id' => (string) $user->getKey(),
@@ -67,9 +71,10 @@ class VipPaymentSettlementService
             $expiresAt = $existing->end_date instanceof Carbon
                 ? $existing->end_date
                 : Carbon::parse($existing->end_date);
+            $permanentPremium = (int) ($user->is_premium ?? 0) === 1 && ! $user->vip_expires_at;
             $user->forceFill([
                 'is_premium' => 1,
-                'vip_expires_at' => $expiresAt,
+                'vip_expires_at' => $permanentPremium ? null : $expiresAt,
             ])->save();
 
             $payment->forceFill([

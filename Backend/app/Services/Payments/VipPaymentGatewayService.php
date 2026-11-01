@@ -16,6 +16,7 @@ class VipPaymentGatewayService
             ['id' => 'momo', 'label' => 'MoMo', 'enabled' => $this->isConfigured('momo')],
             ['id' => 'vnpay', 'label' => 'VNPAY', 'enabled' => $this->isConfigured('vnpay')],
             ['id' => 'zalopay', 'label' => 'Ví ZaloPay', 'enabled' => $this->isConfigured('zalopay')],
+            ['id' => 'sepay', 'label' => 'SePay', 'enabled' => $this->isConfigured('sepay')],
         ];
     }
 
@@ -27,6 +28,7 @@ class VipPaymentGatewayService
             'momo' => ['partner_code', 'access_key', 'secret_key', 'api_url', 'ipn_url', 'redirect_url'],
             'vnpay' => ['tmn_code', 'hash_secret', 'payment_url', 'return_url', 'ipn_url'],
             'zalopay' => ['app_id', 'key1', 'key2', 'create_url', 'query_url', 'callback_url'],
+            'sepay' => ['merchant_id', 'secret_key', 'checkout_url', 'ipn_url'],
             default => [],
         };
 
@@ -55,11 +57,13 @@ class VipPaymentGatewayService
                 'momo' => [$settings['redirect_url'] ?? '', $settings['ipn_url'] ?? ''],
                 'vnpay' => [$settings['return_url'] ?? '', $settings['ipn_url'] ?? ''],
                 'zalopay' => [$settings['callback_url'] ?? ''],
+                'sepay' => [$settings['ipn_url'] ?? ''],
             };
             $providerUrl = match ($gateway) {
                 'momo' => $settings['api_url'] ?? '',
                 'vnpay' => $settings['payment_url'] ?? '',
                 'zalopay' => $settings['create_url'] ?? '',
+                'sepay' => $settings['checkout_url'] ?? '',
                 default => $settings['create_url'] ?? '',
             };
             $providerUrls = $gateway === 'zalopay'
@@ -82,8 +86,99 @@ class VipPaymentGatewayService
             'momo' => $this->createMomoCheckout($payment),
             'vnpay' => $this->createVnpayCheckout($payment),
             'zalopay' => $this->createZaloPayCheckout($payment, $user),
+            'sepay' => $this->createSePayCheckout($payment, $user),
             default => throw new RuntimeException('Phương thức thanh toán không được hỗ trợ.'),
         };
+    }
+
+    private function createSePayCheckout(Payment $payment, User $user): array
+    {
+        abort_unless($this->isConfigured('sepay'), 503, 'SePay chưa được cấu hình trên máy chủ.');
+        $settings = config('services.sepay');
+        $resultUrl = $this->appendQueryParameters((string) config('services.payments.return_url'), [
+            'payment_code' => (string) $payment->payment_code,
+        ]);
+        $fields = [
+            'order_amount' => (string) (int) round((float) $payment->amount),
+            'merchant' => (string) $settings['merchant_id'],
+            'currency' => 'VND',
+            'operation' => 'PURCHASE',
+            'order_description' => 'Melodify VIP '.$payment->payment_code,
+            'order_invoice_number' => (string) $payment->payment_code,
+            'customer_id' => (string) $user->getKey(),
+            'payment_method' => 'BANK_TRANSFER',
+            'success_url' => $resultUrl,
+            'error_url' => $resultUrl,
+            'cancel_url' => $resultUrl,
+        ];
+        $signedFields = array_intersect_key($fields, array_flip([
+            'order_amount', 'merchant', 'currency', 'operation', 'order_description',
+            'order_invoice_number', 'customer_id', 'payment_method', 'success_url', 'error_url', 'cancel_url',
+        ]));
+        $signature = base64_encode(hash_hmac('sha256', implode(',', array_map(
+            static fn (string $key, string $value): string => $key.'='.$value,
+            array_keys($signedFields), array_values($signedFields),
+        )), (string) $settings['secret_key'], true));
+
+        return [
+            'checkout_url' => url('/api/v1/vip/payments/sepay/checkout/'.$payment->payment_code),
+            'request_id' => (string) $payment->payment_code,
+            'provider_order_id' => (string) $payment->payment_code,
+        ];
+    }
+
+    public function verifySePayIpn(array $payload, string $secret): bool
+    {
+        return $secret !== '' && hash_equals($secret, (string) request()->header('X-Secret-Key', ''));
+    }
+
+    public function sePayCheckoutForm(Payment $payment): array
+    {
+        $user = $payment->user;
+        $settings = config('services.sepay');
+        $resultUrl = $this->appendQueryParameters((string) config('services.payments.return_url'), [
+            'payment_code' => (string) $payment->payment_code,
+        ]);
+        $fields = [
+            'order_amount' => (string) (int) round((float) $payment->amount),
+            'merchant' => (string) $settings['merchant_id'],
+            'currency' => 'VND',
+            'operation' => 'PURCHASE',
+            'order_description' => 'Melodify VIP '.$payment->payment_code,
+            'order_invoice_number' => (string) $payment->payment_code,
+            'customer_id' => (string) $user->getKey(),
+            'payment_method' => 'BANK_TRANSFER',
+            'success_url' => $resultUrl,
+            'error_url' => $resultUrl,
+            'cancel_url' => $resultUrl,
+        ];
+        $signed = [];
+        foreach (['order_amount', 'merchant', 'currency', 'operation', 'order_description', 'order_invoice_number', 'customer_id', 'payment_method', 'success_url', 'error_url', 'cancel_url'] as $key) {
+            if (isset($fields[$key])) $signed[] = $key.'='.$fields[$key];
+        }
+
+        return ['action' => (string) $settings['checkout_url'], 'fields' => $fields + [
+            'signature' => base64_encode(hash_hmac('sha256', implode(',', $signed), (string) $settings['secret_key'], true)),
+        ]];
+    }
+
+    public function startSePayCheckout(Payment $payment): ?string
+    {
+        $form = $this->sePayCheckoutForm($payment);
+        $response = Http::asForm()->withOptions(['allow_redirects' => false])
+            ->connectTimeout(5)->timeout(15)
+            ->post($form['action'], $form['fields']);
+        if (! in_array($response->status(), [302, 303], true)) {
+            return null;
+        }
+
+        $checkoutUrl = (string) $response->header('Location', '');
+        $host = strtolower((string) parse_url($checkoutUrl, PHP_URL_HOST));
+        return parse_url($checkoutUrl, PHP_URL_SCHEME) === 'https'
+            && $host === 'pay.sepay.vn'
+            && str_starts_with((string) parse_url($checkoutUrl, PHP_URL_PATH), '/v1/checkout')
+            ? $checkoutUrl
+            : null;
     }
 
     private function createMomoCheckout(Payment $payment): array
@@ -332,6 +427,49 @@ class VipPaymentGatewayService
         $body = $response->json();
 
         return $response->successful() && is_array($body) ? $body : null;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function querySePayOrder(Payment $payment): ?array
+    {
+        if ($payment->method !== 'sepay' || blank($payment->payment_code) || ! $this->isConfigured('sepay')) {
+            return null;
+        }
+
+        $settings = config('services.sepay');
+        $baseUrl = rtrim((string) ($settings['api_url'] ?? ''), '/');
+        $auth = Http::withBasicAuth((string) $settings['merchant_id'], (string) $settings['secret_key'])
+            ->acceptJson()->connectTimeout(4)->timeout(8);
+        $list = $auth->get($baseUrl.'/v1/order', ['q' => (string) $payment->payment_code, 'per_page' => 10])->json('data');
+        $order = collect(is_array($list) ? $list : [])->first(fn ($item) => is_array($item)
+            && hash_equals((string) $payment->payment_code, (string) ($item['order_invoice_number'] ?? '')));
+        if (! is_array($order) || blank($order['order_id'] ?? null)) {
+            return null;
+        }
+
+        $detailResponse = $auth->get($baseUrl.'/v1/order/detail/'.rawurlencode((string) $order['order_id']));
+        if (! $detailResponse->successful()) {
+            return null;
+        }
+
+        $detail = $detailResponse->json('data');
+        return is_array($detail) ? $detail : null;
+    }
+
+    public function cancelSePayOrder(Payment $payment): bool
+    {
+        if ($payment->method !== 'sepay' || blank($payment->payment_code) || ! $this->isConfigured('sepay')) {
+            return false;
+        }
+
+        $settings = config('services.sepay');
+        $response = Http::withBasicAuth((string) $settings['merchant_id'], (string) $settings['secret_key'])
+            ->asJson()->acceptJson()->connectTimeout(4)->timeout(8)
+            ->post(rtrim((string) $settings['api_url'], '/').'/v1/order/cancel', [
+                'order_invoice_number' => (string) $payment->payment_code,
+            ]);
+
+        return $response->successful();
     }
 
     private function signMomoCreate(array $payload, string $accessKey, string $secretKey): string
