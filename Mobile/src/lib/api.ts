@@ -941,6 +941,10 @@ export function loginWithPassword(identifier: string, password: string) {
   return apiFetch<AuthResponse>('/v1/auth/login', jsonRequest({ identifier, password, remember: true, device_name: 'melodify-mobile' }));
 }
 
+export function approveQrLogin(qrPayload: string) {
+  return apiFetch<{ message: string; status: 'approved' }>('/v1/auth/qr/scan', jsonRequest({ qr_payload: qrPayload }));
+}
+
 export function requestPasswordReset(email: string) {
   return fetchApiResponse<{ message: string; expires_at?: string; resend_after_seconds?: number }>(
     '/v1/auth/password/forgot', jsonRequest({ email: email.trim().toLowerCase() }), 'POST', null,
