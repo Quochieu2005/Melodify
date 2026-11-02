@@ -28,24 +28,30 @@ class VipCheckoutController extends Controller
     {
         $payment = Payment::query()->where('payment_code', $paymentCode)->where('method', 'sepay')->firstOrFail();
         abort_unless($gateways->isConfigured('sepay'), 404);
-        if ($payment->status !== 'pending') {
-            return $this->redirectToResult($paymentCode);
-        }
 
-        try {
-            if ($gateways->querySePayOrder($payment)) {
-                return $this->redirectToResult($paymentCode);
-            }
-        } catch (Throwable $exception) {
-            report($exception);
+        return Cache::lock('vip:sepay:checkout:'.hash('sha256', (string) $payment->getKey()), 60)
+            ->block(30, function () use ($payment, $paymentCode, $gateways): RedirectResponse {
+                $payment->refresh();
+                if ($payment->status !== 'pending') {
+                    return $this->redirectToResult($paymentCode);
+                }
 
-            return $this->redirectToResult($paymentCode);
-        }
+                try {
+                    if ($gateways->querySePayOrder($payment)) {
+                        return $this->redirectToResult($paymentCode);
+                    }
+                } catch (Throwable $exception) {
+                    report($exception);
 
-        $checkoutUrl = $gateways->startSePayCheckout($payment);
-        abort_unless($checkoutUrl, 502, 'SePay chưa khởi tạo được đơn. Vui lòng quay lại Melodify và tạo mã thanh toán mới.');
+                    return $this->redirectToResult($paymentCode);
+                }
 
-        return redirect()->away($checkoutUrl);
+                $checkoutUrl = $gateways->startSePayCheckout($payment);
+                abort_unless($checkoutUrl, 502, 'SePay chưa khởi tạo được đơn. Vui lòng quay lại Melodify và tạo mã thanh toán mới.');
+                $payment->forceFill(['gateway_checkout_at' => now()])->save();
+
+                return redirect()->away($checkoutUrl);
+            });
     }
 
     public function sePayIpn(Request $request, VipPaymentGatewayService $gateways, VipPaymentSettlementService $settlements): JsonResponse
@@ -56,17 +62,36 @@ class VipCheckoutController extends Controller
         }
         $order = $payload['order'] ?? [];
         $payment = Payment::query()->where('payment_code', (string) ($order['order_invoice_number'] ?? ''))->where('method', 'sepay')->first();
-        if (! $payment) return response()->json(['message' => 'Order not found'], 404);
-        if (strtoupper((string) ($order['order_currency'] ?? '')) !== 'VND'
-            || (int) round((float) ($order['order_amount'] ?? -1)) !== (int) round((float) $payment->amount)) {
+        if (! $payment) {
+            return response()->json(['message' => 'Order not found'], 404);
+        }
+
+        if (($payload['notification_type'] ?? '') !== 'ORDER_PAID') {
+            return response()->json(['success' => true]);
+        }
+
+        $transaction = $payload['transaction'] ?? [];
+        if (! is_array($transaction)
+            || ($order['order_status'] ?? '') !== 'CAPTURED'
+            || strtoupper((string) ($order['order_currency'] ?? '')) !== 'VND'
+            || strtoupper((string) ($transaction['transaction_currency'] ?? '')) !== 'VND'
+            || ! is_numeric($order['order_amount'] ?? null)
+            || ! is_numeric($transaction['transaction_amount'] ?? null)
+            || (int) round((float) $order['order_amount']) !== (int) round((float) $payment->amount)
+            || (int) round((float) $transaction['transaction_amount']) !== (int) round((float) $payment->amount)
+            || blank($transaction['transaction_id'] ?? null)) {
             return response()->json(['message' => 'Invalid amount or currency'], 409);
         }
-        if (($payload['notification_type'] ?? '') === 'ORDER_PAID'
-            && ($order['order_status'] ?? '') === 'CAPTURED'
-            && ($payload['transaction']['transaction_status'] ?? '') === 'APPROVED'
-            && (int) round((float) ($payload['transaction']['transaction_amount'] ?? -1)) === (int) round((float) $payment->amount)) {
-            $settlements->markPaid($payment, (string) ($payload['transaction']['transaction_id'] ?? ''), $payload);
+
+        if (($transaction['transaction_status'] ?? '') !== 'APPROVED'
+            || (string) ($payment->currency ?? 'VND') !== 'VND') {
+            return response()->json(['message' => 'Transaction is not an approved VND payment'], 409);
         }
+
+        if (! $settlements->markPaid($payment, (string) $transaction['transaction_id'], $payload)) {
+            return response()->json(['message' => 'Transaction has already been used'], 409);
+        }
+
         return response()->json(['success' => true]);
     }
 
@@ -120,8 +145,7 @@ class VipCheckoutController extends Controller
         string $paymentCode,
         VipPaymentGatewayService $gateways,
         VipPaymentSettlementService $settlements,
-    ): JsonResponse
-    {
+    ): JsonResponse {
         $payment = Payment::query()
             ->where('payment_code', $paymentCode)
             ->where('user_id', (string) $request->user()->getKey())
@@ -291,7 +315,12 @@ class VipCheckoutController extends Controller
         }
 
         if ((int) ($payload['resultCode'] ?? -1) === 0) {
-            $settlements->markPaid($payment, (string) ($payload['transId'] ?? ''), $payload);
+            if (blank($payload['transId'] ?? null)) {
+                return response()->json(['message' => 'Mã giao dịch MoMo bị thiếu.'], 409);
+            }
+            if (! $settlements->markPaid($payment, (string) $payload['transId'], $payload)) {
+                return response()->json(['message' => 'Mã giao dịch MoMo đã được sử dụng.'], 409);
+            }
         } else {
             $status = (int) ($payload['resultCode'] ?? 0) === 1006 ? 'cancelled' : 'failed';
             $settlements->markFailed($payment, $status, (string) ($payload['transId'] ?? ''));
@@ -327,12 +356,18 @@ class VipCheckoutController extends Controller
         if (! $payment || $payment->method !== 'vnpay') {
             return response()->json(['RspCode' => '01', 'Message' => 'Order not found']);
         }
-        if ((int) ($payload['vnp_Amount'] ?? -1) !== (int) round((float) $payment->amount) * 100) {
+        if (strtoupper((string) ($payload['vnp_CurrCode'] ?? '')) !== 'VND'
+            || (int) ($payload['vnp_Amount'] ?? -1) !== (int) round((float) $payment->amount) * 100) {
             return response()->json(['RspCode' => '04', 'Message' => 'Invalid amount']);
         }
 
         if (($payload['vnp_ResponseCode'] ?? '') === '00' && ($payload['vnp_TransactionStatus'] ?? '') === '00') {
-            $settlements->markPaid($payment, (string) ($payload['vnp_TransactionNo'] ?? ''), $payload);
+            if (blank($payload['vnp_TransactionNo'] ?? null)) {
+                return response()->json(['RspCode' => '99', 'Message' => 'Missing transaction number']);
+            }
+            if (! $settlements->markPaid($payment, (string) $payload['vnp_TransactionNo'], $payload)) {
+                return response()->json(['RspCode' => '99', 'Message' => 'Transaction already used']);
+            }
         } else {
             $settlements->markFailed($payment, 'failed', (string) ($payload['vnp_TransactionNo'] ?? ''));
         }
@@ -344,8 +379,7 @@ class VipCheckoutController extends Controller
         Request $request,
         VipPaymentGatewayService $gateways,
         VipPaymentSettlementService $settlements,
-    ): RedirectResponse
-    {
+    ): RedirectResponse {
         $payload = $request->query();
         abort_unless($gateways->verifyVnpayCallback($payload), 400, 'Phản hồi VNPAY không hợp lệ.');
 
@@ -353,7 +387,8 @@ class VipCheckoutController extends Controller
             ->where('payment_code', (string) ($payload['vnp_TxnRef'] ?? ''))
             ->where('method', 'vnpay')
             ->firstOrFail();
-        abort_unless((int) ($payload['vnp_Amount'] ?? -1) === (int) round((float) $payment->amount) * 100, 400, 'Số tiền VNPAY không khớp.');
+        abort_unless(strtoupper((string) ($payload['vnp_CurrCode'] ?? '')) === 'VND'
+            && (int) ($payload['vnp_Amount'] ?? -1) === (int) round((float) $payment->amount) * 100, 400, 'Số tiền hoặc tiền tệ VNPAY không khớp.');
 
         $transactionCode = (string) ($payload['vnp_TransactionNo'] ?? '');
         if (($payload['vnp_ResponseCode'] ?? '') === '00'

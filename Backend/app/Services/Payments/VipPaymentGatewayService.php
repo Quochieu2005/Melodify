@@ -154,7 +154,9 @@ class VipPaymentGatewayService
         ];
         $signed = [];
         foreach (['order_amount', 'merchant', 'currency', 'operation', 'order_description', 'order_invoice_number', 'customer_id', 'payment_method', 'success_url', 'error_url', 'cancel_url'] as $key) {
-            if (isset($fields[$key])) $signed[] = $key.'='.$fields[$key];
+            if (isset($fields[$key])) {
+                $signed[] = $key.'='.$fields[$key];
+            }
         }
 
         return ['action' => (string) $settings['checkout_url'], 'fields' => $fields + [
@@ -174,6 +176,7 @@ class VipPaymentGatewayService
 
         $checkoutUrl = (string) $response->header('Location', '');
         $host = strtolower((string) parse_url($checkoutUrl, PHP_URL_HOST));
+
         return parse_url($checkoutUrl, PHP_URL_SCHEME) === 'https'
             && $host === 'pay.sepay.vn'
             && str_starts_with((string) parse_url($checkoutUrl, PHP_URL_PATH), '/v1/checkout')
@@ -254,7 +257,7 @@ class VipPaymentGatewayService
             'vnp_OrderType' => 'other',
             'vnp_ReturnUrl' => (string) $settings['return_url'],
             'vnp_TxnRef' => (string) $payment->payment_code,
-            'vnp_ExpireDate' => $now->copy()->addMinutes(15)->format('YmdHis'),
+            'vnp_ExpireDate' => $now->copy()->addMinutes(10)->format('YmdHis'),
         ];
         $bankCode = trim((string) ($settings['bank_code'] ?? ''));
         if ($bankCode !== '') {
@@ -306,7 +309,7 @@ class VipPaymentGatewayService
             'app_user' => $appUser,
             'app_trans_id' => $appTransId,
             'app_time' => $appTime,
-            'expire_duration_seconds' => 900,
+            'expire_duration_seconds' => 600,
             'amount' => $amount,
             'description' => 'Melodify VIP '.$payment->payment_code,
             'callback_url' => $callbackUrl,
@@ -453,6 +456,7 @@ class VipPaymentGatewayService
         }
 
         $detail = $detailResponse->json('data');
+
         return is_array($detail) ? $detail : null;
     }
 
