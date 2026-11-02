@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
+import { requireOptionalNativeModule } from "expo";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppShell } from "@/components/layout";
@@ -83,40 +84,99 @@ export function SearchScreen() {
   const [results, setResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [recognizing, setRecognizing] = useState(false);
+  const [voiceStarting, setVoiceStarting] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
+  const searchSequence = useRef(0);
+  const speechModule = useRef<typeof import("expo-speech-recognition").ExpoSpeechRecognitionModule | null>(null);
+  const speechListeners = useRef<{ remove: () => void }[]>([]);
+  const updateSearchQuery = (value: string) => {
+    searchSequence.current += 1;
+    setQuery(value);
+    setResults(null);
+    setError("");
+    setLoading(false);
+  };
 
-  const runSearch = async (searchType: SearchKind = type) => {
+  useEffect(() => () => {
+    speechListeners.current.forEach((listener) => listener.remove());
+    speechModule.current?.abort();
+  }, []);
+
+  const toggleVoiceSearch = async () => {
+    setVoiceError("");
+    if (voiceStarting) return;
+    setVoiceStarting(true);
+    try {
+      if (!requireOptionalNativeModule("ExpoSpeechRecognition")) {
+        setVoiceError("Tìm kiếm bằng giọng nói cần bản Melodify development build; Expo Go chưa có module này.");
+        return;
+      }
+
+      let speech = speechModule.current;
+      if (!speech) {
+        speech = (await import("expo-speech-recognition")).ExpoSpeechRecognitionModule;
+        speechModule.current = speech;
+        speechListeners.current = [
+          speech.addListener("start", () => setRecognizing(true)),
+          speech.addListener("end", () => setRecognizing(false)),
+          speech.addListener("result", (event) => {
+            const transcript = event.results[0]?.transcript?.trim();
+            if (event.isFinal && transcript) updateSearchQuery(transcript);
+          }),
+          speech.addListener("error", (event) => {
+            setRecognizing(false);
+            if (event.error !== "aborted") setVoiceError("Không nhận được giọng nói. Hãy thử lại.");
+          }),
+        ];
+      }
+
+      if (recognizing) {
+        speech.stop();
+        return;
+      }
+      if (!speech.isRecognitionAvailable()) {
+        setVoiceError("Thiết bị chưa có dịch vụ nhận dạng giọng nói. Kiểm tra Siri/Dictation hoặc dịch vụ Google.");
+        return;
+      }
+      const permission = await speech.requestPermissionsAsync();
+      if (!permission.granted) {
+        setVoiceError("Bạn chưa cấp quyền micro và nhận dạng giọng nói.");
+        return;
+      }
+      speech.start({ lang: "vi-VN", interimResults: false, continuous: false, iosTaskHint: "search" });
+    } catch {
+      setVoiceError("Không tải được nhận dạng giọng nói. Hãy cài bản app có module này rồi thử lại.");
+      setRecognizing(false);
+    } finally {
+      setVoiceStarting(false);
+    }
+  };
+
+  const runSearch = useCallback(async (searchType: SearchKind = type) => {
     if (!query.trim()) return;
+    const sequence = ++searchSequence.current;
     setLoading(true);
     setError("");
     try {
-      setResults(await searchCatalog(query, searchType));
+      const result = await searchCatalog(query, searchType);
+      if (sequence === searchSequence.current) setResults(result);
     } catch (reason) {
+      if (sequence !== searchSequence.current) return;
       setError(
         reason instanceof Error ? reason.message : "Không thể tìm kiếm.",
       );
       setResults(null);
     } finally {
-      setLoading(false);
+      if (sequence === searchSequence.current) setLoading(false);
     }
-  };
+  }, [query, type]);
 
   useEffect(() => {
-    if (!initialQuery?.trim()) return;
-    let active = true;
-    void searchCatalog(initialQuery, "all")
-      .then((result) => {
-        if (active) setResults(result);
-      })
-      .catch((reason: unknown) => {
-        if (active)
-          setError(
-            reason instanceof Error ? reason.message : "Không thể tìm kiếm.",
-          );
-      });
-    return () => {
-      active = false;
-    };
-  }, [initialQuery]);
+    if (query.trim().length < 2) return;
+    const timer = setTimeout(() => void runSearch(type), 350);
+    return () => clearTimeout(timer);
+  }, [query, type, runSearch]);
 
   const artists = results?.data.artist ?? [];
   const songs = results?.data.song ?? [];
@@ -134,7 +194,7 @@ export function SearchScreen() {
           <TextInput
             accessibilityLabel="Từ khóa tìm kiếm"
             value={query}
-            onChangeText={setQuery}
+            onChangeText={updateSearchQuery}
             onSubmitEditing={() => void runSearch()}
             returnKeyType="search"
             placeholder="Nhập từ khóa…"
@@ -142,12 +202,24 @@ export function SearchScreen() {
             style={styles.input}
           />
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={recognizing ? "Dừng tìm kiếm bằng giọng nói" : "Tìm kiếm bằng giọng nói"}
+            accessibilityState={{ selected: recognizing, disabled: voiceStarting }}
+            disabled={voiceStarting}
+            onPress={() => void toggleVoiceSearch()}
+            style={[styles.voiceSearchButton, recognizing && styles.voiceSearchButtonActive]}
+          >
+            <AppIcon name="mic" color={recognizing ? "#FFFFFF" : theme.primary} size={20} />
+          </Pressable>
+          <Pressable
             onPress={() => void runSearch()}
             style={styles.searchButton}
           >
             <Text style={styles.searchButtonText}>Tìm</Text>
           </Pressable>
         </View>
+        {recognizing ? <Text style={styles.voiceHint}>Đang nghe… chạm micro lần nữa để dừng.</Text> : null}
+        {voiceError ? <Text accessibilityRole="alert" style={styles.voiceError}>{voiceError}</Text> : null}
         <View style={styles.pills}>
           {searchTypes.map((item) => (
             <Pressable
@@ -248,6 +320,9 @@ export function SearchScreen() {
               <StateMessage empty="Không tìm thấy kết quả phù hợp." />
             ) : null}
           </>
+        ) : null}
+        {results && !songs.length && !artists.length && !albums.length && !playlists.length && !users.length ? (
+          <Text style={styles.detail}>Không tìm thấy kết quả phù hợp.</Text>
         ) : null}
       </ScrollPage>
     </AppShell>
@@ -803,7 +878,6 @@ export function LoginScreen() {
   const [phoneMode, setPhoneMode] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [consent, setConsent] = useState(true);
-
   const finishLogin = async (
     auth: Awaited<ReturnType<typeof verifyPhoneLoginOtp>>,
   ) => {
@@ -1822,6 +1896,10 @@ const baseStyles = StyleSheet.create({
     backgroundColor: "#00B5AD",
   },
   searchButtonText: { color: "#FFFFFF", fontWeight: "900" },
+  voiceSearchButton: { width: 38, height: 38, margin: 2, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  voiceSearchButtonActive: { backgroundColor: "#EF4444" },
+  voiceHint: { color: "#00B5AD", fontSize: 12, fontWeight: "700" },
+  voiceError: { color: "#DC2626", fontSize: 12 },
   pills: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   pill: {
     paddingVertical: 7,

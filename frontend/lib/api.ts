@@ -690,6 +690,16 @@ export function loginWithPassword(
   );
 }
 
+export function registerWithPassword(name: string, email: string, password: string, confirmation: string) {
+  return apiFetch<AuthResponse>("/v1/auth/register", jsonRequest({
+    name: name.trim(),
+    email: email.trim().toLowerCase(),
+    password,
+    password_confirmation: confirmation,
+    device_name: "melodify-web",
+  }));
+}
+
 export function requestPhoneOtp(phone: string) {
   return apiFetch<{
     message: string;

@@ -43,6 +43,25 @@
           "enableBackgroundPlayback": true
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Cho phép Melodify dùng camera để quét mã đăng nhập QR.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Cho phép Melodify dùng micro để tìm kiếm bằng giọng nói.",
+          "speechRecognitionPermission": "Cho phép Melodify chuyển giọng nói thành từ khóa tìm kiếm.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.tts"
+          ]
+        }
+      ],
       "expo-secure-store",
       "expo-asset"
     ],

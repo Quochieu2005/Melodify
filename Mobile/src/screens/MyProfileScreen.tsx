@@ -16,12 +16,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
 import { AppShell } from '@/components/layout';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { useRemoteData } from '@/hooks/useRemoteData';
 import {
   logout,
+  approveQrLogin,
   createUserPlaylist,
   getLibrary,
   getSavedAuthUser,
@@ -71,6 +73,35 @@ export function MyProfileScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const scannedQr = useRef(false);
+
+  const openQrScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const permission = await requestCameraPermission();
+      if (!permission.granted) {
+        Alert.alert('Cần quyền camera', 'Cho phép Melodify dùng camera để quét mã đăng nhập QR.');
+        return;
+      }
+    }
+    scannedQr.current = false;
+    setSettingsOpen(false);
+    setQrScannerOpen(true);
+  };
+
+  const scanLoginQr = async (payload: string) => {
+    if (scannedQr.current || !payload.startsWith('melodify://login?')) return;
+    scannedQr.current = true;
+    try {
+      const result = await approveQrLogin(payload);
+      setQrScannerOpen(false);
+      Alert.alert('Đã xác nhận đăng nhập', result.message || 'Trang web sẽ tự đăng nhập.');
+    } catch (reason) {
+      scannedQr.current = false;
+      Alert.alert('Không thể xác nhận', reason instanceof Error ? reason.message : 'Vui lòng thử lại.');
+    }
+  };
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -850,6 +881,12 @@ export function MyProfileScreen() {
             ) : null}
 
             <View style={styles.sheetMenu}>
+              {user ? (
+                <Pressable onPress={() => void openQrScanner()} style={styles.sheetMenuItem}>
+                  <AppIcon name="search" color="#0EA5E9" size={20} />
+                  <Text style={styles.sheetMenuText}>Quét QR để đăng nhập web</Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 onPress={() => {
                   setSettingsOpen(false);
@@ -905,6 +942,22 @@ export function MyProfileScreen() {
               <Text style={styles.sheetCancelText}>Đóng</Text>
             </Pressable>
           </View>
+        </View>
+      </Modal>
+      <Modal visible={qrScannerOpen} animationType="slide" onRequestClose={() => setQrScannerOpen(false)}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#000' }}>
+          <CameraView
+            style={{ width: '100%', aspectRatio: 1, overflow: 'hidden', borderRadius: 20 }}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={({ data }) => void scanLoginQr(data)}
+          />
+          <Text style={{ color: '#fff', textAlign: 'center', marginTop: 20 }}>
+            Quét mã QR đang hiển thị trên trang đăng nhập web
+          </Text>
+          <Pressable onPress={() => setQrScannerOpen(false)} style={{ padding: 16 }}>
+            <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '700' }}>Đóng máy quét</Text>
+          </Pressable>
         </View>
       </Modal>
     </AppShell>
