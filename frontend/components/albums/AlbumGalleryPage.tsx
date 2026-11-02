@@ -22,16 +22,16 @@ function AlbumCard({ album }: { album: AlbumCard }) {
   );
 }
 
-async function loadAllAlbums() {
+async function loadAllAlbums(onFirstPage: (albums: AlbumRecord[]) => void) {
   const firstPage = await listAlbums({ page: 1, perPage: 50 });
-  const records: AlbumRecord[] = [...firstPage.data];
+  onFirstPage(firstPage.data);
+  const remainingPages = await Promise.all(
+    Array.from({ length: firstPage.meta.last_page - 1 }, (_, index) =>
+      listAlbums({ page: index + 2, perPage: 50 }),
+    ),
+  );
 
-  for (let page = 2; page <= firstPage.meta.last_page; page += 1) {
-    const response = await listAlbums({ page, perPage: 50 });
-    records.push(...response.data);
-  }
-
-  return records;
+  return [...firstPage.data, ...remainingPages.flatMap((response) => response.data)];
 }
 
 export default function AlbumGalleryPage() {
@@ -42,7 +42,12 @@ export default function AlbumGalleryPage() {
   useEffect(() => {
     let cancelled = false;
 
-    loadAllAlbums()
+    loadAllAlbums((records) => {
+      if (!cancelled) {
+        setAlbums(records.map(albumRecordToCard));
+        setIsLoading(false);
+      }
+    })
       .then((records) => {
         if (!cancelled) setAlbums(records.map(albumRecordToCard));
       })

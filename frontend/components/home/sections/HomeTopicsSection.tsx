@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
-import { listGenres, listTopics, subscribeCatalogResponse } from '@/lib/api';
+import { useMemo } from 'react';
+import type { GenreRecord, TopicRecord } from '@/lib/api';
 import {
   genreRecordToCard,
   pickDailyTopics,
@@ -14,63 +14,8 @@ import {
 } from '@/lib/topic-data';
 
 
-export default function HomeTopicsSection() {
-  const [topics, setTopics] = useState<TopicCard[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [dateKey] = useState(vietnamDateKey);
-
-  useEffect(() => {
-    let cancelled = false;
-    let genres: TopicCard[] = [];
-    let topicsFromApi: TopicCard[] = [];
-
-    const publishTopics = () => {
-      if (cancelled) return;
-      setTopics(pickDailyTopics([...genres, ...topicsFromApi], 12, dateKey));
-      setError('');
-      setIsLoading(false);
-    };
-
-    const unsubscribeGenres = subscribeCatalogResponse<Awaited<ReturnType<typeof listGenres>>>(
-      '/v1/genres?per_page=20',
-      (response) => { genres = response.data.map(genreRecordToCard); publishTopics(); },
-    );
-    const unsubscribeTopics = subscribeCatalogResponse<Awaited<ReturnType<typeof listTopics>>>(
-      '/v1/topics?per_page=20',
-      (response) => { topicsFromApi = response.data.map(topicRecordToCard); publishTopics(); },
-    );
-
-    const loadDailyTopics = async () => {
-      try {
-        const [genresResult, topicsResult] = await Promise.allSettled([
-          listGenres({ perPage: 20 }),
-          listTopics({ perPage: 20 }),
-        ]);
-        if (genresResult.status === 'fulfilled') genres = genresResult.value.data.map(genreRecordToCard);
-        if (topicsResult.status === 'fulfilled') topicsFromApi = topicsResult.value.data.map(topicRecordToCard);
-
-        if (!cancelled) {
-          setTopics(pickDailyTopics([...genres, ...topicsFromApi], 12, dateKey));
-          setError(genresResult.status === 'rejected' && topicsResult.status === 'rejected' ? 'Không thể tải chủ đề lúc này.' : '');
-        }
-      } catch {
-        if (!cancelled) {
-          setTopics([]);
-          setError('Không thể tải chủ đề lúc này.');
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-
-    void loadDailyTopics();
-    return () => {
-      cancelled = true;
-      unsubscribeGenres();
-      unsubscribeTopics();
-    };
-  }, [dateKey]);
+export default function HomeTopicsSection({ genres, topics: apiTopics }: { genres: GenreRecord[]; topics: TopicRecord[] }) {
+  const topics = useMemo(() => pickDailyTopics([...genres.map(genreRecordToCard), ...apiTopics.map(topicRecordToCard)], 12, vietnamDateKey()), [genres, apiTopics]);
 
   return (
     <section aria-labelledby="home-topics-heading" className="mt-12">
@@ -91,13 +36,7 @@ export default function HomeTopicsSection() {
         </Link>
       </div>
 
-      {isLoading ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 2xl:gap-5">
-          {Array.from({ length: 12 }, (_, index) => <div key={index} className="h-[115px] animate-pulse rounded-[10px] bg-[#30443f]" />)}
-        </div>
-      ) : error ? (
-        <p role="alert" className="text-sm text-red-300">{error}</p>
-      ) : topics.length === 0 ? (
+      {topics.length === 0 ? (
         <p className="text-sm text-white/60">Chưa có chủ đề.</p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 2xl:gap-5">
