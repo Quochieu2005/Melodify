@@ -37,17 +37,11 @@ class AdminNotificationController extends Controller
     public function markAllRead(): RedirectResponse
     {
         $adminId = (string) auth('admin')->id();
-        $notifications = AdminNotification::query()
+        AdminNotification::query()
             ->where('admin_id', $adminId)
             ->where('is_read', false)
-            ->get();
-
-        foreach ($notifications as $notification) {
-            $notification->forceFill([
-                'is_read' => true,
-                'read_at' => now(),
-            ])->save();
-        }
+            ->update(['is_read' => true, 'read_at' => now()]);
+        Cache::store('file')->forget(AdminNotificationService::headerCacheKey($adminId));
 
         return back()->with('success', 'Đã đánh dấu tất cả thông báo là đã đọc.');
     }
