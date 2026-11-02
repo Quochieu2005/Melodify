@@ -25,7 +25,7 @@ class PaymentController extends Controller
     private function listing(Request $request, bool $successfulOnly): View
     {
         $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+            'q' => ['nullable', 'string', 'max:100', new PlainText],
         ]);
         $search = trim((string) ($filters['q'] ?? ''));
         $query = Payment::query();
@@ -85,7 +85,7 @@ class PaymentController extends Controller
             ]],
         ], ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']])->toArray())[0] ?? [];
         $successfulPaymentCount = (int) ($summary['count'] ?? 0);
-        $totalAmount = (float) ($summary['amount'] ?? 0);
+        $totalAmount = (float) (string) ($summary['amount'] ?? 0);
         $pendingCount = Payment::query()->whereIn('status', ['pending', 'processing'])->count();
 
         return view('Admin.payments.index', compact('payments', 'successfulPaymentCount', 'totalAmount', 'pendingCount', 'search', 'successfulOnly'));
