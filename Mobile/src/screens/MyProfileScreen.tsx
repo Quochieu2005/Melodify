@@ -21,7 +21,7 @@ import { AppShell } from '@/components/layout';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { useRemoteData } from '@/hooks/useRemoteData';
 import {
-  clearAuthSession,
+  logout,
   createUserPlaylist,
   getLibrary,
   getSavedAuthUser,
@@ -132,7 +132,7 @@ export function MyProfileScreen() {
   // Handle Logout
   const handleLogout = async () => {
     setSettingsOpen(false);
-    await clearAuthSession();
+    await logout();
     setUser(null);
     await reload();
   };
