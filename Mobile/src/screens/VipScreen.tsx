@@ -59,6 +59,7 @@ const PAYMENT_METHOD_ICONS: Record<VipPaymentMethod, string> = {
   momo: 'M',
   vnpay: 'V',
   zalopay: 'Z',
+  sepay: 'QR',
 };
 
 function isSuccessfulPayment(status?: string | null) {

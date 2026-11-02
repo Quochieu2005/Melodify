@@ -29,7 +29,6 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { useRemoteData } from "@/hooks/useRemoteData";
 import {
   API_URL,
-  clearAuthSession,
   createUserPlaylist,
   getForYouArtists,
   getForYouSong,
@@ -39,10 +38,14 @@ import {
   listFavoriteSongs,
   listGenres,
   loginWithPassword,
+  logout as logoutAuth,
+  requestPasswordReset,
+  resetPassword,
   registerWithPassword,
   requestPhoneLoginOtp,
   searchCatalog,
   saveAuthSession,
+  verifyPasswordResetOtp,
   verifyPhoneLoginOtp,
   type Artist,
   type Genre,
@@ -572,7 +575,7 @@ export function LibraryScreen() {
     }
   };
   const logout = async () => {
-    await clearAuthSession();
+    await logoutAuth();
     setUser(null);
     await reload();
   };
@@ -1394,6 +1397,11 @@ export function PasswordLoginScreen() {
                 </Pressable>
               </View> : null}
               {error ? <Text style={styles.loginError}>{error}</Text> : null}
+              {!registering ? <Pressable accessibilityRole="button" disabled={loading}
+                onPress={() => router.push('/forgot-password' as never)}
+                style={{ alignSelf: 'flex-end', paddingVertical: 2 }}>
+                <Text style={{ color: theme.primary, fontWeight: '600' }}>Quên mật khẩu?</Text>
+              </Pressable> : null}
               <PrimaryButton
                 disabled={loading}
                 label={loading ? 'Đang xử lý…' : registering ? 'Đăng ký và tiếp tục' : 'Đăng nhập'}
@@ -1406,6 +1414,83 @@ export function PasswordLoginScreen() {
                   {registering ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký'}
                 </Text>
               </Pressable>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
+    </AppShell>
+  );
+}
+
+export function ForgotPasswordScreen() {
+  const styles = useAdaptiveStyles(baseStyles);
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const theme = useTheme();
+  const mode = useThemeMode();
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [step, setStep] = useState<'email' | 'otp' | 'password'>('email');
+  const [completed, setCompleted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const submit = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      if (step === 'email') {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) throw new Error('Nhập email hợp lệ.');
+        const result = await requestPasswordReset(email);
+        setStep('otp');
+        setSuccess(result.message);
+      } else if (step === 'otp') {
+        if (!/^\d{6}$/.test(code.trim())) throw new Error('Mã OTP gồm 6 chữ số.');
+        const result = await verifyPasswordResetOtp(email, code.trim());
+        setResetToken(result.reset_token);
+        setStep('password');
+      } else {
+        if (password.length < 8 || password !== confirmation) throw new Error('Mật khẩu cần ít nhất 8 ký tự và nhập lại phải khớp.');
+        const result = await resetPassword(email, resetToken, password, confirmation);
+        setSuccess(result.message);
+        setCompleted(true);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Không thể đặt lại mật khẩu.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const title = step === 'email' ? 'Quên mật khẩu' : step === 'otp' ? 'Xác nhận OTP' : 'Tạo mật khẩu mới';
+  return (
+    <AppShell hideHeader hidePlayer hideTabs>
+      <LinearGradient colors={mode === 'dark' ? ['#070B0C', '#062D2A', '#07110E'] : ['#FFFFFF', '#E8FBF8', '#F5FBFA']} style={styles.loginScreen}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top} style={styles.loginScreen}>
+          <ScrollView contentContainerStyle={[styles.passwordLoginScroll, { paddingTop: Math.max(insets.top + 8, 28) }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <View style={styles.loginTopRow}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Quay lại đăng nhập" hitSlop={16} onPress={() => router.back()} style={styles.loginClose}>
+                <AppIcon name="close" color={theme.text} size={22} />
+              </Pressable>
+            </View>
+            <Text style={[styles.passwordPageTitle, { color: theme.text }]}>{title}</Text>
+            <Text style={[styles.passwordPageSubtitle, { color: theme.textSecondary }]}>Đặt lại mật khẩu bằng mã OTP gửi đến email của bạn.</Text>
+            <View style={styles.passwordPageForm}>
+              {!completed && step === 'email' ? <TextInput accessibilityLabel="Email" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} editable={!loading} placeholder="Email đã đăng ký" placeholderTextColor={theme.textMuted} style={[styles.loginField, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]} /> : null}
+              {!completed && step === 'otp' ? <TextInput accessibilityLabel="Mã OTP" keyboardType="number-pad" maxLength={6} value={code} onChangeText={setCode} editable={!loading} placeholder="Mã OTP gồm 6 số" placeholderTextColor={theme.textMuted} style={[styles.loginField, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]} /> : null}
+              {!completed && step === 'password' ? <>
+                <TextInput accessibilityLabel="Mật khẩu mới" secureTextEntry value={password} onChangeText={setPassword} editable={!loading} placeholder="Mật khẩu mới" placeholderTextColor={theme.textMuted} style={[styles.loginField, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]} />
+                <TextInput accessibilityLabel="Nhập lại mật khẩu mới" secureTextEntry value={confirmation} onChangeText={setConfirmation} editable={!loading} placeholder="Nhập lại mật khẩu mới" placeholderTextColor={theme.textMuted} style={[styles.loginField, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]} />
+              </> : null}
+              {error ? <Text style={styles.loginError}>{error}</Text> : null}
+              {success ? <Text style={styles.loginSuccess}>{success}</Text> : null}
+              {completed ? <PrimaryButton label="Quay lại đăng nhập" onPress={() => router.replace('/password-login' as never)} /> : <PrimaryButton disabled={loading} label={loading ? 'Đang xử lý…' : step === 'email' ? 'Gửi mã OTP' : step === 'otp' ? 'Xác nhận mã' : 'Đổi mật khẩu'} onPress={() => void submit()} />}
+              {!completed && step !== 'email' ? <Pressable accessibilityRole="button" disabled={loading} onPress={() => { setStep(step === 'password' ? 'otp' : 'email'); setError(''); setSuccess(''); }} style={{ paddingVertical: 12, alignItems: 'center' }}><Text style={{ color: theme.primary, fontWeight: '600' }}>{step === 'password' ? 'Quay lại nhập OTP' : 'Đổi email'}</Text></Pressable> : null}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>

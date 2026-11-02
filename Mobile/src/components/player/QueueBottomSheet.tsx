@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useMusicControls } from '@/components/music';
 import { AppIcon } from '@/components/shared/AppIcon';
-import { getVisitorId, listSongs, toggleSongFavorite, type Song } from '@/lib/api';
+import { addSongsToPlaylist, getSavedAuthUser, getVisitorId, listSongs, listUserPlaylists, toggleSongFavorite, type Song } from '@/lib/api';
 import { downloadSong } from '@/lib/downloads';
 import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
 import { useTheme } from '@/hooks/use-theme';
@@ -27,6 +28,7 @@ type QueueBottomSheetProps = {
 export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
   const styles = useAdaptiveStyles(baseStyles);
   const theme = useTheme();
+  const router = useRouter();
   const {
     track,
     selectedQualityId,
@@ -42,6 +44,9 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [downloadBusy, setDownloadBusy] = useState(false);
   const [suggestions, setSuggestions] = useState<Song[]>([]);
+  const [playlistModal, setPlaylistModal] = useState(false);
+  const [playlists, setPlaylists] = useState<{ id: string; name: string; song_count: number }[]>([]);
+  const [playlistBusy, setPlaylistBusy] = useState(false);
 
   // Load recommended suggestions if queue is short
   useEffect(() => {
@@ -80,6 +85,41 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
       Alert.alert('Không thể tải bài hát', error instanceof Error ? error.message : 'Vui lòng thử lại.');
     } finally {
       setDownloadBusy(false);
+    }
+  };
+
+  const openPlaylistPicker = async () => {
+    if (playlistBusy) return;
+    if (!await getSavedAuthUser()) {
+      Alert.alert('Cần đăng nhập', 'Đăng nhập để lưu bài hát vào playlist.', [
+        { text: 'Để sau', style: 'cancel' },
+        { text: 'Đăng nhập', onPress: () => { onClose(); router.push('/login' as never); } },
+      ]);
+      return;
+    }
+    setPlaylistBusy(true);
+    try {
+      const result = await listUserPlaylists();
+      setPlaylists(result.data);
+      setPlaylistModal(true);
+    } catch (error) {
+      Alert.alert('Không tải được playlist', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+    } finally {
+      setPlaylistBusy(false);
+    }
+  };
+
+  const addCurrentSongToPlaylist = async (playlistId: string) => {
+    if (!track || playlistBusy) return;
+    setPlaylistBusy(true);
+    try {
+      const result = await addSongsToPlaylist(playlistId, [track.id]);
+      setPlaylistModal(false);
+      Alert.alert('Playlist', result.message);
+    } catch (error) {
+      Alert.alert('Không thể thêm bài hát', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+    } finally {
+      setPlaylistBusy(false);
     }
   };
 
@@ -146,11 +186,11 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
             </Pressable>
 
             {/* Add to Playlist */}
-            <Pressable style={styles.actionBtn}>
+            <Pressable disabled={playlistBusy} onPress={() => void openPlaylistPicker()} style={styles.actionBtn}>
               <View style={styles.circleIcon}>
                 <AppIcon name="playlist-add" color={theme.textSecondary} size={20} />
               </View>
-              <Text style={styles.actionLabel}>Thêm vào{'\n'}playlist</Text>
+              <Text style={styles.actionLabel}>{playlistBusy ? 'Đang tải…' : <>Thêm vào{'\n'}playlist</>}</Text>
             </Pressable>
 
             {/* Favorite */}
@@ -321,6 +361,21 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
           </Pressable>
         </SafeAreaView>
       </View>
+      {playlistModal ? <View style={styles.playlistOverlay}>
+          <Pressable style={styles.backdrop} onPress={() => setPlaylistModal(false)} />
+          <View style={styles.playlistPicker}>
+            <Text style={styles.playlistTitle}>Chọn playlist</Text>
+            {playlists.length ? playlists.map((playlist) => (
+              <Pressable key={playlist.id} disabled={playlistBusy} onPress={() => void addCurrentSongToPlaylist(playlist.id)} style={styles.playlistChoice}>
+                <AppIcon name="playlist-add" color={theme.primary} size={20} />
+                <Text numberOfLines={1} style={styles.playlistChoiceText}>{playlist.name}</Text>
+                <Text style={styles.playlistCount}>{playlist.song_count} bài</Text>
+              </Pressable>
+            )) : <Text style={styles.playlistEmpty}>Bạn chưa có playlist nào. Tạo playlist trong mục Của tôi trước nhé.</Text>}
+            {playlistBusy ? <ActivityIndicator color={theme.primary} /> : null}
+            <Pressable onPress={() => setPlaylistModal(false)} style={styles.cancelBtn}><Text style={styles.cancelText}>Đóng</Text></Pressable>
+          </View>
+        </View> : null}
     </Modal>
   );
 }
@@ -496,4 +551,11 @@ const baseStyles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  playlistOverlay: { ...StyleSheet.absoluteFill, justifyContent: 'center', padding: 22, backgroundColor: 'rgba(0,0,0,0.45)' },
+  playlistPicker: { maxHeight: '75%', padding: 18, borderRadius: 18, backgroundColor: '#FFFFFF' },
+  playlistTitle: { color: '#0F172A', fontSize: 18, fontWeight: '800', marginBottom: 12 },
+  playlistChoice: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  playlistChoiceText: { flex: 1, color: '#0F172A', fontSize: 14, fontWeight: '600' },
+  playlistCount: { color: '#64748B', fontSize: 12 },
+  playlistEmpty: { color: '#64748B', fontSize: 14, lineHeight: 20, paddingVertical: 14 },
 });
