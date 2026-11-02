@@ -66,18 +66,24 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::get('/vip/payment-methods', [VipCheckoutController::class, 'methods'])
         ->name('vip.payment-methods.index');
     Route::post('/vip/payments/momo/ipn', [VipCheckoutController::class, 'momoIpn'])
+        ->middleware('throttle:300,1,payment-ipn')
         ->name('vip.payments.momo.ipn');
     Route::get('/vip/payments/momo/return', [VipCheckoutController::class, 'momoReturn'])
         ->name('vip.payments.momo.return');
     Route::get('/vip/payments/vnpay/ipn', [VipCheckoutController::class, 'vnpayIpn'])
+        ->middleware('throttle:300,1,payment-ipn')
         ->name('vip.payments.vnpay.ipn');
     Route::get('/vip/payments/vnpay/return', [VipCheckoutController::class, 'vnpayReturn'])
         ->name('vip.payments.vnpay.return');
     Route::post('/vip/payments/zalopay/callback', [VipCheckoutController::class, 'zalopayCallback'])
+        ->middleware('throttle:300,1,payment-ipn')
         ->name('vip.payments.zalopay.callback');
     Route::get('/vip/payments/sepay/checkout/{paymentCode}', [VipCheckoutController::class, 'sePayCheckout'])
-        ->where('paymentCode', '[A-Za-z0-9_-]{1,100}')->name('vip.payments.sepay.checkout');
+        ->where('paymentCode', '[A-Za-z0-9_-]{1,100}')
+        ->middleware('throttle:30,1,sepay-checkout')
+        ->name('vip.payments.sepay.checkout');
     Route::post('/vip/payments/sepay/ipn', [VipCheckoutController::class, 'sePayIpn'])
+        ->middleware('throttle:300,1,payment-ipn')
         ->name('vip.payments.sepay.ipn');
 
     Route::post('/auth/social/browser/start', [BrowserSocialAuthController::class, 'start'])
@@ -140,6 +146,7 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
             ->name('vip.transactions.index');
         Route::get('/vip/transactions/{paymentCode}', [VipCheckoutController::class, 'show'])
             ->where('paymentCode', '[A-Za-z0-9_-]{1,100}')
+            ->middleware('throttle:60,1')
             ->name('vip.transactions.show');
         Route::get('/me/playlists', [UserPlaylistController::class, 'index'])->name('me.playlists.index');
         Route::post('/me/playlists', [UserPlaylistController::class, 'store'])

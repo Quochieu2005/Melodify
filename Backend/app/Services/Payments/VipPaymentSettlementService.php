@@ -8,11 +8,37 @@ use App\Models\SubscriptionPlan;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 
 class VipPaymentSettlementService
 {
     public function markPaid(Payment $payment, string $transactionCode, array $callback): bool
+    {
+        if (blank($transactionCode)) {
+            return false;
+        }
+
+        $transactionLockKey = 'vip:settlement:transaction:'.hash('sha256', $payment->method.'|'.$transactionCode);
+
+        return Cache::lock($transactionLockKey, 60)->block(10, function () use ($payment, $transactionCode, $callback): bool {
+            $existingTransaction = Transaction::query()
+                ->where('gateway', (string) $payment->method)
+                ->where('transaction_code', $transactionCode)
+                ->first();
+
+            if ($existingTransaction && (string) $existingTransaction->payment_id !== (string) $payment->getKey()) {
+                return false;
+            }
+
+            $userLockKey = 'vip:settlement:user:'.hash('sha256', (string) $payment->user_id);
+
+            return Cache::lock($userLockKey, 60)->block(10, fn (): bool => $this->settleClaimedPayment($payment, $transactionCode, $callback));
+        });
+    }
+
+    /** @param array<string, mixed> $callback */
+    private function settleClaimedPayment(Payment $payment, string $transactionCode, array $callback): bool
     {
         if (in_array((string) $payment->status, ['success', 'paid', 'completed'], true)) {
             return true;

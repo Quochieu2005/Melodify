@@ -174,12 +174,31 @@ class VipPaymentGatewayTest extends TestCase
         $payload = [
             'notification_type' => 'ORDER_PAID',
             'order' => ['order_invoice_number' => $paymentCode, 'order_status' => 'CAPTURED', 'order_currency' => 'VND', 'order_amount' => '12000.00'],
-            'transaction' => ['transaction_status' => 'APPROVED', 'transaction_amount' => '12000', 'transaction_id' => 'SEPAY-TRANS-1'],
+            'transaction' => ['transaction_status' => 'APPROVED', 'transaction_amount' => '12000', 'transaction_currency' => 'VND', 'transaction_id' => 'SEPAY-TRANS-1'],
         ];
         $this->postJson('/api/v1/vip/payments/sepay/ipn', $payload)->assertForbidden();
+        $this->withHeaders(['X-Secret-Key' => 'sepay-test-secret'])
+            ->postJson('/api/v1/vip/payments/sepay/ipn', array_replace_recursive($payload, ['transaction' => ['transaction_currency' => 'USD']]))
+            ->assertStatus(409);
+        $this->assertSame('pending', Payment::query()->where('payment_code', $paymentCode)->firstOrFail()->status);
         $this->withHeaders(['X-Secret-Key' => 'sepay-test-secret'])->postJson('/api/v1/vip/payments/sepay/ipn', $payload)->assertOk();
         $this->assertSame('success', Payment::query()->where('payment_code', $paymentCode)->firstOrFail()->status);
         $this->assertTrue($this->user->fresh()->hasPremiumAccess());
+    }
+
+    public function test_gateway_transaction_id_cannot_be_reused_for_another_vip_order(): void
+    {
+        $firstPayment = $this->pendingPayment('momo');
+        $secondPayment = $this->pendingPayment('momo');
+
+        $this->postJson('/api/v1/vip/payments/momo/ipn', $this->signedMomoCallback($firstPayment, 0, 'MOMO-REUSED-TRANS'))
+            ->assertNoContent();
+        $this->postJson('/api/v1/vip/payments/momo/ipn', $this->signedMomoCallback($secondPayment, 0, 'MOMO-REUSED-TRANS'))
+            ->assertStatus(409);
+
+        $this->assertSame('success', $firstPayment->fresh()->status);
+        $this->assertSame('pending', $secondPayment->fresh()->status);
+        $this->assertSame(1, Subscription::query()->count());
     }
 
     public function test_momo_checkout_creates_signed_provider_request_and_returns_a_trusted_https_pay_url(): void
@@ -517,6 +536,7 @@ class VipPaymentGatewayTest extends TestCase
         $payload = [
             'vnp_Amount' => '1200000',
             'vnp_BankCode' => 'NCB',
+            'vnp_CurrCode' => 'VND',
             'vnp_OrderInfo' => 'Melodify VIP '.$payment->payment_code,
             'vnp_ResponseCode' => '00',
             'vnp_TmnCode' => 'VNPAYTEST',
