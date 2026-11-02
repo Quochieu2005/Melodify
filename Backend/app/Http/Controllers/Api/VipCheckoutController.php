@@ -28,24 +28,30 @@ class VipCheckoutController extends Controller
     {
         $payment = Payment::query()->where('payment_code', $paymentCode)->where('method', 'sepay')->firstOrFail();
         abort_unless($gateways->isConfigured('sepay'), 404);
-        if ($payment->status !== 'pending') {
-            return $this->redirectToResult($paymentCode);
-        }
 
-        try {
-            if ($gateways->querySePayOrder($payment)) {
-                return $this->redirectToResult($paymentCode);
-            }
-        } catch (Throwable $exception) {
-            report($exception);
+        return Cache::lock('vip:sepay:checkout:'.hash('sha256', (string) $payment->getKey()), 60)
+            ->block(30, function () use ($payment, $paymentCode, $gateways): RedirectResponse {
+                $payment->refresh();
+                if ($payment->status !== 'pending') {
+                    return $this->redirectToResult($paymentCode);
+                }
 
-            return $this->redirectToResult($paymentCode);
-        }
+                try {
+                    if ($gateways->querySePayOrder($payment)) {
+                        return $this->redirectToResult($paymentCode);
+                    }
+                } catch (Throwable $exception) {
+                    report($exception);
 
-        $checkoutUrl = $gateways->startSePayCheckout($payment);
-        abort_unless($checkoutUrl, 502, 'SePay chưa khởi tạo được đơn. Vui lòng quay lại Melodify và tạo mã thanh toán mới.');
+                    return $this->redirectToResult($paymentCode);
+                }
 
-        return redirect()->away($checkoutUrl);
+                $checkoutUrl = $gateways->startSePayCheckout($payment);
+                abort_unless($checkoutUrl, 502, 'SePay chưa khởi tạo được đơn. Vui lòng quay lại Melodify và tạo mã thanh toán mới.');
+                $payment->forceFill(['gateway_checkout_at' => now()])->save();
+
+                return redirect()->away($checkoutUrl);
+            });
     }
 
     public function sePayIpn(Request $request, VipPaymentGatewayService $gateways, VipPaymentSettlementService $settlements): JsonResponse

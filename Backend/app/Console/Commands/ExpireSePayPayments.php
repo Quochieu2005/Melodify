@@ -20,7 +20,8 @@ class ExpireSePayPayments extends Command
         $payments = Payment::query()
             ->where('method', 'sepay')
             ->where('status', 'pending')
-            ->where('created_at', '<=', now()->subMinutes(10))
+            ->whereNotNull('gateway_checkout_at')
+            ->where('gateway_checkout_at', '<=', now()->subMinutes(10))
             ->get();
 
         foreach ($payments as $payment) {
@@ -44,6 +45,7 @@ class ExpireSePayPayments extends Command
                     && (int) round((float) ($order['order_amount'] ?? -1)) === (int) round((float) $payment->amount)
                     && is_array($approved)) {
                     $settlements->markPaid($payment, (string) ($approved['transaction_id'] ?? $approved['id']), $order);
+
                     continue;
                 }
 
