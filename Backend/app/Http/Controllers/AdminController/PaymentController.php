@@ -76,11 +76,16 @@ class PaymentController extends Controller
             ->latest()
             ->paginate(15)
             ->withQueryString();
-        $successfulPayments = Payment::query()
-            ->whereIn('status', $successStatuses)
-            ->get(['amount']);
-        $successfulPaymentCount = $successfulPayments->count();
-        $totalAmount = (float) $successfulPayments->sum(fn ($payment) => (float) ($payment->amount ?? 0));
+        $summary = Payment::query()->raw(fn ($collection) => $collection->aggregate([
+            ['$match' => ['status' => ['$in' => $successStatuses]]],
+            ['$group' => [
+                '_id' => null,
+                'count' => ['$sum' => 1],
+                'amount' => ['$sum' => ['$ifNull' => ['$amount', 0]]],
+            ]],
+        ], ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']])->toArray())[0] ?? [];
+        $successfulPaymentCount = (int) ($summary['count'] ?? 0);
+        $totalAmount = (float) ($summary['amount'] ?? 0);
         $pendingCount = Payment::query()->whereIn('status', ['pending', 'processing'])->count();
 
         return view('Admin.payments.index', compact('payments', 'successfulPaymentCount', 'totalAmount', 'pendingCount', 'search', 'successfulOnly'));
