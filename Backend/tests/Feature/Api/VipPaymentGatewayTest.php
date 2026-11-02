@@ -10,6 +10,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Models\UserApiToken;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -357,6 +358,12 @@ class VipPaymentGatewayTest extends TestCase
         $response->assertCreated()->assertJsonPath('data.method', 'vnpay');
         parse_str((string) parse_url((string) $response->json('data.checkout_url'), PHP_URL_QUERY), $query);
         $this->assertArrayNotHasKey('vnp_BankCode', $query);
+        $this->assertSame(
+            Carbon::createFromFormat('!YmdHis', $query['vnp_CreateDate'], 'Asia/Ho_Chi_Minh')
+                ->addMinutes(10)
+                ->format('YmdHis'),
+            $query['vnp_ExpireDate'],
+        );
     }
 
     public function test_zalopay_checkout_creates_a_signed_wallet_only_order(): void
@@ -393,6 +400,7 @@ class VipPaymentGatewayTest extends TestCase
 
             return $request->url() === 'https://sb-openapi.zalopay.vn/v2/create'
                 && $payload['callback_url'] === 'https://api.example.test/api/v1/vip/payments/zalopay/callback'
+                && $payload['expire_duration_seconds'] === 600
                 && ($embedData['preferred_payment_method'] ?? null) === ['zalopay_wallet']
                 && $payload['mac'] === hash_hmac('sha256', $signatureData, 'zalopay-test-key1');
         });
