@@ -12,6 +12,7 @@ use App\Models\Song;
 use App\Models\SongArtist;
 use App\Models\SongVideo;
 use App\Models\User;
+use App\Services\Search\AtlasSearch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -47,9 +48,14 @@ trait SearchesCatalog
         $literal = new Regex(preg_quote($term, '/'), 'i');
         $normalized = preg_replace('/[^a-z0-9]/', '', Str::slug($term));
         $slugPattern = new Regex($normalized !== '' ? implode('[^a-z0-9]*', str_split($normalized)) : '(?!)', 'i');
+        // Atlas Search ids when the index is ready, otherwise null and the regex match below is used.
+        $atlas = app(AtlasSearch::class);
+        $artistHits = $atlas->ids(Artist::class, $term);
         $matchedArtistIds = Artist::query()
             ->where('status', 'active')
-            ->where(fn ($query) => $query->where('name', 'regex', $literal)->orWhere('slug', 'regex', $slugPattern))
+            ->where(fn ($query) => $artistHits !== null
+                ? $query->whereIn((new Artist)->getKeyName(), $artistHits)
+                : $query->where('name', 'regex', $literal)->orWhere('slug', 'regex', $slugPattern))
             ->pluck((new Artist)->getKeyName())
             ->map(fn ($id): string => (string) $id)
             ->all();
@@ -58,10 +64,15 @@ trait SearchesCatalog
             : SongArtist::query()->whereIn('artist_id', $matchedArtistIds)->pluck('song_id')
                 ->map(fn ($id): string => (string) $id)->all();
         $artistMatchedSongs = array_values(array_unique($songsByArtist));
-        $relatedSongs = Song::query()->where('status', 'published')->where(function ($query) use ($literal, $slugPattern, $artistMatchedSongs): void {
-            $query->where('title', 'regex', $literal)
-                ->orWhere('slug', 'regex', $slugPattern)
-                ->orWhere('artist_name', 'regex', $literal);
+        $songHits = $atlas->ids(Song::class, $term);
+        $relatedSongs = Song::query()->where('status', 'published')->where(function ($query) use ($literal, $slugPattern, $artistMatchedSongs, $songHits): void {
+            if ($songHits !== null) {
+                $query->whereIn((new Song)->getKeyName(), $songHits);
+            } else {
+                $query->where('title', 'regex', $literal)
+                    ->orWhere('slug', 'regex', $slugPattern)
+                    ->orWhere('artist_name', 'regex', $literal);
+            }
             if ($artistMatchedSongs !== []) {
                 $query->orWhereIn((new Song)->getKeyName(), $artistMatchedSongs);
             }
@@ -95,8 +106,18 @@ trait SearchesCatalog
                 continue;
             }
             $keyName = (new $model)->getKeyName();
-            $query = $model::query()->where('status', $status)->where(function ($query) use ($field, $literal, $slugPattern, $kind, $relatedIds, $keyName): void {
-                $query->where(function ($textQuery) use ($field, $literal, $slugPattern, $kind): void {
+            $hits = match ($kind) {
+                'song' => $songHits,
+                'artist' => $artistHits,
+                default => $atlas->ids($model, $term),
+            };
+            $query = $model::query()->where('status', $status)->where(function ($query) use ($field, $literal, $slugPattern, $kind, $relatedIds, $keyName, $hits): void {
+                $query->where(function ($textQuery) use ($field, $literal, $slugPattern, $kind, $keyName, $hits): void {
+                    if ($hits !== null) {
+                        $textQuery->whereIn($keyName, $hits);
+
+                        return;
+                    }
                     $textQuery->where($field, 'regex', $literal)->orWhere($kind === 'user' ? 'username' : 'slug', 'regex', $slugPattern);
                     if ($kind === 'song') {
                         $textQuery->orWhere('artist_name', 'regex', $literal);
