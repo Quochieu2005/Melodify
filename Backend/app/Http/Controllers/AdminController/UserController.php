@@ -34,7 +34,10 @@ class UserController extends CrudResourceController
     {
         $data = parent::normalize($data, $ignoreId);
         $data['is_premium'] = request()->boolean('is_premium') ? 1 : 0;
-        if (request()->has('is_premium') && $data['is_premium'] === 1) {
+        // The form posts is_premium=1 again for every paying VIP on any edit. Only granting VIP to someone who
+        // was not premium makes it permanent; an existing VIP keeps their expiry date.
+        $wasPremium = $ignoreId !== null && (int) (User::query()->find((string) $ignoreId)?->is_premium ?? 0) === 1;
+        if ($data['is_premium'] === 1 && ! $wasPremium) {
             $data['vip_expires_at'] = null;
         }
 

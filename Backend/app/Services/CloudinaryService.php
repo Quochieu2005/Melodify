@@ -92,12 +92,7 @@ class CloudinaryService
 
     public function uploadImage(UploadedFile $file, ?string $folder = null, ?string $publicId = null): array
     {
-        return $this->uploadImageContents(
-            $file->get(),
-            $file->getClientOriginalName(),
-            $folder,
-            $publicId,
-        );
+        return $this->uploadFileStream($file, 'image', $folder, $publicId);
     }
 
     public function uploadImageContents(string $contents, string $filename, ?string $folder = null, ?string $publicId = null): array
@@ -107,12 +102,7 @@ class CloudinaryService
 
     public function uploadAudio(UploadedFile $file, ?string $folder = null, ?string $publicId = null): array
     {
-        return $this->uploadAudioContents(
-            $file->get(),
-            $file->getClientOriginalName(),
-            $folder,
-            $publicId,
-        );
+        return $this->uploadFileStream($file, 'video', $folder, $publicId);
     }
 
     public function uploadAudioContents(string $contents, string $filename, ?string $folder = null, ?string $publicId = null): array
@@ -248,8 +238,27 @@ class CloudinaryService
         $this->deleteAsset($publicId, 'video');
     }
 
+    /** Send an uploaded file from disk without reading it all into memory (audio can be 100 MB). */
+    private function uploadFileStream(UploadedFile $file, string $resourceType, ?string $folder, ?string $publicId): array
+    {
+        $path = $file->getRealPath();
+        $stream = $path ? fopen($path, 'rb') : false;
+        if ($stream === false || (int) $file->getSize() < 1) {
+            throw new RuntimeException('Không mở được file hoặc file rỗng.');
+        }
+
+        try {
+            return $this->uploadMediaContents($stream, $file->getClientOriginalName(), $resourceType, $folder, $publicId);
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+    }
+
+    /** @param string|resource $contents */
     private function uploadMediaContents(
-        string $contents,
+        mixed $contents,
         string $filename,
         string $resourceType,
         ?string $folder = null,
@@ -275,7 +284,8 @@ class CloudinaryService
         $signature = $this->signature($signedParameters, $apiSecret);
         $endpoint = "https://api.cloudinary.com/v1_1/{$cloudName}/{$resourceType}/upload";
 
-        $response = Http::attach('file', $contents, $filename)
+        // Laravel's default HTTP timeout is 30 s, too short for a 100 MB audio file.
+        $response = Http::connectTimeout(15)->timeout(300)->attach('file', $contents, $filename)
             ->post($endpoint, [
                 'api_key' => $apiKey,
                 'timestamp' => $timestamp,
