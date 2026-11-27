@@ -460,6 +460,34 @@ class VipPaymentGatewayService
         return is_array($detail) ? $detail : null;
     }
 
+    /**
+     * The approved transaction when the SePay order proves this payment was paid in full, else null.
+     * One rule for the result page and the expiry job, so they cannot disagree about "paid".
+     *
+     * @return array{transaction_id: string, transaction: array<string, mixed>}|null
+     */
+    public function approvedSePayTransaction(Payment $payment, mixed $order): ?array
+    {
+        if (! is_array($order)
+            || ! hash_equals((string) $payment->payment_code, (string) ($order['order_invoice_number'] ?? ''))
+            || ($order['order_status'] ?? '') !== 'CAPTURED'
+            || strtoupper((string) ($order['order_currency'] ?? '')) !== 'VND'
+            || (int) round((float) ($order['order_amount'] ?? -1)) !== (int) round((float) $payment->amount)) {
+            return null;
+        }
+
+        $transactions = $order['transactions'] ?? [];
+        $approved = collect(is_array($transactions) ? $transactions : [])->first(fn ($transaction) => is_array($transaction)
+            && ($transaction['transaction_status'] ?? '') === 'APPROVED'
+            && strtoupper((string) ($transaction['transaction_currency'] ?? '')) === 'VND'
+            && (int) round((float) ($transaction['transaction_amount'] ?? -1)) === (int) round((float) $payment->amount)
+            && filled($transaction['transaction_id'] ?? $transaction['id'] ?? null));
+
+        return is_array($approved)
+            ? ['transaction_id' => (string) ($approved['transaction_id'] ?? $approved['id']), 'transaction' => $approved]
+            : null;
+    }
+
     public function cancelSePayOrder(Payment $payment): bool
     {
         if ($payment->method !== 'sepay' || blank($payment->payment_code) || ! $this->isConfigured('sepay')) {

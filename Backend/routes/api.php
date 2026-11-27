@@ -178,7 +178,7 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
 
     Route::get('/me/library', [UserLibraryController::class, 'index'])->name('me.library');
     Route::get('/users/{identifier}', [FollowController::class, 'show'])->name('users.show');
-    Route::get('/search', [CatalogController::class, 'search'])->middleware('throttle:120,1')->name('search');
+    Route::get('/search', [CatalogController::class, 'search'])->middleware('throttle:60,1,search')->name('search');
 
     Route::get('/topics', [CatalogController::class, 'topics'])->name('topics.index');
     Route::get('/topics/{slug}', [CatalogController::class, 'topic'])->name('topics.show');

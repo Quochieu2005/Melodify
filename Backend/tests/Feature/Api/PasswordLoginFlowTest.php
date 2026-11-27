@@ -93,4 +93,26 @@ class PasswordLoginFlowTest extends TestCase
         $this->postJson('/api/v1/auth/password/reset', $payload)->assertUnprocessable();
         $this->assertNotSame($user->password, $user->fresh()->password);
     }
+
+    public function test_password_reset_otp_locks_after_five_wrong_codes_even_for_the_right_code(): void
+    {
+        Mail::fake();
+        $email = 'lock-'.bin2hex(random_bytes(4)).'@example.test';
+        User::query()->create(['name' => 'Lock Test', 'email' => $email, 'password' => 'BrowserTest!2026', 'status' => 'active']);
+        $this->postJson('/api/v1/auth/password/forgot', ['email' => $email])->assertOk();
+        $otp = '';
+        Mail::assertSent(UserPasswordOtpMail::class, function (UserPasswordOtpMail $mail) use (&$otp): bool {
+            $otp = $mail->code;
+
+            return true;
+        });
+        $wrong = $otp === '000000' ? '111111' : '000000';
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->postJson('/api/v1/auth/password/verify-otp', ['email' => $email, 'code' => $wrong])->assertUnprocessable();
+        }
+
+        $this->postJson('/api/v1/auth/password/verify-otp', ['email' => $email, 'code' => $otp])
+            ->assertUnprocessable()->assertJsonMissingPath('reset_token');
+    }
 }

@@ -179,20 +179,8 @@ class VipCheckoutController extends Controller
             try {
                 if (Cache::add('vip:sepay:query:'.(string) $payment->getKey(), true, 8)) {
                     $providerOrder = $gateways->querySePayOrder($payment);
-                    $transactions = $providerOrder['transactions'] ?? [];
-                    $approved = collect(is_array($transactions) ? $transactions : [])->first(fn ($transaction) => is_array($transaction)
-                        && ($transaction['transaction_status'] ?? '') === 'APPROVED'
-                        && strtoupper((string) ($transaction['transaction_currency'] ?? '')) === 'VND'
-                        && (int) round((float) ($transaction['transaction_amount'] ?? -1)) === (int) round((float) $payment->amount)
-                        && filled($transaction['id'] ?? $transaction['transaction_id'] ?? null));
-
-                    if (is_array($providerOrder)
-                        && hash_equals((string) $payment->payment_code, (string) ($providerOrder['order_invoice_number'] ?? ''))
-                        && ($providerOrder['order_status'] ?? '') === 'CAPTURED'
-                        && strtoupper((string) ($providerOrder['order_currency'] ?? '')) === 'VND'
-                        && (int) round((float) ($providerOrder['order_amount'] ?? -1)) === (int) round((float) $payment->amount)
-                        && is_array($approved)) {
-                        $settlements->markPaid($payment, (string) ($approved['transaction_id'] ?? $approved['id']), $providerOrder);
+                    if ($paid = $gateways->approvedSePayTransaction($payment, $providerOrder)) {
+                        $settlements->markPaid($payment, $paid['transaction_id'], $providerOrder);
                     }
                 }
             } catch (Throwable $exception) {
