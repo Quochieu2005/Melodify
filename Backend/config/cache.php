@@ -15,7 +15,7 @@ return [
     |
     */
 
-    'default' => env('CACHE_STORE', 'database'),
+    'default' => env('CACHE_STORE', 'mongodb'),
 
     /*
     |--------------------------------------------------------------------------
@@ -37,6 +37,16 @@ return [
         'array' => [
             'driver' => 'array',
             'serialize' => false,
+        ],
+
+        // Shared across servers (Atlas), so locks, OTPs and QR sessions work with more than one instance.
+        'mongodb' => [
+            'driver' => 'mongodb',
+            'connection' => 'mongodb',
+            'collection' => 'cache',
+            'lock_collection' => 'cache_locks',
+            'lock_lottery' => [2, 100],
+            'lock_timeout' => 86400,
         ],
 
         'database' => [

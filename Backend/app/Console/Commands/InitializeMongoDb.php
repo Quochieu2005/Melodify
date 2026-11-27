@@ -66,6 +66,8 @@ class InitializeMongoDb extends Command
             'topic_songs',
             'media_assets',
             'user_upload_stages',
+            'cache',
+            'cache_locks',
         ];
 
         $existing = [];
@@ -121,6 +123,9 @@ class InitializeMongoDb extends Command
             'user_api_tokens' => [[['token_hash' => 1], ['unique' => true]], [['user_id' => 1], []], [['expires_at' => 1], []]],
             'phone_login_challenges' => [[['phone' => 1, 'created_at' => -1], []], [['expires_at' => 1], []]],
             'recommendations' => [[['user_id' => 1, 'song_id' => 1], ['unique' => true]]],
+            // Cache entries and locks delete themselves once expires_at has passed.
+            'cache' => [[['expires_at' => 1], ['expireAfterSeconds' => 0]]],
+            'cache_locks' => [[['expires_at' => 1], ['expireAfterSeconds' => 0]]],
         ];
 
         foreach ($indexes as $collection => $collectionIndexes) {
