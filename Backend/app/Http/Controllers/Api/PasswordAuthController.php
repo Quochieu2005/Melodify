@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\UserApiToken;
 use App\Services\ApiTokenService;
 use App\Services\PhoneOtpService;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -174,6 +175,19 @@ class PasswordAuthController extends Controller
         ]);
 
         $email = Str::lower(trim($data['email']));
+
+        // Serialize attempts per email: the counter is read, checked and written back,
+        // so parallel guesses would otherwise all see the same old count.
+        try {
+            return Cache::lock('api-password-verify:'.hash('sha256', $email), 10)
+                ->block(5, fn (): JsonResponse => $this->checkPasswordResetOtp($email, $data['code']));
+        } catch (LockTimeoutException) {
+            return response()->json(['message' => 'Hệ thống đang bận, vui lòng thử lại.'], 429);
+        }
+    }
+
+    private function checkPasswordResetOtp(string $email, string $code): JsonResponse
+    {
         $cacheKey = $this->otpCacheKey($email);
         $challenge = Cache::get($cacheKey);
 
@@ -191,7 +205,7 @@ class PasswordAuthController extends Controller
             return response()->json(['message' => 'Bạn đã nhập sai OTP quá nhiều lần.'], 422);
         }
 
-        if (! Hash::check($data['code'], (string) ($challenge['code_hash'] ?? ''))) {
+        if (! Hash::check($code, (string) ($challenge['code_hash'] ?? ''))) {
             $challenge['attempts'] = (int) ($challenge['attempts'] ?? 0) + 1;
             Cache::put($cacheKey, $challenge, Carbon::parse($challenge['expires_at']));
 

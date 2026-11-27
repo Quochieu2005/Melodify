@@ -47,6 +47,11 @@ class PhoneOtpService
             throw new \RuntimeException('PHONE_OTP_DRIVER không được hỗ trợ.');
         }
 
+        // The log driver writes the code in plain text to laravel.log; never allow it outside local/testing.
+        if ($driver === 'log' && ! app()->environment(['local', 'testing'])) {
+            throw new \RuntimeException('PHONE_OTP_DRIVER=log chỉ được dùng ở môi trường local. Hãy cấu hình twilio.');
+        }
+
         if ($driver === 'twilio'
             && ((string) config('services.twilio.account_sid') === ''
                 || (string) config('services.twilio.auth_token') === ''
@@ -94,15 +99,20 @@ class PhoneOtpService
 
         $maxAttempts = max(3, (int) config('auth.phone_otp.max_attempts', 5));
 
-        if ((int) ($challenge->attempts ?? 0) >= $maxAttempts) {
+        // Claim one attempt atomically before checking the code. A read-then-write counter
+        // lets parallel requests all see "0 attempts" and guess more than the limit.
+        $claimed = PhoneLoginChallenge::query()
+            ->where('_id', (string) $challenge->getKey())
+            ->where('attempts', '<', $maxAttempts)
+            ->increment('attempts');
+
+        if ($claimed === 0) {
             return false;
         }
 
         $valid = $challenge->provider === 'twilio'
             ? $this->checkWithTwilio($phone, $code)
             : Hash::check($code, (string) $challenge->code_hash);
-
-        $challenge->increment('attempts');
 
         if (! $valid) {
             return false;
