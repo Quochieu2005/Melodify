@@ -32,7 +32,7 @@ class SongAudioUploadTest extends TestCase
         try {
             $connection = DB::connection('mongodb');
             if ($connection->getTablePrefix() === $this->testPrefix && preg_match('/^test_song_audio_[a-f0-9]{16}_$/', $this->testPrefix)) {
-                foreach (['admins', 'logs', 'songs', 'song_audio_files', 'song_artists', 'artists', 'topics', 'topic_songs', 'genres', 'song_genres', 'playlists', 'playlist_songs', 'lyrics'] as $collection) {
+                foreach (['admins', 'admin_notifications', 'logs', 'songs', 'song_audio_files', 'song_artists', 'artists', 'topics', 'topic_songs', 'genres', 'song_genres', 'playlists', 'playlist_songs', 'lyrics'] as $collection) {
                     $connection->getCollection($collection)->drop();
                 }
             }

@@ -34,7 +34,7 @@ class VideoEngagementTest extends TestCase
         try {
             $connection = DB::connection('mongodb');
             if ($connection->getTablePrefix() === $this->testPrefix && preg_match('/^test_video_[a-f0-9]{16}_$/', $this->testPrefix)) {
-                foreach (['song_videos', 'video_favorites', 'reports'] as $collection) {
+                foreach (['song_videos', 'video_favorites', 'reports', 'users', 'user_api_tokens', 'admin_notifications', 'logs'] as $collection) {
                     $connection->getCollection($collection)->drop();
                 }
             }
