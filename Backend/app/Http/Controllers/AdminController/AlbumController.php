@@ -13,11 +13,17 @@ use Illuminate\View\View;
 class AlbumController extends CrudResourceController
 {
     protected string $model = Album::class;
+
     protected string $resource = 'albums';
+
     protected string $title = 'album';
+
     protected string $viewDirectory = 'Admin.albums';
+
     protected array $columns = ['cover_url' => 'Ảnh bìa', 'title' => 'Tên album', 'artist.name' => 'Nghệ sĩ', 'release_date' => 'Ngày phát hành', 'status' => 'Trạng thái'];
+
     protected array $searchable = ['title', 'slug'];
+
     protected array $indexWith = ['artist'];
 
     public function create(): View
@@ -42,7 +48,7 @@ class AlbumController extends CrudResourceController
             'selectedSongIds' => Song::query()
                 ->where('album_id', (string) $item->getKey())
                 ->orderBy('title')
-                ->pluck((new Song())->getKeyName())
+                ->pluck((new Song)->getKeyName())
                 ->map(fn ($id): string => (string) $id)
                 ->all(),
             'mediaAssets' => app(MediaAssetService::class)->latest(),
@@ -58,7 +64,7 @@ class AlbumController extends CrudResourceController
             'album' => $album,
             'artists' => $artistIds === []
                 ? collect()
-                : Artist::query()->whereIn((new Artist())->getKeyName(), $artistIds)->orderBy('name')->get(),
+                : Artist::query()->whereIn((new Artist)->getKeyName(), $artistIds)->orderBy('name')->get(),
             'songs' => Song::query()
                 ->where('album_id', (string) $album->getKey())
                 ->orderBy('title')
@@ -135,7 +141,7 @@ class AlbumController extends CrudResourceController
     {
         $albumId = (string) $album->getKey();
         $songIds = array_values(array_unique(array_map('strval', $songIds)));
-        $keyName = (new Song())->getKeyName();
+        $keyName = (new Song)->getKeyName();
         $currentSongIds = Song::query()->where('album_id', $albumId)->pluck($keyName)->map(fn ($id): string => (string) $id)->all();
         $removedIds = array_values(array_diff($currentSongIds, $songIds));
 

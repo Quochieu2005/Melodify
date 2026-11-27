@@ -7,8 +7,8 @@ use App\Mail\AdminCredentialsMail;
 use App\Models\Admin;
 use App\Services\CloudinaryService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -216,6 +216,7 @@ class AdminManagementController extends CrudResourceController
 
             if (! $admin || $admin->role !== 'admin' || filled($admin->credentials_sent_at)) {
                 $skipped++;
+
                 continue;
             }
 

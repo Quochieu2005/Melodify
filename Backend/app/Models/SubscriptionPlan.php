@@ -19,6 +19,13 @@ class SubscriptionPlan extends BaseModel
         'unlimited_skip' => 'boolean',
     ];
 
-    public function subscriptions() { return $this->hasMany(Subscription::class, 'plan_id'); }
-    public function payments() { return $this->hasMany(PaymentDetail::class, 'plan_id'); }
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class, 'plan_id');
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(PaymentDetail::class, 'plan_id');
+    }
 }

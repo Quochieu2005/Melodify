@@ -7,8 +7,8 @@ use App\Models\Playlist;
 use App\Rules\PlainText;
 use App\Services\MediaAssetService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -67,7 +67,7 @@ abstract class MediaCatalogController extends Controller
         return Playlist::query()
             ->get()
             ->filter(fn (Playlist $playlist): bool => $this->relationContainsId($playlist->{$relationField} ?? [], (string) $item->getKey()))
-            ->pluck((new Playlist())->getKeyName())
+            ->pluck((new Playlist)->getKeyName())
             ->map(fn ($id): string => (string) $id)
             ->values()
             ->all();
@@ -165,7 +165,7 @@ abstract class MediaCatalogController extends Controller
     {
         $request ??= request();
         $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+            'q' => ['nullable', 'string', 'max:100', new PlainText],
         ]);
         $search = trim((string) ($filters['q'] ?? ''));
         $query = ($this->model)::query();
@@ -264,7 +264,7 @@ abstract class MediaCatalogController extends Controller
             'ids.*.distinct' => 'Các mục được chọn không được trùng lặp.',
         ]);
 
-        $keyName = (new $this->model())->getKeyName();
+        $keyName = (new $this->model)->getKeyName();
         $items = ($this->model)::query()
             ->whereIn($keyName, array_values($data['ids']))
             ->get();
@@ -453,9 +453,7 @@ abstract class MediaCatalogController extends Controller
         return $data;
     }
 
-    protected function afterDelete(object $item): void
-    {
-    }
+    protected function afterDelete(object $item): void {}
 
     protected function resolveSlug(?string $provided, string $name, mixed $ignoreId = null): string
     {

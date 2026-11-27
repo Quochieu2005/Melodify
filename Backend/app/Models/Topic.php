@@ -10,5 +10,8 @@ class Topic extends BaseModel
         'sort_order' => 'integer',
     ];
 
-    public function songs() { return $this->hasMany(TopicSong::class, 'topic_id'); }
+    public function songs()
+    {
+        return $this->hasMany(TopicSong::class, 'topic_id');
+    }
 }

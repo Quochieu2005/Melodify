@@ -43,8 +43,8 @@ class ProfileController extends Controller
     {
         $admin = $request->user('admin');
         $data = $request->validate([
-            'name' => ['bail', 'required', 'string', 'min:1', 'max:120', new PlainText()],
-            'email' => ['bail', 'required', 'string', 'email', 'max:160', new PlainText(), Rule::unique('admins', 'email')->ignore($admin->getKey())],
+            'name' => ['bail', 'required', 'string', 'min:1', 'max:120', new PlainText],
+            'email' => ['bail', 'required', 'string', 'email', 'max:160', new PlainText, Rule::unique('admins', 'email')->ignore($admin->getKey())],
             'avatar_file' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=4000,max_height=4000'],
             'remove_avatar' => ['nullable', 'boolean'],
         ]);

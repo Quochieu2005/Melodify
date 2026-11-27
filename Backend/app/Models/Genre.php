@@ -10,5 +10,8 @@ class Genre extends BaseModel
         'sort_order' => 'integer',
     ];
 
-    public function songs() { return $this->hasMany(SongGenre::class, 'genre_id'); }
+    public function songs()
+    {
+        return $this->hasMany(SongGenre::class, 'genre_id');
+    }
 }

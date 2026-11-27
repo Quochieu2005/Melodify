@@ -28,7 +28,7 @@ class NormalizeCatalogSortOrders extends Command
     }
 
     /**
-     * @param Collection<int, Playlist|Topic> $items
+     * @param  Collection<int, Playlist|Topic>  $items
      */
     private function normalize(Collection $items, bool $isTopic, bool $dryRun): int
     {

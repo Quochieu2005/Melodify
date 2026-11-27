@@ -8,5 +8,8 @@ class Lyric extends BaseModel
 
     protected $casts = ['is_synced' => 'boolean'];
 
-    public function song() { return $this->belongsTo(Song::class, 'song_id'); }
+    public function song()
+    {
+        return $this->belongsTo(Song::class, 'song_id');
+    }
 }

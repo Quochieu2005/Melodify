@@ -11,7 +11,18 @@ class SongPlayEvent extends BaseModel
         'completed' => 'boolean',
     ];
 
-    public function user() { return $this->belongsTo(User::class, 'user_id'); }
-    public function song() { return $this->belongsTo(Song::class, 'song_id'); }
-    public function device() { return $this->belongsTo(Device::class, 'device_id'); }
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function song()
+    {
+        return $this->belongsTo(Song::class, 'song_id');
+    }
+
+    public function device()
+    {
+        return $this->belongsTo(Device::class, 'device_id');
+    }
 }

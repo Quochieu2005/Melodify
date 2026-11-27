@@ -11,5 +11,8 @@ class Transaction extends BaseModel
         'transaction_at' => 'datetime',
     ];
 
-    public function payment() { return $this->belongsTo(Payment::class, 'payment_id'); }
+    public function payment()
+    {
+        return $this->belongsTo(Payment::class, 'payment_id');
+    }
 }

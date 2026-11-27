@@ -12,7 +12,6 @@ use App\Models\AlbumFavorite;
 use App\Models\AlbumShare;
 use App\Models\Artist;
 use App\Models\ArtistFollower;
-use App\Models\ArtistViewEvent;
 use App\Models\Banner;
 use App\Models\ChartShare;
 use App\Models\Favorite;
@@ -30,7 +29,6 @@ use App\Models\SongShare;
 use App\Models\SongVideo;
 use App\Models\Topic;
 use App\Models\TopicSong;
-use App\Models\User;
 use App\Models\VideoFavorite;
 use App\Services\Music\LyricsClient;
 use App\Services\Music\NhacCuaTuiClient;
@@ -41,7 +39,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
-use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -324,7 +321,6 @@ class CatalogController extends Controller
      *
      * @return array<int, array<string, mixed>>
      */
-
     public function videos(Request $request): JsonResponse
     {
         $perPage = min(max($request->integer('per_page', 20), 1), 50);

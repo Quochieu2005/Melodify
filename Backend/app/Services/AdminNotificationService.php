@@ -79,6 +79,7 @@ class AdminNotificationService
                     'is_read' => false,
                     'read_at' => null,
                 ]);
+
                 continue;
             }
 

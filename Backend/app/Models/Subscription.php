@@ -13,7 +13,18 @@ class Subscription extends BaseModel
         'cancelled_at' => 'datetime',
     ];
 
-    public function user() { return $this->belongsTo(User::class, 'user_id'); }
-    public function plan() { return $this->belongsTo(SubscriptionPlan::class, 'plan_id'); }
-    public function payments() { return $this->hasMany(Payment::class, 'subscription_id'); }
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function plan()
+    {
+        return $this->belongsTo(SubscriptionPlan::class, 'plan_id');
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class, 'subscription_id');
+    }
 }

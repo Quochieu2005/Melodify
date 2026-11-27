@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Models\Topic;
-use App\Models\Playlist;
 use App\Rules\PlainText;
 use App\Services\CatalogGroupService;
 use Illuminate\Http\Request;
@@ -42,7 +41,7 @@ class TopicController extends MediaCatalogController
     {
         $request ??= request();
         $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+            'q' => ['nullable', 'string', 'max:100', new PlainText],
             'type' => ['nullable', 'string', 'max:160'],
         ]);
         $search = trim((string) ($filters['q'] ?? ''));
@@ -80,6 +79,7 @@ class TopicController extends MediaCatalogController
             ->latest()
             ->paginate(12)
             ->withQueryString();
+
         return view('Admin.catalog.index', $this->viewData(compact(
             'items',
             'search',
@@ -90,11 +90,11 @@ class TopicController extends MediaCatalogController
     protected function rules(?object $item): array
     {
         return [
-            'name' => ['bail', 'required', 'string', 'min:1', 'max:150', new PlainText()],
+            'name' => ['bail', 'required', 'string', 'min:1', 'max:150', new PlainText],
             'type' => ['required', Rule::in(array_keys(config('topics.types', [])))],
-            'type_custom' => ['nullable', 'required_if:type,custom', 'string', 'min:1', 'max:80', new PlainText()],
-            'slug' => ['nullable', 'alpha_dash', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', new PlainText()],
-            'description' => ['nullable', 'string', 'max:2000', new PlainText()],
+            'type_custom' => ['nullable', 'required_if:type,custom', 'string', 'min:1', 'max:80', new PlainText],
+            'slug' => ['nullable', 'alpha_dash', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', new PlainText],
+            'description' => ['nullable', 'string', 'max:2000', new PlainText],
             'sort_order' => ['required', 'integer', 'min:1', 'max:9999'],
             'status' => ['required', 'in:active,inactive'],
             'playlist_ids' => ['nullable', 'array', 'max:500'],

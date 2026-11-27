@@ -12,5 +12,8 @@ class Notification extends BaseModel
         'read_at' => 'datetime',
     ];
 
-    public function user() { return $this->belongsTo(User::class, 'user_id'); }
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 }

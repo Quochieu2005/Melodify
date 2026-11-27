@@ -6,7 +6,6 @@ use App\Models\PhoneLoginChallenge;
 use App\Services\PhoneOtpService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class PhoneOtpTest extends TestCase

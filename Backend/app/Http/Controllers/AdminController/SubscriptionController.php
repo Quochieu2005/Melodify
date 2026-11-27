@@ -40,7 +40,7 @@ class SubscriptionController extends CrudResourceController
     {
         $request ??= request();
         $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+            'q' => ['nullable', 'string', 'max:100', new PlainText],
         ]);
         $search = trim((string) ($filters['q'] ?? ''));
         $query = SubscriptionPlan::query();
