@@ -1418,20 +1418,25 @@ class CatalogController extends Controller
         $visitorId = trim((string) ($data['visitor_id'] ?? ''));
         $visitorId = $visitorId !== '' ? $visitorId : hash('sha256', (string) $request->ip());
         $songId = (string) $song->getKey();
-        SongPlayEvent::query()->create([
-            'user_id' => $request->user()?->getKey() ? (string) $request->user()->getKey() : null,
-            'song_id' => $songId,
-            'visitor_id' => $visitorId,
-            'source' => $data['source'] ?? 'web',
-            'started_at' => now(),
-            'completed' => false,
-        ]);
+        $actor = $request->user()?->getKey() ? 'user:'.$request->user()->getKey() : 'visitor:'.$visitorId;
+        // A replay within a few seconds is the same listen; this stops spam from inflating charts.
+        $isNewListen = Cache::store('file')->add('song-view:'.$songId.':'.hash('sha256', $actor), true, now()->addSeconds(20));
+        if ($isNewListen) {
+            SongPlayEvent::query()->create([
+                'user_id' => $request->user()?->getKey() ? (string) $request->user()->getKey() : null,
+                'song_id' => $songId,
+                'visitor_id' => $visitorId,
+                'source' => $data['source'] ?? 'web',
+                'started_at' => now(),
+                'completed' => false,
+            ]);
+        }
 
         // Rollups refresh after one minute. Invalidating on every play
         // defeats caching for every visitor while music is being played.
 
         return response()->json([
-            'recorded' => true,
+            'recorded' => $isNewListen,
             'views' => $this->songViewCount($song),
         ]);
     }

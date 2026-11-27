@@ -190,6 +190,38 @@ class VipPaymentGatewayTest extends TestCase
         $this->assertTrue($this->user->fresh()->hasPremiumAccess());
     }
 
+    public function test_sepay_status_check_reconciles_a_paid_order_when_ipn_is_delayed(): void
+    {
+        $payment = $this->pendingPayment('sepay');
+        config(['services.sepay.api_url' => 'https://api.sepay.example.test']);
+        Http::fake([
+            'https://api.sepay.example.test/v1/order?*' => Http::response(['data' => [[
+                'order_id' => 'SEPAY-ORDER-QUERY',
+                'order_invoice_number' => $payment->payment_code,
+            ]]]),
+            'https://api.sepay.example.test/v1/order/detail/'.$payment->payment_code => Http::response(['data' => [
+                'order_invoice_number' => $payment->payment_code,
+                'order_status' => 'CAPTURED',
+                'order_currency' => 'VND',
+                'order_amount' => '12000.00',
+                'transactions' => [[
+                    'transaction_status' => 'APPROVED',
+                    'transaction_currency' => 'VND',
+                    'transaction_amount' => '12000',
+                    'transaction_id' => 'SEPAY-STATUS-QUERY-1',
+                ]],
+            ]]),
+        ]);
+
+        $this->withHeaders($this->headers)
+            ->getJson('/api/v1/vip/transactions/'.$payment->payment_code)
+            ->assertOk()
+            ->assertJsonPath('data.status', 'success');
+
+        $this->assertSame('success', $payment->fresh()->status);
+        $this->assertTrue($this->user->fresh()->hasPremiumAccess());
+    }
+
     public function test_sepay_expiration_uses_the_provider_checkout_creation_time(): void
     {
         $this->assertTrue(app(VipPaymentGatewayService::class)->isConfigured('sepay'));
@@ -213,6 +245,25 @@ class VipPaymentGatewayTest extends TestCase
 
         Http::assertSent(fn (HttpRequest $request): bool => str_ends_with($request->url(), '/v1/order/cancel'));
         $this->assertSame('failed', $payment->fresh()->status);
+    }
+
+    public function test_verified_paid_callback_settles_an_order_already_marked_failed_or_stuck_processing(): void
+    {
+        $failed = $this->pendingPayment('momo');
+        $failed->forceFill(['status' => 'failed'])->save();
+        $this->postJson('/api/v1/vip/payments/momo/ipn', $this->signedMomoCallback($failed, 0, 'MOMO-LATE-PAID'))->assertNoContent();
+        $this->assertSame('success', $failed->fresh()->status);
+        $this->assertTrue($this->user->fresh()->hasPremiumAccess());
+
+        $stuck = $this->pendingPayment('momo');
+        $stuck->forceFill(['status' => 'processing', 'processing_at' => now()->subMinutes(6)])->save();
+        $this->postJson('/api/v1/vip/payments/momo/ipn', $this->signedMomoCallback($stuck, 0, 'MOMO-STUCK-PAID'))->assertNoContent();
+        $this->assertSame('success', $stuck->fresh()->status);
+
+        $busy = $this->pendingPayment('momo');
+        $busy->forceFill(['status' => 'processing', 'processing_at' => now()])->save();
+        $this->postJson('/api/v1/vip/payments/momo/ipn', $this->signedMomoCallback($busy, 0, 'MOMO-BUSY-PAID'))->assertStatus(409);
+        $this->assertSame('processing', $busy->fresh()->status);
     }
 
     public function test_gateway_transaction_id_cannot_be_reused_for_another_vip_order(): void

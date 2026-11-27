@@ -941,8 +941,22 @@ export function loginWithPassword(identifier: string, password: string) {
   return apiFetch<AuthResponse>('/v1/auth/login', jsonRequest({ identifier, password, remember: true, device_name: 'melodify-mobile' }));
 }
 
-export function approveQrLogin(qrPayload: string) {
-  return apiFetch<{ message: string; status: 'approved' }>('/v1/auth/qr/scan', jsonRequest({ qr_payload: qrPayload }));
+export type QrScanResult = {
+  message: string;
+  status: 'scanned';
+  session_id: string;
+  device_name: string;
+  requested_ip: string | null;
+};
+
+// Step 1: claim the QR. The browser is NOT logged in yet; show the device to the user first.
+export function scanQrLogin(qrPayload: string) {
+  return apiFetch<QrScanResult>('/v1/auth/qr/scan', jsonRequest({ qr_payload: qrPayload }));
+}
+
+// Step 2: only after the user confirmed the device on screen.
+export function approveQrLogin(sessionId: string) {
+  return apiFetch<{ message: string; status: 'approved' }>('/v1/auth/qr/approve', jsonRequest({ session_id: sessionId }));
 }
 
 export function requestPasswordReset(email: string) {

@@ -163,7 +163,7 @@
     </li>
     @endif
 
-    @if($currentAdmin)
+    @if($currentAdmin?->role === 'super_admin')
         <li class="ant-menu-item {{ request()->is('admin/admins*') ? 'ant-menu-item-selected' : '' }}" role="menuitem">
             <a href="{{ route('admin.admins.index') }}" class="ant-menu-title-content">
                 <x-anticon name="team" class="ant-menu-item-icon" />

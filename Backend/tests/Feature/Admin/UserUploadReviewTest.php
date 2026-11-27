@@ -27,7 +27,7 @@ class UserUploadReviewTest extends TestCase
         try {
             $connection = DB::connection('mongodb');
             if ($connection->getTablePrefix() === $this->testPrefix && preg_match('/^test_upload_review_[a-f0-9]{16}_$/', $this->testPrefix)) {
-                foreach (['admins', 'logs', 'users', 'songs', 'song_audio_files'] as $collection) {
+                foreach (['admins', 'admin_notifications', 'logs', 'users', 'songs', 'song_audio_files'] as $collection) {
                     $connection->getCollection($collection)->drop();
                 }
             }

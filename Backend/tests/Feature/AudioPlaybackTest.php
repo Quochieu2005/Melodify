@@ -344,7 +344,7 @@ class AudioPlaybackTest extends TestCase
         $client->shouldNotReceive('stream');
 
         $this->get('/api/v1/songs/playback-test/audio?download=1')
-            ->assertRedirect('https://res.cloudinary.com/demo/video/upload/fl_attachment:Playback.m4a/v123/melodify/audio/test.m4a');
+            ->assertRedirect('https://res.cloudinary.com/demo/video/upload/fl_attachment:Playback/v123/melodify/audio/test.m4a');
     }
 
     public function test_upstream_connection_failure_returns_gateway_error_not_internal_server_error(): void
