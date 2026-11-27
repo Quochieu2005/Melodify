@@ -257,10 +257,6 @@ class AdminManagementController extends CrudResourceController
             return back()->with('error', 'Bạn không thể tự tắt tài khoản đang đăng nhập.');
         }
 
-        if ($currentAdmin?->role !== 'super_admin' && $admin->role === 'super_admin') {
-            return back()->with('error', 'Admin nhỏ không được thay đổi trạng thái của Admin lớn.');
-        }
-
         if ($admin->role === 'super_admin'
             && $admin->is_active
             && Admin::query()->where('role', 'super_admin')->where('is_active', true)->count() <= 1
