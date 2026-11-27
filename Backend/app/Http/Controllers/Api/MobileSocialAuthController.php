@@ -145,6 +145,12 @@ class MobileSocialAuthController extends Controller
             return $this->isAllowedWebRedirect($parts);
         }
 
+        // Expo Go dev URLs (any LAN IP, u.expo.dev) are for development only: in production they would let a
+        // crafted link send the login ticket to someone else's device.
+        if (! app()->environment(['local', 'testing'])) {
+            return false;
+        }
+
         if ($scheme !== 'exp' || ! isset($parts['host'], $parts['port'])) {
             return false;
         }

@@ -48,6 +48,7 @@ class SocialAuthController extends Controller
             $data['access_token'],
             $data['device_name'] ?? null,
             array_key_exists('remember', $data) ? $request->boolean('remember') : null,
+            verifyAudience: true,
         );
     }
 
@@ -129,8 +130,61 @@ class SocialAuthController extends Controller
         );
     }
 
-    private function authenticateWithAccessToken(string $provider, string $accessToken, ?string $deviceName, ?bool $remember): JsonResponse
+    /**
+     * A token handed to us by a client may have been issued to another app (a malicious "Sign in with Google"
+     * button). Only trust it when the provider says it was issued to one of our own apps. Tokens we got by
+     * exchanging a code ourselves are already ours and skip this.
+     */
+    private function audienceError(string $provider, string $accessToken): ?JsonResponse
     {
+        try {
+            if ($provider === 'google') {
+                $allowed = array_values(array_filter(array_map('trim', array_merge(
+                    [(string) config('services.google.client_id', '')],
+                    explode(',', (string) config('services.google.mobile_client_ids', '')),
+                ))));
+                if ($allowed === []) {
+                    return response()->json(['message' => 'Google Client ID chưa được cấu hình trên Backend.', 'code' => 'provider_not_configured'], 503);
+                }
+                $info = Http::acceptJson()->timeout(8)->get('https://oauth2.googleapis.com/tokeninfo', ['access_token' => $accessToken]);
+                if ($info->serverError()) {
+                    return response()->json(['message' => 'Google đang tạm thời không khả dụng.', 'code' => 'provider_unavailable'], 503);
+                }
+                $valid = $info->successful()
+                    && (in_array((string) $info->json('aud'), $allowed, true) || in_array((string) $info->json('azp'), $allowed, true));
+            } else {
+                $appId = (string) config('services.facebook.client_id', '');
+                $secret = (string) config('services.facebook.client_secret', '');
+                if ($appId === '' || $secret === '') {
+                    return response()->json(['message' => 'Facebook App ID/Secret chưa được cấu hình trên Backend.', 'code' => 'provider_not_configured'], 503);
+                }
+                $version = (string) config('services.facebook.graph_version', 'v23.0');
+                $info = Http::acceptJson()->timeout(8)->get("https://graph.facebook.com/{$version}/debug_token", [
+                    'input_token' => $accessToken,
+                    'access_token' => $appId.'|'.$secret,
+                ]);
+                if ($info->serverError()) {
+                    return response()->json(['message' => 'Facebook đang tạm thời không khả dụng.', 'code' => 'provider_unavailable'], 503);
+                }
+                $valid = $info->successful()
+                    && $info->json('data.is_valid') === true
+                    && hash_equals($appId, (string) $info->json('data.app_id'));
+            }
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json(['message' => 'Không thể xác minh token Google/Facebook lúc này.', 'code' => 'provider_unavailable'], 503);
+        }
+
+        return $valid ? null : response()->json(['message' => 'Access token không được cấp cho ứng dụng Melodify.', 'code' => 'invalid_social_token'], 422);
+    }
+
+    private function authenticateWithAccessToken(string $provider, string $accessToken, ?string $deviceName, ?bool $remember, bool $verifyAudience = false): JsonResponse
+    {
+        if ($verifyAudience && ($error = $this->audienceError($provider, $accessToken))) {
+            return $error;
+        }
+
         try {
             $socialUser = Socialite::driver($provider)->userFromToken($accessToken);
         } catch (ConnectException $exception) {

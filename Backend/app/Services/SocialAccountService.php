@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Models\UserApiToken;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Contracts\User as SocialiteUser;
@@ -52,6 +53,18 @@ class SocialAccountService
                 'is_premium' => 0,
                 'status' => 'active',
             ]);
+        }
+
+        // Password sign-up does not verify the email. If someone registered this address first, they must not
+        // keep access once the real owner proves the email through Google/Facebook: reset the password and
+        // revoke tokens. Accounts that already have a social login, or were just created, are left alone.
+        $takesOverPasswordAccount = $userByEmail
+            && ! $userByProvider
+            && blank($userByEmail->google_id)
+            && blank($userByEmail->facebook_id);
+        if ($takesOverPasswordAccount) {
+            $user->forceFill(['password' => Hash::make(Str::random(48)), 'remember_token' => Str::random(60)]);
+            UserApiToken::query()->where('user_id', (string) $user->getKey())->delete();
         }
 
         $user->forceFill([
