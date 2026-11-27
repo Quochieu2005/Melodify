@@ -11,6 +11,13 @@ class Album extends BaseModel
         'artist_ids' => 'array',
     ];
 
-    public function artist() { return $this->belongsTo(Artist::class, 'artist_id'); }
-    public function songs() { return $this->hasMany(Song::class, 'album_id'); }
+    public function artist()
+    {
+        return $this->belongsTo(Artist::class, 'artist_id');
+    }
+
+    public function songs()
+    {
+        return $this->hasMany(Song::class, 'album_id');
+    }
 }

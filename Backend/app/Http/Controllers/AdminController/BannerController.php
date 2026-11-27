@@ -12,6 +12,7 @@ use App\Rules\PlainText;
 use App\Services\MediaAssetService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -29,7 +30,7 @@ class BannerController extends Controller
     {
         $request ??= request();
         $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+            'q' => ['nullable', 'string', 'max:100', new PlainText],
         ]);
         $search = trim((string) ($filters['q'] ?? ''));
         $query = Banner::query();
@@ -170,8 +171,8 @@ class BannerController extends Controller
         return Banner::query()->where('slug', $slug)->firstOrFail();
     }
 
-    /** @return \Illuminate\Support\Collection<int, string> */
-    private function relatedNames(string $model, mixed $ids): \Illuminate\Support\Collection
+    /** @return Collection<int, string> */
+    private function relatedNames(string $model, mixed $ids): Collection
     {
         $ids = collect(is_array($ids) ? $ids : [])
             ->filter(fn ($id): bool => filled($id))
@@ -182,7 +183,7 @@ class BannerController extends Controller
             return collect();
         }
 
-        $instance = new $model();
+        $instance = new $model;
 
         $nameField = 'name';
 
@@ -207,7 +208,7 @@ class BannerController extends Controller
             'banner_ids.*.distinct' => 'Banner được chọn không được trùng lặp.',
         ]);
 
-        $keyName = (new Banner())->getKeyName();
+        $keyName = (new Banner)->getKeyName();
         $banners = Banner::query()
             ->whereIn($keyName, array_values($data['banner_ids']))
             ->get();
@@ -247,11 +248,11 @@ class BannerController extends Controller
     {
         $data = $request->validate([
             'form_token' => [$banner ? 'nullable' : 'required', 'string', 'uuid'],
-            'title' => ['bail', 'required', 'string', 'min:1', 'max:100', new PlainText()],
-            'slug' => ['nullable', 'alpha_dash', 'max:120', new PlainText()],
+            'title' => ['bail', 'required', 'string', 'min:1', 'max:100', new PlainText],
+            'slug' => ['nullable', 'alpha_dash', 'max:120', new PlainText],
             'image' => [$banner ? 'nullable' : 'required_without:image_asset_id', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=6000,max_height=4000'],
             'image_asset_id' => [$banner ? 'nullable' : 'required_without:image', 'string', 'alpha_dash', 'max:64'],
-            'link_url' => ['nullable', 'string', 'max:500', 'regex:/^(https?:\/\/|\/)[^<>"\']*$/', new PlainText()],
+            'link_url' => ['nullable', 'string', 'max:500', 'regex:/^(https?:\/\/|\/)[^<>"\']*$/', new PlainText],
             'sort_order' => [
                 'bail',
                 'required',
@@ -363,5 +364,4 @@ class BannerController extends Controller
 
         return $slug;
     }
-
 }

@@ -8,7 +8,18 @@ class TopicSong extends BaseModel
 
     protected $casts = ['position' => 'integer'];
 
-    public function topic() { return $this->belongsTo(Topic::class, 'topic_id'); }
-    public function song() { return $this->belongsTo(Song::class, 'song_id'); }
-    public function addedByAdmin() { return $this->belongsTo(Admin::class, 'added_by_admin_id'); }
+    public function topic()
+    {
+        return $this->belongsTo(Topic::class, 'topic_id');
+    }
+
+    public function song()
+    {
+        return $this->belongsTo(Song::class, 'song_id');
+    }
+
+    public function addedByAdmin()
+    {
+        return $this->belongsTo(Admin::class, 'added_by_admin_id');
+    }
 }

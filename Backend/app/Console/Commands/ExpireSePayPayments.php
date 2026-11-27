@@ -31,20 +31,8 @@ class ExpireSePayPayments extends Command
                 }
 
                 $order = $gateways->querySePayOrder($payment);
-                $transactions = $order['transactions'] ?? [];
-                $approved = collect(is_array($transactions) ? $transactions : [])->first(fn ($transaction) => is_array($transaction)
-                    && ($transaction['transaction_status'] ?? '') === 'APPROVED'
-                    && strtoupper((string) ($transaction['transaction_currency'] ?? '')) === 'VND'
-                    && (int) round((float) ($transaction['transaction_amount'] ?? -1)) === (int) round((float) $payment->amount)
-                    && filled($transaction['id'] ?? $transaction['transaction_id'] ?? null));
-
-                if (is_array($order)
-                    && hash_equals((string) $payment->payment_code, (string) ($order['order_invoice_number'] ?? ''))
-                    && ($order['order_status'] ?? '') === 'CAPTURED'
-                    && strtoupper((string) ($order['order_currency'] ?? '')) === 'VND'
-                    && (int) round((float) ($order['order_amount'] ?? -1)) === (int) round((float) $payment->amount)
-                    && is_array($approved)) {
-                    $settlements->markPaid($payment, (string) ($approved['transaction_id'] ?? $approved['id']), $order);
+                if ($paid = $gateways->approvedSePayTransaction($payment, $order)) {
+                    $settlements->markPaid($payment, $paid['transaction_id'], $order);
 
                     continue;
                 }

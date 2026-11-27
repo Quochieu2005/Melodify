@@ -14,6 +14,13 @@ class PaymentDetail extends BaseModel
         'total_amount' => 'decimal:2',
     ];
 
-    public function payment() { return $this->belongsTo(Payment::class, 'payment_id'); }
-    public function plan() { return $this->belongsTo(SubscriptionPlan::class, 'plan_id'); }
+    public function payment()
+    {
+        return $this->belongsTo(Payment::class, 'payment_id');
+    }
+
+    public function plan()
+    {
+        return $this->belongsTo(SubscriptionPlan::class, 'plan_id');
+    }
 }

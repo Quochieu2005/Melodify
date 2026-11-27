@@ -12,9 +12,7 @@ class TestEmail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public string $recipient)
-    {
-    }
+    public function __construct(public string $recipient) {}
 
     public function envelope(): Envelope
     {

@@ -2,16 +2,18 @@
 
 namespace App\Providers;
 
-use App\Models\User;
 use App\Models\AdminNotification;
+use App\Models\Playlist;
+use App\Models\Topic;
+use App\Models\User;
 use App\Services\AdminNotificationService;
 use App\Services\CatalogGroupService;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
+use Illuminate\Support\ServiceProvider;
 use Throwable;
 
 class AppServiceProvider extends ServiceProvider
@@ -53,8 +55,8 @@ class AppServiceProvider extends ServiceProvider
             try {
                 $groups = app(CatalogGroupService::class);
                 $view->with([
-                    'sidebarTopicCustomTypes' => $groups->customTypeNames(\App\Models\Topic::class),
-                    'sidebarPlaylistCustomTypes' => $groups->customTypeNames(\App\Models\Playlist::class),
+                    'sidebarTopicCustomTypes' => $groups->customTypeNames(Topic::class),
+                    'sidebarPlaylistCustomTypes' => $groups->customTypeNames(Playlist::class),
                 ]);
             } catch (Throwable) {
                 // Sidebar vẫn hiển thị được nếu kho dữ liệu tạm thời không kết nối.

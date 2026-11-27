@@ -2,16 +2,17 @@
 
 namespace App\Http\Controllers\AdminController;
 
+use App\Models\Artist;
+use App\Models\Genre;
 use App\Models\Playlist;
 use App\Models\PlaylistSong;
 use App\Models\Song;
 use App\Models\SongArtist;
-use App\Models\Artist;
-use App\Models\Genre;
 use App\Models\Topic;
 use App\Models\User;
 use App\Rules\PlainText;
 use App\Services\CatalogGroupService;
+use App\Services\MediaAssetService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -58,7 +59,7 @@ class PlaylistController extends MediaCatalogController
     {
         $request ??= request();
         $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+            'q' => ['nullable', 'string', 'max:100', new PlainText],
             'type' => ['nullable', 'string', 'max:160'],
         ]);
         $search = trim((string) ($filters['q'] ?? ''));
@@ -99,7 +100,7 @@ class PlaylistController extends MediaCatalogController
         return view("{$this->viewDirectory}.create", $this->viewData([
             'item' => null,
             'fields' => $this->resolvedFields(),
-            'mediaAssets' => app(\App\Services\MediaAssetService::class)->latest(),
+            'mediaAssets' => app(MediaAssetService::class)->latest(),
             'songs' => $this->availableSongs(),
             'selectedSongIds' => [],
             'defaultSortOrder' => $this->nextSortOrder($this->defaultSortOrderGroup()),
@@ -125,7 +126,7 @@ class PlaylistController extends MediaCatalogController
         return view("{$this->viewDirectory}.edit", $this->viewData([
             'item' => $item,
             'fields' => $this->resolvedFields(),
-            'mediaAssets' => app(\App\Services\MediaAssetService::class)->latest(),
+            'mediaAssets' => app(MediaAssetService::class)->latest(),
             'songs' => $this->availableSongs(),
             'selectedSongIds' => $selectedSongIds,
             ...$this->relationOptions(),
@@ -148,7 +149,7 @@ class PlaylistController extends MediaCatalogController
         $songIds = $links->getCollection()->pluck('song_id')->map(fn ($id): string => (string) $id)->all();
         $songMap = $songIds === []
             ? collect()
-            : Song::query()->whereIn((new Song())->getKeyName(), $songIds)->get()->keyBy(fn (Song $song): string => (string) $song->getKey());
+            : Song::query()->whereIn((new Song)->getKeyName(), $songIds)->get()->keyBy(fn (Song $song): string => (string) $song->getKey());
         $songs = $links->setCollection(
             $links->getCollection()
                 ->map(fn (PlaylistSong $link) => $songMap->get((string) $link->song_id))
@@ -212,12 +213,12 @@ class PlaylistController extends MediaCatalogController
     protected function rules(?object $item): array
     {
         return [
-            'name' => ['bail', 'required', 'string', 'min:1', 'max:180', new PlainText()],
+            'name' => ['bail', 'required', 'string', 'min:1', 'max:180', new PlainText],
             'type' => ['required', Rule::in(array_keys(config('playlists.types', [])))],
-            'type_custom' => ['nullable', 'required_if:type,custom', 'string', 'min:1', 'max:80', new PlainText()],
-            'slug' => ['nullable', 'alpha_dash', 'max:220', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', new PlainText()],
+            'type_custom' => ['nullable', 'required_if:type,custom', 'string', 'min:1', 'max:80', new PlainText],
+            'slug' => ['nullable', 'alpha_dash', 'max:220', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', new PlainText],
             'user_id' => ['nullable', 'string', 'alpha_dash', 'max:64'],
-            'description' => ['nullable', 'string', 'max:2500', new PlainText()],
+            'description' => ['nullable', 'string', 'max:2500', new PlainText],
             'is_system' => ['nullable', 'boolean'],
             'visibility' => ['required', 'in:public,private,unlisted'],
             'sort_order' => [
@@ -490,5 +491,4 @@ class PlaylistController extends MediaCatalogController
             ]);
         }
     }
-
 }

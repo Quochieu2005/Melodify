@@ -14,7 +14,7 @@ class LogController extends Controller
     public function index(Request $request): View
     {
         $filters = $request->validate([
-            'search' => ['nullable', 'string', 'max:100', new PlainText()],
+            'search' => ['nullable', 'string', 'max:100', new PlainText],
             'admin_id' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
             'date_from' => ['nullable', 'date_format:Y-m-d'],
             'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],

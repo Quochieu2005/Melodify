@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\AdminController;
 
 use App\Models\Genre;
-use App\Models\Playlist;
 use App\Rules\PlainText;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -36,9 +35,9 @@ class GenreController extends MediaCatalogController
     protected function rules(?object $item): array
     {
         return [
-            'name' => ['bail', 'required', 'string', 'min:1', 'max:150', new PlainText()],
-            'slug' => ['nullable', 'alpha_dash', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', new PlainText()],
-            'description' => ['nullable', 'string', 'max:2000', new PlainText()],
+            'name' => ['bail', 'required', 'string', 'min:1', 'max:150', new PlainText],
+            'slug' => ['nullable', 'alpha_dash', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', new PlainText],
+            'description' => ['nullable', 'string', 'max:2000', new PlainText],
             // Several records may intentionally share a display position.  The
             // catalog query resolves a tie by creation date, so editing a record
             // must not be rejected just because another record uses this number.

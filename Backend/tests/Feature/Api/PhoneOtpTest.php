@@ -6,7 +6,6 @@ use App\Models\PhoneLoginChallenge;
 use App\Services\PhoneOtpService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class PhoneOtpTest extends TestCase
@@ -27,7 +26,9 @@ class PhoneOtpTest extends TestCase
         try {
             $connection = DB::connection('mongodb');
             if ($connection->getTablePrefix() === $this->prefix && preg_match('/^test_otp_[a-f0-9]{16}_$/', $this->prefix)) {
-                $connection->getCollection('phone_login_challenges')->drop();
+                foreach (['phone_login_challenges', 'users', 'user_api_tokens'] as $collection) {
+                    $connection->getCollection($collection)->drop();
+                }
             }
             DB::purge('mongodb');
         } finally {
@@ -63,6 +64,23 @@ class PhoneOtpTest extends TestCase
 
         $this->assertFalse($otp->verify('+84901234567', '123456'));
         $this->assertSame(5, (int) PhoneLoginChallenge::query()->first()->attempts);
+    }
+
+    public function test_phone_verify_endpoint_logs_in_with_the_right_code_and_rejects_a_wrong_one(): void
+    {
+        PhoneLoginChallenge::query()->create([
+            'phone' => '+84907654321',
+            'provider' => 'log',
+            'code_hash' => Hash::make('654321'),
+            'attempts' => 0,
+            'expires_at' => now()->addMinutes(5),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->postJson('/api/v1/auth/phone/verify', ['phone' => '0907654321', 'code' => '111111'])->assertUnprocessable();
+        $this->postJson('/api/v1/auth/phone/verify', ['phone' => '0907654321', 'code' => '654321'])
+            ->assertOk()->assertJsonStructure(['token', 'user' => ['id', 'phone']]);
     }
 
     public function test_correct_code_verifies_once(): void

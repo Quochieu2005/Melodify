@@ -5,8 +5,8 @@ namespace App\Http\Controllers\AdminController;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminResourceRequest;
 use App\Rules\PlainText;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -36,7 +36,7 @@ abstract class CrudResourceController extends Controller
     {
         $request ??= request();
         $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:100', new PlainText()],
+            'q' => ['nullable', 'string', 'max:100', new PlainText],
         ]);
         $search = trim((string) ($filters['q'] ?? ''));
         $query = ($this->model)::query();
@@ -119,7 +119,7 @@ abstract class CrudResourceController extends Controller
             'ids.*.distinct' => 'Các mục được chọn không được trùng lặp.',
         ]);
 
-        $keyName = (new $this->model())->getKeyName();
+        $keyName = (new $this->model)->getKeyName();
         $items = ($this->model)::query()
             ->whereIn($keyName, array_values($data['ids']))
             ->get();
