@@ -8,21 +8,53 @@ use App\Models\SubscriptionPlan;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 
 class VipPaymentSettlementService
 {
     public function markPaid(Payment $payment, string $transactionCode, array $callback): bool
     {
+        if (blank($transactionCode)) {
+            return false;
+        }
+
+        $transactionLockKey = 'vip:settlement:transaction:'.hash('sha256', $payment->method.'|'.$transactionCode);
+
+        return Cache::lock($transactionLockKey, 60)->block(10, function () use ($payment, $transactionCode, $callback): bool {
+            $existingTransaction = Transaction::query()
+                ->where('gateway', (string) $payment->method)
+                ->where('transaction_code', $transactionCode)
+                ->first();
+
+            if ($existingTransaction && (string) $existingTransaction->payment_id !== (string) $payment->getKey()) {
+                return false;
+            }
+
+            $userLockKey = 'vip:settlement:user:'.hash('sha256', (string) $payment->user_id);
+
+            return Cache::lock($userLockKey, 60)->block(10, fn (): bool => $this->settleClaimedPayment($payment, $transactionCode, $callback));
+        });
+    }
+
+    /** @param array<string, mixed> $callback */
+    private function settleClaimedPayment(Payment $payment, string $transactionCode, array $callback): bool
+    {
         if (in_array((string) $payment->status, ['success', 'paid', 'completed'], true)) {
             return true;
         }
 
-        // Claim the pending payment atomically so repeated IPNs cannot grant VIP twice.
+        // Claim the payment atomically so repeated IPNs cannot grant VIP twice.
+        // A verified paid callback also wins over failed/cancelled (the money was taken),
+        // and over a 'processing' claim left behind by a process that died mid-settlement.
         $claimed = Payment::query()
             ->where('_id', (string) $payment->getKey())
-            ->where('status', 'pending')
-            ->update(['status' => 'processing']);
+            ->where(function ($query): void {
+                $query->whereIn('status', ['pending', 'failed', 'cancelled'])
+                    ->orWhere(fn ($stale) => $stale->where('status', 'processing')
+                        ->where('processing_at', '<=', now()->subMinutes(5)));
+            })
+            ->update(['status' => 'processing', 'processing_at' => now()]);
 
         if ($claimed === 0) {
             $payment->refresh();
@@ -48,9 +80,13 @@ class VipPaymentSettlementService
                     ->where('end_date', '>', $now)
                     ->orderByDesc('end_date')
                     ->first();
+                $currentExpiry = $user->hasPremiumAccess() ? $user->vip_expires_at : null;
                 $start = $latestActive?->end_date && $latestActive->end_date->greaterThan($now)
                     ? $latestActive->end_date->copy()
                     : $now->copy();
+                if ($currentExpiry && $currentExpiry->greaterThan($start)) {
+                    $start = $currentExpiry->copy();
+                }
                 $months = max(1, (int) ($plan->billing_months ?: 1));
                 $existing = Subscription::query()->create([
                     'user_id' => (string) $user->getKey(),
@@ -67,9 +103,10 @@ class VipPaymentSettlementService
             $expiresAt = $existing->end_date instanceof Carbon
                 ? $existing->end_date
                 : Carbon::parse($existing->end_date);
+            $permanentPremium = (int) ($user->is_premium ?? 0) === 1 && ! $user->vip_expires_at;
             $user->forceFill([
                 'is_premium' => 1,
-                'vip_expires_at' => $expiresAt,
+                'vip_expires_at' => $permanentPremium ? null : $expiresAt,
             ])->save();
 
             $payment->forceFill([

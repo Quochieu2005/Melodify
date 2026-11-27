@@ -39,6 +39,23 @@ function EmptyPlaylistIcon() {
   );
 }
 
+function vipTimeRemaining(expiresAt: string): string {
+  const now = new Date();
+  const expiry = new Date(expiresAt);
+  let months = (expiry.getFullYear() - now.getFullYear()) * 12 + expiry.getMonth() - now.getMonth();
+  const addMonths = (date: Date, count: number) => {
+    const result = new Date(date);
+    const day = result.getDate();
+    result.setDate(1);
+    result.setMonth(result.getMonth() + count);
+    result.setDate(Math.min(day, new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate()));
+    return result;
+  };
+  if (addMonths(now, months) > expiry) months -= 1;
+  const days = Math.max(0, Math.ceil((expiry.getTime() - addMonths(now, months).getTime()) / 86_400_000));
+  return [months ? `${months} tháng` : '', days ? `${days} ngày` : ''].filter(Boolean).join(' ') || 'dưới 1 ngày';
+}
+
 function LibraryCollectionCard({ href, coverUrl, title, subtitle, isPrivate = false }: { href: string; coverUrl: string | null; title: string; subtitle?: string; isPrivate?: boolean }) {
   return (
     <Link href={href} className="group block rounded-lg p-2 outline-none focus-visible:outline-2 focus-visible:outline-cyan-300">
@@ -118,6 +135,13 @@ export default function MyProfilePage() {
               <button type="button" onClick={() => router.push('/following')} className="hover:text-cyan-300">Đang theo dõi · <strong>{data?.following_count ?? '…'}</strong></button>
               <button type="button" onClick={() => router.push('/followers')} className="hover:text-cyan-300">Người theo dõi · <strong>{data?.followers_count ?? '…'}</strong></button>
             </div>
+            {user.is_premium ? (
+              <p className="mt-2 text-sm text-white/50">
+                {user.vip_expires_at
+                  ? `VIP còn ${vipTimeRemaining(user.vip_expires_at)} · hết hạn ${new Intl.DateTimeFormat('vi-VN', { dateStyle: 'long' }).format(new Date(user.vip_expires_at))}`
+                  : 'VIP không thời hạn'}
+              </p>
+            ) : null}
           </div>
         </section>
 

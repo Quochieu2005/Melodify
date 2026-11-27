@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 
-import { listAlbums, subscribeCatalogResponse } from '@/lib/api';
+import type { AlbumRecord } from '@/lib/api';
 import { albumRecordToCard, pickDailyAlbums, type AlbumCard } from '@/lib/album-data';
 import { ArtistLink } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
@@ -31,38 +31,9 @@ function AlbumCard({ album }: { album: AlbumCard }) {
   );
 }
 
-export default function AlbumHotSection() {
-  const [albums, setAlbums] = useState<AlbumCard[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [dateKey] = useState(vietnamDateKey);
-
-  useEffect(() => {
-    let cancelled = false;
-    const applyAlbums = (response: Awaited<ReturnType<typeof listAlbums>>) => {
-      const cards = response.data.map(albumRecordToCard);
-      if (!cancelled) setAlbums(pickDailyAlbums(cards, 6, dateKey));
-    };
-    const unsubscribe = subscribeCatalogResponse<Awaited<ReturnType<typeof listAlbums>>>(
-      '/v1/albums?per_page=12',
-      applyAlbums,
-    );
-
-    const loadDailyAlbums = async () => {
-      try {
-        const response = await listAlbums({ perPage: 12 });
-        applyAlbums(response);
-      } catch {
-        if (!cancelled) setAlbums([]);
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-
-    void loadDailyAlbums();
-    return () => { cancelled = true; unsubscribe(); };
-  }, [dateKey]);
-
-  if (!isLoading && albums.length === 0) return null;
+export default function AlbumHotSection({ albums: apiAlbums }: { albums: AlbumRecord[] }) {
+  const albums = useMemo(() => pickDailyAlbums(apiAlbums.map(albumRecordToCard), 6, vietnamDateKey()), [apiAlbums]);
+  if (albums.length === 0) return null;
 
   return (
     <section aria-labelledby="album-hot-heading" className={`mt-12 ${styles.homeSection}`}>
@@ -75,15 +46,7 @@ export default function AlbumHotSection() {
         </Link>
       </div>
 
-      {isLoading ? (
-        <div className={styles.homeGrid}>
-          {Array.from({ length: 6 }, (_, index) => <div key={index} className="aspect-square animate-pulse rounded-[8px] bg-[#30443f]" />)}
-        </div>
-      ) : (
-        <div className={styles.homeGrid}>
-          {albums.map((album) => <AlbumCard key={album.id} album={album} />)}
-        </div>
-      )}
+      <div className={styles.homeGrid}>{albums.map((album) => <AlbumCard key={album.id} album={album} />)}</div>
     </section>
   );
 }

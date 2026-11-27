@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
@@ -6,18 +7,12 @@ import { AppShell } from '@/components/layout';
 import { Artwork, SongRow } from '@/components/music';
 import { ScrollPage, SectionHeading, useSurfaceStyles } from '@/components/shared';
 import { AppIcon } from '@/components/shared/AppIcon';
-import { useRemoteData } from '@/hooks/useRemoteData';
 import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
 import { useTheme } from '@/hooks/use-theme';
 import {
-  getHomeDiscovery,
-  getTrendingArtists,
-  listAlbums,
-  listBanners,
-  listCharts,
-  listGenres,
-  listPlaylists,
-  listTopics,
+  getHomeBootstrap,
+  subscribeHomeBootstrap,
+  type HomeBootstrap,
   type Song,
 } from '@/lib/api';
 import { getAlbumRailCardWidth } from '@/lib/layout';
@@ -48,24 +43,31 @@ export default function HomeScreen() {
   const catalogCardWidth = Math.min(184, Math.max(140, (width - 48) / 2.2));
   const albumCardWidth = getAlbumRailCardWidth(width);
   const chartWidth = Math.max(280, width - 32);
-  // Keep each home area on its own API and let all requests start together.
-  const bannersResource = useRemoteData(() => listBanners({ daily: true, limit: 4 }));
-  const topicsResource = useRemoteData(() => listTopics({ perPage: 12 }));
-  const chartsResource = useRemoteData(listCharts);
-  const discoveryResource = useRemoteData(getHomeDiscovery);
-  const artistsResource = useRemoteData(getTrendingArtists);
-  const genresResource = useRemoteData(() => listGenres({ perPage: 12 }));
-  const albumsResource = useRemoteData(() => listAlbums({ perPage: 12 }));
-  const playlistsResource = useRemoteData(() => listPlaylists({ perPage: 12 }));
+  const [home, setHome] = useState<HomeBootstrap | null>(null);
 
-  const banners = bannersResource.data?.data ?? [];
-  const topics = topicsResource.data?.data ?? [];
-  const charts = chartsResource.data?.data ?? [];
-  const discovery = discoveryResource.data?.data;
-  const trendingArtists = artistsResource.data?.data ?? [];
-  const genres = genresResource.data?.data ?? [];
-  const albums = albumsResource.data?.data ?? [];
-  const playlists = playlistsResource.data?.data ?? [];
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = subscribeHomeBootstrap(({ data }) => {
+      if (active) setHome(data);
+    });
+    void getHomeBootstrap()
+      .then(({ data }) => { if (active) setHome(data); })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const banners = home?.banners ?? [];
+  const topics = home?.topics ?? [];
+  const charts = home?.charts ?? [];
+  const discovery = home?.discovery;
+  const trendingArtists = home?.trending_artists ?? [];
+  const genres = home?.genres ?? [];
+  const albums = home?.albums ?? [];
+  const playlists = home?.playlists ?? [];
 
   const openBanner = (target: string | null) => {
     if (!target) return;

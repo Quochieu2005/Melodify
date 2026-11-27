@@ -114,6 +114,10 @@ export function LoginModalProvider({ children, variant = 'default' }: { children
     }
   }, []);
 
+  useEffect(() => {
+    if (authReady && user) void refreshUser();
+  }, [authReady, refreshUser, user?.id]);
+
   const value = useMemo(() => ({ openLogin, user, authReady, logout, refreshUser }), [authReady, logout, openLogin, refreshUser, user]);
 
   return (

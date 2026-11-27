@@ -7,9 +7,8 @@ import {
   ApiError,
   getQrLoginStatus,
   loginWithPassword,
-  loginWithPhone,
+  registerWithPassword,
   loginWithSocial,
-  requestPhoneOtp,
   saveAuthSession,
   startQrLogin,
   type AuthResponse,
@@ -23,7 +22,7 @@ type LoginModalProps = {
   variant?: 'default' | 'vip';
 };
 
-type LoginMethod = 'username' | 'phone';
+type LoginMethod = 'login' | 'register';
 
 type GoogleTokenResponse = {
   access_token?: string;
@@ -182,7 +181,7 @@ function EyeIcon({ visible }: { visible: boolean }) {
   );
 }
 
-function SocialIcon({ type }: { type: 'facebook' | 'google' | 'phone' | 'qr' }) {
+function SocialIcon({ type }: { type: 'facebook' | 'google' | 'qr' }) {
   if (type === 'facebook') {
     return (
       <svg viewBox="0 0 28 28" aria-hidden="true" className="size-7 shrink-0">
@@ -203,15 +202,6 @@ function SocialIcon({ type }: { type: 'facebook' | 'google' | 'phone' | 'qr' }) 
     );
   }
 
-  if (type === 'phone') {
-    return (
-      <svg viewBox="0 0 28 28" aria-hidden="true" className="size-7 shrink-0 fill-none stroke-cyan-300 stroke-[1.8]">
-        <rect x="7.5" y="2.75" width="13" height="22.5" rx="3" />
-        <path d="M11.5 6h5M12.5 21h3" strokeLinecap="round" />
-      </svg>
-    );
-  }
-
   return (
     <svg viewBox="0 0 28 28" aria-hidden="true" className="size-7 shrink-0 stroke-cyan-300 text-cyan-300">
       <path d="M3.5 3.5h7v7h-7zM17.5 3.5h7v7h-7zM3.5 17.5h7v7h-7z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -222,14 +212,13 @@ function SocialIcon({ type }: { type: 'facebook' | 'google' | 'phone' | 'qr' }) 
 }
 
 export default function LoginModal({ onClose, onLoginSuccess, variant = 'default' }: LoginModalProps) {
-  const [method, setMethod] = useState<LoginMethod>('username');
+  const [method, setMethod] = useState<LoginMethod>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [identifier, setIdentifier] = useState('');
   const [forgotPassword, setForgotPassword] = useState(false);
   const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState('');
-  const [phoneCode, setPhoneCode] = useState('');
-  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [name, setName] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [remember, setRemember] = useState(variant === 'vip');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [qrSession, setQrSession] = useState<QrLoginStartResponse | null>(null);
@@ -317,22 +306,10 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
     if (!validateTerms()) return;
 
     try {
-      if (method === 'phone') {
-        if (!phoneOtpSent) {
-          setLoadingAction('phone-otp');
-          const response = await requestPhoneOtp(phone);
-          setPhoneOtpSent(true);
-          setNotice(`${response.message} Kiểm tra tin nhắn để lấy mã xác thực.`);
-          return;
-        }
-
-        setLoadingAction('phone-login');
-        await completeLogin(await loginWithPhone(phone, phoneCode, remember));
-        return;
-      }
-
-      setLoadingAction('password');
-      await completeLogin(await loginWithPassword(identifier, password, remember));
+      setLoadingAction(method);
+      await completeLogin(method === 'register'
+        ? await registerWithPassword(name, identifier, password, passwordConfirmation)
+        : await loginWithPassword(identifier, password, remember));
     } catch (submitError) {
       setError(getErrorMessage(submitError));
     } finally {
@@ -554,7 +531,7 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
       <section
         aria-labelledby="login-dialog-title"
         aria-modal="true"
-        className="max-h-[calc(100vh-2rem)] w-full max-w-[630px] overflow-y-auto rounded-lg border border-white/10 bg-[#242424] p-6 text-white shadow-2xl sm:p-7"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-[630px] overflow-hidden rounded-lg border border-white/10 bg-[#242424] p-4 text-white shadow-2xl sm:p-5"
         role="dialog"
       >
         <div className="flex items-center justify-between">
@@ -583,9 +560,9 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
           </div>
         ) : (
           <>
-            <form onSubmit={handleSubmit} className="mt-5">
+            <form onSubmit={handleSubmit} className="mt-3">
               <div className="grid grid-cols-2 border-b border-white/10">
-                {(['username', 'phone'] as const).map((tab) => (
+                {(['login', 'register'] as const).map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -595,80 +572,78 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
                       setNotice(null);
                     }}
                     className={[
-                      'border-b-4 py-3 text-sm font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-inset',
+                      'border-b-4 py-2 text-sm font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-inset',
                       method === tab ? 'border-cyan-400 text-white' : 'border-transparent text-white/45 hover:text-white/75',
                     ].join(' ')}
                   >
-                    {tab === 'username' ? 'Tên đăng nhập' : 'Số điện thoại'}
+                    {tab === 'login' ? 'Đăng nhập' : 'Đăng ký'}
                   </button>
                 ))}
               </div>
 
-              <div className="mt-6 space-y-4">
-                {method === 'username' ? (
-                  <>
-                    <input
-                      autoFocus
-                      type="text"
-                      value={identifier}
-                      onChange={(event) => setIdentifier(event.target.value)}
-                      placeholder="Tên đăng nhập hoặc email"
-                      aria-label="Tên đăng nhập hoặc email"
-                      required
-                      className="h-12 w-full rounded bg-[#3a3a3a] px-4 text-sm text-white outline-none placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
-                    />
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        placeholder="Mật khẩu"
-                        aria-label="Mật khẩu"
-                        required
-                        className="h-12 w-full rounded bg-[#3a3a3a] px-4 pr-12 text-sm text-white outline-none placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
-                      />
-                      <button type="button" aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} onClick={() => setShowPassword((visible) => !visible)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/55 outline-none hover:text-white focus-visible:text-cyan-300">
-                        <EyeIcon visible={showPassword} />
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <input
-                      autoFocus
-                      type="tel"
-                      value={phone}
-                      onChange={(event) => setPhone(event.target.value)}
-                      placeholder="Số điện thoại, ví dụ 090..."
-                      aria-label="Số điện thoại"
-                      required
-                      className="h-12 w-full rounded bg-[#3a3a3a] px-4 text-sm text-white outline-none placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
-                    />
-                    {phoneOtpSent ? (
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={phoneCode}
-                        onChange={(event) => setPhoneCode(event.target.value)}
-                        placeholder="Nhập mã xác thực"
-                        aria-label="Mã xác thực qua SMS"
-                        required
-                        className="h-12 w-full rounded bg-[#3a3a3a] px-4 text-sm tracking-[0.35em] text-white outline-none placeholder:tracking-normal placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
-                      />
-                    ) : null}
-                  </>
-                )}
+              <div className="mt-4 space-y-3">
+                {method === 'register' ? (
+                  <input
+                    autoFocus
+                    type="text"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="Họ và tên"
+                    aria-label="Họ và tên"
+                    autoComplete="name"
+                    required
+                    className="h-11 w-full rounded bg-[#3a3a3a] px-4 text-sm text-white outline-none placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
+                  />
+                ) : null}
+                <input
+                  autoFocus={method === 'login'}
+                  type="email"
+                  value={identifier}
+                  onChange={(event) => setIdentifier(event.target.value)}
+                  placeholder="Email"
+                  aria-label="Email"
+                  autoComplete="email"
+                  required
+                  className="h-11 w-full rounded bg-[#3a3a3a] px-4 text-sm text-white outline-none placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
+                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Mật khẩu"
+                    aria-label="Mật khẩu"
+                    autoComplete={method === 'register' ? 'new-password' : 'current-password'}
+                    required
+                    className="h-11 w-full rounded bg-[#3a3a3a] px-4 pr-12 text-sm text-white outline-none placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
+                  />
+                  <button type="button" aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} onClick={() => setShowPassword((visible) => !visible)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/55 outline-none hover:text-white focus-visible:text-cyan-300">
+                    <EyeIcon visible={showPassword} />
+                  </button>
+                </div>
+                {method === 'register' ? (
+                  <input
+                    type="password"
+                    value={passwordConfirmation}
+                    onChange={(event) => setPasswordConfirmation(event.target.value)}
+                    placeholder="Nhập lại mật khẩu"
+                    aria-label="Nhập lại mật khẩu"
+                    autoComplete="new-password"
+                    required
+                    className="h-11 w-full rounded bg-[#3a3a3a] px-4 text-sm text-white outline-none placeholder:text-[#a4a4a4] focus:ring-2 focus:ring-cyan-400"
+                  />
+                ) : null}
               </div>
 
-              <div className="mt-4 flex items-center justify-between text-xs">
+              <div className="mt-3 flex items-center justify-between text-xs">
                 <label className="flex cursor-pointer items-center gap-2 text-white/85">
                   <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className={darkCheckboxClass} />
                   Ghi nhớ đăng nhập
                 </label>
-                {method === 'username' ? <button type="button" onClick={() => setForgotPassword(true)} className="font-bold text-cyan-400 hover:text-cyan-300">Quên mật khẩu?</button> : null}
+                {method === 'login' ? <button type="button" onClick={() => setForgotPassword(true)} className="font-bold text-cyan-400 hover:text-cyan-300">Quên mật khẩu?</button> : null}
               </div>
 
-              <label className="mt-4 flex cursor-pointer items-start gap-2 text-[11px] leading-[1.45] text-white/85">
+              <label className="mt-3 flex cursor-pointer items-start gap-2 text-[11px] leading-[1.45] text-white/85">
                 <input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className={`${darkCheckboxClass} mt-0.5`} />
                 <span>
                   Tôi đã đọc, hiểu và đồng ý với <button type="button" className="text-cyan-400 hover:underline">Chính sách bảo mật</button> và <button type="button" className="text-cyan-400 hover:underline">Điều khoản sử dụng</button> của Melodify.
@@ -678,28 +653,25 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
               {error ? <p role="alert" className="mt-4 text-sm text-red-300">{error}</p> : null}
               {notice ? <p role="status" className="mt-4 text-sm text-cyan-300">{notice}</p> : null}
 
-              <button type="submit" disabled={isLoading} className="mt-6 h-14 w-full rounded-full bg-cyan-400 text-base font-bold text-[#07363a] outline-none transition-colors hover:bg-cyan-300 focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-60">
-                {loadingAction === 'phone-otp' ? 'Đang gửi mã...' : loadingAction === 'phone-login' ? 'Đang đăng nhập...' : loadingAction === 'password' ? 'Đang đăng nhập...' : method === 'phone' && !phoneOtpSent ? 'Gửi mã xác thực' : 'Đăng nhập'}
+              <button type="submit" disabled={isLoading} className="mt-4 h-12 w-full rounded-full bg-cyan-400 text-base font-bold text-[#07363a] outline-none transition-colors hover:bg-cyan-300 focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-60">
+                {isLoading ? (method === 'register' ? 'Đang tạo tài khoản...' : 'Đang đăng nhập...') : method === 'register' ? 'Đăng ký' : 'Đăng nhập'}
               </button>
             </form>
 
-            <div className="my-6 flex items-center gap-3 text-xs text-white/55">
+            <div className="my-4 flex items-center gap-3 text-xs text-white/55">
               <span className="h-px flex-1 bg-white/10" />
               <span>Hoặc đăng nhập bằng</span>
               <span className="h-px flex-1 bg-white/10" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <button type="button" disabled={isLoading} onClick={() => { void handleSocialLogin('facebook'); }} className="flex h-11 items-center gap-3 rounded bg-[#3a3a3a] px-3 text-sm font-bold text-white outline-none transition-colors hover:bg-[#464646] focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" disabled={isLoading} onClick={() => { void handleSocialLogin('facebook'); }} className="flex h-10 items-center gap-3 rounded bg-[#3a3a3a] px-3 text-sm font-bold text-white outline-none transition-colors hover:bg-[#464646] focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
                 <SocialIcon type="facebook" /> Facebook
               </button>
-              <button type="button" disabled={isLoading} onClick={() => { void handleSocialLogin('google'); }} className="flex h-11 items-center gap-3 rounded bg-[#3a3a3a] px-3 text-sm font-bold text-white outline-none transition-colors hover:bg-[#464646] focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
+              <button type="button" disabled={isLoading} onClick={() => { void handleSocialLogin('google'); }} className="flex h-10 items-center gap-3 rounded bg-[#3a3a3a] px-3 text-sm font-bold text-white outline-none transition-colors hover:bg-[#464646] focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
                 <SocialIcon type="google" /> Google
               </button>
-              <button type="button" disabled={isLoading} onClick={() => setMethod('phone')} className="flex h-11 items-center gap-3 rounded bg-[#3a3a3a] px-3 text-sm font-bold text-white outline-none transition-colors hover:bg-[#464646] focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
-                <SocialIcon type="phone" /> Số điện thoại
-              </button>
-              <button type="button" disabled={isLoading} onClick={() => { void handleQrLogin(); }} className="flex h-11 items-center gap-3 rounded bg-[#3a3a3a] px-3 text-sm font-bold text-white outline-none transition-colors hover:bg-[#464646] focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
+              <button type="button" disabled={isLoading} onClick={() => { void handleQrLogin(); }} className="flex h-10 items-center gap-3 rounded bg-[#3a3a3a] px-3 text-sm font-bold text-white outline-none transition-colors hover:bg-[#464646] focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
                 <SocialIcon type="qr" /> Mã QR
               </button>
             </div>

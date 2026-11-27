@@ -19,19 +19,16 @@ type PlaylistGalleryPageProps = {
 
 type CatalogInfo = Pick<TopicRecord, 'name' | 'description' | 'image_url'> | Pick<GenreRecord, 'name' | 'description' | 'image_url'>;
 
-async function loadAllPlaylists(options: { topic?: string; genre?: string }) {
-  const playlists: Playlist[] = [];
-  let page = 1;
-  let lastPage = 1;
+async function loadAllPlaylists(options: { topic?: string; genre?: string }, onFirstPage: (playlists: Playlist[]) => void) {
+  const firstPage = await listPlaylists({ ...options, page: 1, perPage: 50 });
+  onFirstPage(firstPage.data);
+  const remainingPages = await Promise.all(
+    Array.from({ length: firstPage.meta.last_page - 1 }, (_, index) =>
+      listPlaylists({ ...options, page: index + 2, perPage: 50 }),
+    ),
+  );
 
-  do {
-    const response = await listPlaylists({ ...options, page, perPage: 50 });
-    playlists.push(...response.data);
-    lastPage = response.meta.last_page;
-    page += 1;
-  } while (page <= lastPage);
-
-  return playlists;
+  return [...firstPage.data, ...remainingPages.flatMap((response) => response.data)];
 }
 
 function playlistPath(playlist: Playlist) {
@@ -78,7 +75,12 @@ export default function PlaylistGalleryPage({ topicSlug, topicKind = 'topic' }: 
           ? topicKind === 'genre' ? { genre: topicSlug } : { topic: topicSlug }
           : {};
         const [playlistItems, info] = await Promise.all([
-          loadAllPlaylists(filter),
+          loadAllPlaylists(filter, (items) => {
+            if (!cancelled) {
+              setPlaylists(items);
+              setIsLoading(false);
+            }
+          }),
           topicSlug
             ? topicKind === 'genre' ? getGenre(topicSlug).then((response) => response.data) : getTopic(topicSlug).then((response) => response.data)
             : Promise.resolve(null),

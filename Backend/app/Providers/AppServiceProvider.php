@@ -85,19 +85,24 @@ class AppServiceProvider extends ServiceProvider
                         return true;
                     },
                 );
-                // Keep the short-lived sync cache above, but query the models
-                // directly here. Eloquent models must not be serialized into
-                // the database cache store because they can come back as
-                // strings when serializable classes are disabled.
-                $notifications = AdminNotification::query()
-                    ->where('admin_id', $adminId)
-                    ->latest()
-                    ->limit(6)
-                    ->get();
-                $unreadCount = AdminNotification::query()
-                    ->where('admin_id', $adminId)
-                    ->where('is_read', false)
-                    ->count();
+                $header = Cache::store('file')->remember(
+                    AdminNotificationService::headerCacheKey($adminId),
+                    now()->addSeconds(10),
+                    fn (): array => [
+                        'notifications' => AdminNotification::query()
+                            ->where('admin_id', $adminId)
+                            ->latest()
+                            ->limit(6)
+                            ->get()
+                            ->toArray(),
+                        'unread_count' => AdminNotification::query()
+                            ->where('admin_id', $adminId)
+                            ->where('is_read', false)
+                            ->count(),
+                    ],
+                );
+                $notifications = AdminNotification::hydrate($header['notifications'] ?? []);
+                $unreadCount = (int) ($header['unread_count'] ?? 0);
             } catch (Throwable) {
                 $notifications = collect();
                 $unreadCount = 0;

@@ -128,15 +128,15 @@ function toPlayerTrack(song: Song, isPremium: boolean): PlayerTrack {
     ?? (isPremium ? playableQualities[0] : null)
     ?? null;
   const vipRequired = premiumOnly || (playableQualities.length > 0 && !playableQualities.some((quality) => !quality.premium_only));
-  const previewLimitSeconds = vipRequired && isPremium
-    ? null
-    : isHot || vipRequired ? (song.preview_limit_seconds ?? 30) : null;
+  const previewLimitSeconds = !isPremium && (isHot || vipRequired)
+    ? (song.preview_limit_seconds ?? 30)
+    : null;
   const rawAudioUrl = vipRequired && !isPremium
     ? song.preview_url || null
     : selectedQuality?.audio_url || song.audio_url || song.stream_url || song.preview_url || null;
   const rawDownloadUrl = selectedQuality?.download_url || song.download_url || null;
-  const audioUrl = audioUrlWithAccessToken(rawAudioUrl, selectedQuality?.premium_only ?? premiumOnly, isPremium);
-  const downloadUrl = audioUrlWithAccessToken(rawDownloadUrl, selectedQuality?.premium_only ?? premiumOnly, isPremium);
+  const audioUrl = audioUrlWithAccessToken(rawAudioUrl, vipRequired || Boolean(selectedQuality?.premium_only), isPremium);
+  const downloadUrl = audioUrlWithAccessToken(rawDownloadUrl, vipRequired || Boolean(selectedQuality?.premium_only), isPremium);
 
   return {
     id: song.id,
@@ -247,6 +247,12 @@ function requiresVipForTrack(track: PlayerTrack | null | undefined) {
   return track.premiumOnly || Boolean(selectedQuality?.premium_only);
 }
 
+function removeVipPreviewLimit(track: PlayerTrack, isPremium: boolean) {
+  return isPremium && track.previewLimitSeconds !== null
+    ? { ...track, durationSeconds: null, previewLimitSeconds: null }
+    : track;
+}
+
 function isPlayerTrack(value: unknown): value is PlayerTrack {
   if (!value || typeof value !== 'object') return false;
 
@@ -320,8 +326,26 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       repeatRef.current = 'off';
       setShuffle(false);
       setRepeatMode('off');
+    } else if (isPremium) {
+      queueRef.current = queueRef.current.map((item) => removeVipPreviewLimit(item, true));
+      originalQueueRef.current = originalQueueRef.current.map((item) => removeVipPreviewLimit(item, true));
+      setQueue(queueRef.current);
+
+      const currentTrack = trackRef.current;
+      if (currentTrack) {
+        const fullTrack = removeVipPreviewLimit(currentTrack, true);
+        if (fullTrack !== currentTrack) {
+          trackRef.current = fullTrack;
+          setTrack(fullTrack);
+          const audio = audioRef.current;
+          setDuration(audio && Number.isFinite(audio.duration) && audio.duration > 0
+            ? Math.floor(audio.duration)
+            : fullTrack.durationSeconds ?? 0);
+          savePlayerState(fullTrack, queueRef.current, currentIndexRef.current, audio?.currentTime ?? 0, Boolean(audio && !audio.paused));
+        }
+      }
     }
-  }, [user]);
+  }, [user, savePlayerState]);
 
   const requestVipAccess = useCallback(() => setVipDialogOpen(true), []);
   const closeVipDialog = useCallback(() => setVipDialogOpen(false), []);
@@ -599,13 +623,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const applySyncedState = (savedState: PersistedPlayerState, playbackIntent?: 'play' | 'pause') => {
       const savedTrack = savedState.track;
-      const savedQueue = savedState.queue.filter(isPlayerTrack);
+      const savedQueue = savedState.queue.filter(isPlayerTrack).map((item) => removeVipPreviewLimit(item, isPremiumRef.current));
       if (!isPlayerTrack(savedTrack)) return;
       if (savedTrack.premiumOnly && !isPremiumRef.current) return;
 
       const restoredQueue = savedQueue.length > 0 ? savedQueue : [savedTrack];
       const savedOriginalQueue = Array.isArray(savedState.originalQueue)
-        ? savedState.originalQueue.filter(isPlayerTrack)
+        ? savedState.originalQueue.filter(isPlayerTrack).map((item) => removeVipPreviewLimit(item, isPremiumRef.current))
         : [];
       originalQueueRef.current = savedOriginalQueue.length > 0 ? savedOriginalQueue : restoredQueue;
       shuffleRef.current = savedState.shuffle === true;
@@ -616,7 +640,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       lastShuffleSignatureRef.current = typeof savedState.lastShuffleSignature === 'string'
         ? savedState.lastShuffleSignature
         : shuffleRef.current ? queueOrderSignature(restoredQueue.slice(restoredIndex + 1)) : null;
-      const restoredTrack = restoredQueue[restoredIndex] || savedTrack;
+      const restoredTrack = restoredQueue[restoredIndex] || removeVipPreviewLimit(savedTrack, isPremiumRef.current);
       const restoreLimit = restoredTrack.previewLimitSeconds ?? restoredTrack.durationSeconds;
       const restoredElapsed = restoreLimit === null || restoreLimit === undefined
         ? Math.max(0, savedState.elapsed)
@@ -689,12 +713,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       try {
         const savedState = JSON.parse(window.sessionStorage.getItem(PLAYER_SESSION_KEY) || 'null') as Partial<PersistedPlayerState> | null;
         const savedTrack = savedState?.track;
-        const savedQueue = Array.isArray(savedState?.queue) ? savedState.queue.filter(isPlayerTrack) : [];
+        const savedQueue = Array.isArray(savedState?.queue)
+          ? savedState.queue.filter(isPlayerTrack).map((item) => removeVipPreviewLimit(item, isPremiumRef.current))
+          : [];
 
         if (isPlayerTrack(savedTrack) && (!savedTrack.premiumOnly || isPremiumRef.current)) {
-          const restoredQueue = savedQueue.length > 0 ? savedQueue : [savedTrack];
+          const fullSavedTrack = removeVipPreviewLimit(savedTrack, isPremiumRef.current);
+          const restoredQueue = savedQueue.length > 0 ? savedQueue : [fullSavedTrack];
           const savedOriginalQueue = Array.isArray(savedState?.originalQueue)
-            ? savedState.originalQueue.filter(isPlayerTrack)
+            ? savedState.originalQueue.filter(isPlayerTrack).map((item) => removeVipPreviewLimit(item, isPremiumRef.current))
             : [];
           originalQueueRef.current = savedOriginalQueue.length > 0 ? savedOriginalQueue : restoredQueue;
           shuffleRef.current = savedState?.shuffle === true;
@@ -707,7 +734,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           lastShuffleSignatureRef.current = typeof savedState?.lastShuffleSignature === 'string'
             ? savedState.lastShuffleSignature
             : shuffleRef.current ? queueOrderSignature(restoredQueue.slice(restoredIndex + 1)) : null;
-          const restoredTrack = restoredQueue[restoredIndex] || savedTrack;
+          const restoredTrack = restoredQueue[restoredIndex] || fullSavedTrack;
           const savedElapsed = typeof savedState?.elapsed === 'number' && Number.isFinite(savedState.elapsed)
             ? Math.max(0, savedState.elapsed)
             : 0;
@@ -911,8 +938,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const isPremium = isPremiumRef.current;
     const nextTrack: PlayerTrack = {
       ...currentTrack,
-      audioUrl: audioUrlWithAccessToken(option.audio_url, option.premium_only, isPremium),
-      downloadUrl: audioUrlWithAccessToken(option.download_url, option.premium_only, isPremium),
+      audioUrl: audioUrlWithAccessToken(option.audio_url, currentTrack.premiumOnly || Boolean(option.premium_only), isPremium),
+      downloadUrl: audioUrlWithAccessToken(option.download_url, currentTrack.premiumOnly || Boolean(option.premium_only), isPremium),
       selectedQualityId: option.quality_id,
       qualityLabel: option.label,
     };
@@ -972,14 +999,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         isFavorite: refreshed.isFavorite,
         audioQualities: refreshed.audioQualities,
         audioUrl: !keepVipPreview && quality?.audio_url
-          ? audioUrlWithAccessToken(quality.audio_url, quality.premium_only, isPremiumRef.current)
+          ? audioUrlWithAccessToken(quality.audio_url, refreshed.premiumOnly || Boolean(quality.premium_only), isPremiumRef.current)
           : activeTrack.audioUrl,
         downloadUrl: !keepVipPreview && quality?.download_url
-          ? audioUrlWithAccessToken(quality.download_url, quality.premium_only, isPremiumRef.current)
+          ? audioUrlWithAccessToken(quality.download_url, refreshed.premiumOnly || Boolean(quality.premium_only), isPremiumRef.current)
           : refreshed.downloadUrl ?? activeTrack.downloadUrl,
         selectedQualityId: quality?.quality_id ?? activeTrack.selectedQualityId ?? null,
         qualityLabel: quality?.label ?? refreshed.qualityLabel ?? activeTrack.qualityLabel,
         premiumOnly: refreshed.premiumOnly,
+        durationSeconds: refreshed.durationSeconds,
         previewLimitSeconds: refreshed.previewLimitSeconds,
       };
       const audio = audioRef.current;
@@ -992,6 +1020,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       originalQueueRef.current = replaceQueueTrack(originalQueueRef.current, nextTrack);
       setTrack(nextTrack);
       setQueue(queueRef.current);
+      if (!sourceChanged) {
+        setDuration(audio && Number.isFinite(audio.duration) && audio.duration > 0
+          ? Math.floor(nextTrack.previewLimitSeconds === null ? audio.duration : Math.min(audio.duration, nextTrack.previewLimitSeconds))
+          : nextTrack.durationSeconds ?? 0);
+      }
       broadcastState(savePlayerState(
         nextTrack,
         queueRef.current,
@@ -1019,6 +1052,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // Keep existing playback usable when the metadata refresh endpoint is unavailable.
     }
   }, [broadcastState, savePlayerState, showNotice]);
+
+  useEffect(() => {
+    if (isPremium) void refreshTrackMetadata();
+  }, [isPremium, refreshTrackMetadata]);
 
   const controls = useMemo(() => ({
     track,

@@ -66,15 +66,25 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::get('/vip/payment-methods', [VipCheckoutController::class, 'methods'])
         ->name('vip.payment-methods.index');
     Route::post('/vip/payments/momo/ipn', [VipCheckoutController::class, 'momoIpn'])
+        ->middleware('throttle:300,1,payment-ipn')
         ->name('vip.payments.momo.ipn');
     Route::get('/vip/payments/momo/return', [VipCheckoutController::class, 'momoReturn'])
         ->name('vip.payments.momo.return');
     Route::get('/vip/payments/vnpay/ipn', [VipCheckoutController::class, 'vnpayIpn'])
+        ->middleware('throttle:300,1,payment-ipn')
         ->name('vip.payments.vnpay.ipn');
     Route::get('/vip/payments/vnpay/return', [VipCheckoutController::class, 'vnpayReturn'])
         ->name('vip.payments.vnpay.return');
     Route::post('/vip/payments/zalopay/callback', [VipCheckoutController::class, 'zalopayCallback'])
+        ->middleware('throttle:300,1,payment-ipn')
         ->name('vip.payments.zalopay.callback');
+    Route::get('/vip/payments/sepay/checkout/{paymentCode}', [VipCheckoutController::class, 'sePayCheckout'])
+        ->where('paymentCode', '[A-Za-z0-9_-]{1,100}')
+        ->middleware('throttle:30,1,sepay-checkout')
+        ->name('vip.payments.sepay.checkout');
+    Route::post('/vip/payments/sepay/ipn', [VipCheckoutController::class, 'sePayIpn'])
+        ->middleware('throttle:300,1,payment-ipn')
+        ->name('vip.payments.sepay.ipn');
 
     Route::post('/auth/social/browser/start', [BrowserSocialAuthController::class, 'start'])
         ->middleware('throttle:10,1');
@@ -129,6 +139,9 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
         Route::post('/auth/qr/scan', [QrAuthController::class, 'scan'])
             ->middleware('throttle:20,1')
             ->name('auth.qr.scan');
+        Route::post('/auth/qr/approve', [QrAuthController::class, 'approve'])
+            ->middleware('throttle:20,1')
+            ->name('auth.qr.approve');
         Route::post('/vip/checkout', [VipCheckoutController::class, 'store'])
             ->middleware('throttle:10,1')
             ->name('vip.checkout');
@@ -136,6 +149,7 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
             ->name('vip.transactions.index');
         Route::get('/vip/transactions/{paymentCode}', [VipCheckoutController::class, 'show'])
             ->where('paymentCode', '[A-Za-z0-9_-]{1,100}')
+            ->middleware('throttle:60,1')
             ->name('vip.transactions.show');
         Route::get('/me/playlists', [UserPlaylistController::class, 'index'])->name('me.playlists.index');
         Route::post('/me/playlists', [UserPlaylistController::class, 'store'])
@@ -219,7 +233,7 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
         ->middleware('api.user.optional')
         ->name('songs.audio');
     Route::post('/songs/{slug}/view', [CatalogController::class, 'recordSongView'])
-        ->middleware('api.user.optional')
+        ->middleware(['api.user.optional', 'throttle:120,1,song-view'])
         ->name('songs.view');
     Route::post('/songs/{slug}/favorite', [CatalogController::class, 'toggleSongFavorite'])
         ->middleware(['api.user', 'throttle:60,1'])

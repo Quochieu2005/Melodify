@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
+import { requireOptionalNativeModule } from "expo";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppShell } from "@/components/layout";
@@ -29,7 +30,6 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { useRemoteData } from "@/hooks/useRemoteData";
 import {
   API_URL,
-  clearAuthSession,
   createUserPlaylist,
   getForYouArtists,
   getForYouSong,
@@ -39,10 +39,14 @@ import {
   listFavoriteSongs,
   listGenres,
   loginWithPassword,
+  logout as logoutAuth,
+  requestPasswordReset,
+  resetPassword,
   registerWithPassword,
   requestPhoneLoginOtp,
   searchCatalog,
   saveAuthSession,
+  verifyPasswordResetOtp,
   verifyPhoneLoginOtp,
   type Artist,
   type Genre,
@@ -80,40 +84,99 @@ export function SearchScreen() {
   const [results, setResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [recognizing, setRecognizing] = useState(false);
+  const [voiceStarting, setVoiceStarting] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
+  const searchSequence = useRef(0);
+  const speechModule = useRef<typeof import("expo-speech-recognition").ExpoSpeechRecognitionModule | null>(null);
+  const speechListeners = useRef<{ remove: () => void }[]>([]);
+  const updateSearchQuery = (value: string) => {
+    searchSequence.current += 1;
+    setQuery(value);
+    setResults(null);
+    setError("");
+    setLoading(false);
+  };
 
-  const runSearch = async (searchType: SearchKind = type) => {
+  useEffect(() => () => {
+    speechListeners.current.forEach((listener) => listener.remove());
+    speechModule.current?.abort();
+  }, []);
+
+  const toggleVoiceSearch = async () => {
+    setVoiceError("");
+    if (voiceStarting) return;
+    setVoiceStarting(true);
+    try {
+      if (!requireOptionalNativeModule("ExpoSpeechRecognition")) {
+        setVoiceError("Tìm kiếm bằng giọng nói cần bản Melodify development build; Expo Go chưa có module này.");
+        return;
+      }
+
+      let speech = speechModule.current;
+      if (!speech) {
+        speech = (await import("expo-speech-recognition")).ExpoSpeechRecognitionModule;
+        speechModule.current = speech;
+        speechListeners.current = [
+          speech.addListener("start", () => setRecognizing(true)),
+          speech.addListener("end", () => setRecognizing(false)),
+          speech.addListener("result", (event) => {
+            const transcript = event.results[0]?.transcript?.trim();
+            if (event.isFinal && transcript) updateSearchQuery(transcript);
+          }),
+          speech.addListener("error", (event) => {
+            setRecognizing(false);
+            if (event.error !== "aborted") setVoiceError("Không nhận được giọng nói. Hãy thử lại.");
+          }),
+        ];
+      }
+
+      if (recognizing) {
+        speech.stop();
+        return;
+      }
+      if (!speech.isRecognitionAvailable()) {
+        setVoiceError("Thiết bị chưa có dịch vụ nhận dạng giọng nói. Kiểm tra Siri/Dictation hoặc dịch vụ Google.");
+        return;
+      }
+      const permission = await speech.requestPermissionsAsync();
+      if (!permission.granted) {
+        setVoiceError("Bạn chưa cấp quyền micro và nhận dạng giọng nói.");
+        return;
+      }
+      speech.start({ lang: "vi-VN", interimResults: false, continuous: false, iosTaskHint: "search" });
+    } catch {
+      setVoiceError("Không tải được nhận dạng giọng nói. Hãy cài bản app có module này rồi thử lại.");
+      setRecognizing(false);
+    } finally {
+      setVoiceStarting(false);
+    }
+  };
+
+  const runSearch = useCallback(async (searchType: SearchKind = type) => {
     if (!query.trim()) return;
+    const sequence = ++searchSequence.current;
     setLoading(true);
     setError("");
     try {
-      setResults(await searchCatalog(query, searchType));
+      const result = await searchCatalog(query, searchType);
+      if (sequence === searchSequence.current) setResults(result);
     } catch (reason) {
+      if (sequence !== searchSequence.current) return;
       setError(
         reason instanceof Error ? reason.message : "Không thể tìm kiếm.",
       );
       setResults(null);
     } finally {
-      setLoading(false);
+      if (sequence === searchSequence.current) setLoading(false);
     }
-  };
+  }, [query, type]);
 
   useEffect(() => {
-    if (!initialQuery?.trim()) return;
-    let active = true;
-    void searchCatalog(initialQuery, "all")
-      .then((result) => {
-        if (active) setResults(result);
-      })
-      .catch((reason: unknown) => {
-        if (active)
-          setError(
-            reason instanceof Error ? reason.message : "Không thể tìm kiếm.",
-          );
-      });
-    return () => {
-      active = false;
-    };
-  }, [initialQuery]);
+    if (query.trim().length < 2) return;
+    const timer = setTimeout(() => void runSearch(type), 350);
+    return () => clearTimeout(timer);
+  }, [query, type, runSearch]);
 
   const artists = results?.data.artist ?? [];
   const songs = results?.data.song ?? [];
@@ -131,7 +194,7 @@ export function SearchScreen() {
           <TextInput
             accessibilityLabel="Từ khóa tìm kiếm"
             value={query}
-            onChangeText={setQuery}
+            onChangeText={updateSearchQuery}
             onSubmitEditing={() => void runSearch()}
             returnKeyType="search"
             placeholder="Nhập từ khóa…"
@@ -139,12 +202,24 @@ export function SearchScreen() {
             style={styles.input}
           />
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={recognizing ? "Dừng tìm kiếm bằng giọng nói" : "Tìm kiếm bằng giọng nói"}
+            accessibilityState={{ selected: recognizing, disabled: voiceStarting }}
+            disabled={voiceStarting}
+            onPress={() => void toggleVoiceSearch()}
+            style={[styles.voiceSearchButton, recognizing && styles.voiceSearchButtonActive]}
+          >
+            <AppIcon name="mic" color={recognizing ? "#FFFFFF" : theme.primary} size={20} />
+          </Pressable>
+          <Pressable
             onPress={() => void runSearch()}
             style={styles.searchButton}
           >
             <Text style={styles.searchButtonText}>Tìm</Text>
           </Pressable>
         </View>
+        {recognizing ? <Text style={styles.voiceHint}>Đang nghe… chạm micro lần nữa để dừng.</Text> : null}
+        {voiceError ? <Text accessibilityRole="alert" style={styles.voiceError}>{voiceError}</Text> : null}
         <View style={styles.pills}>
           {searchTypes.map((item) => (
             <Pressable
@@ -245,6 +320,9 @@ export function SearchScreen() {
               <StateMessage empty="Không tìm thấy kết quả phù hợp." />
             ) : null}
           </>
+        ) : null}
+        {results && !songs.length && !artists.length && !albums.length && !playlists.length && !users.length ? (
+          <Text style={styles.detail}>Không tìm thấy kết quả phù hợp.</Text>
         ) : null}
       </ScrollPage>
     </AppShell>
@@ -572,7 +650,7 @@ export function LibraryScreen() {
     }
   };
   const logout = async () => {
-    await clearAuthSession();
+    await logoutAuth();
     setUser(null);
     await reload();
   };
@@ -800,7 +878,6 @@ export function LoginScreen() {
   const [phoneMode, setPhoneMode] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [consent, setConsent] = useState(true);
-
   const finishLogin = async (
     auth: Awaited<ReturnType<typeof verifyPhoneLoginOtp>>,
   ) => {
@@ -1394,6 +1471,11 @@ export function PasswordLoginScreen() {
                 </Pressable>
               </View> : null}
               {error ? <Text style={styles.loginError}>{error}</Text> : null}
+              {!registering ? <Pressable accessibilityRole="button" disabled={loading}
+                onPress={() => router.push('/forgot-password' as never)}
+                style={{ alignSelf: 'flex-end', paddingVertical: 2 }}>
+                <Text style={{ color: theme.primary, fontWeight: '600' }}>Quên mật khẩu?</Text>
+              </Pressable> : null}
               <PrimaryButton
                 disabled={loading}
                 label={loading ? 'Đang xử lý…' : registering ? 'Đăng ký và tiếp tục' : 'Đăng nhập'}
@@ -1406,6 +1488,83 @@ export function PasswordLoginScreen() {
                   {registering ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký'}
                 </Text>
               </Pressable>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
+    </AppShell>
+  );
+}
+
+export function ForgotPasswordScreen() {
+  const styles = useAdaptiveStyles(baseStyles);
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const theme = useTheme();
+  const mode = useThemeMode();
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [step, setStep] = useState<'email' | 'otp' | 'password'>('email');
+  const [completed, setCompleted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const submit = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      if (step === 'email') {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) throw new Error('Nhập email hợp lệ.');
+        const result = await requestPasswordReset(email);
+        setStep('otp');
+        setSuccess(result.message);
+      } else if (step === 'otp') {
+        if (!/^\d{6}$/.test(code.trim())) throw new Error('Mã OTP gồm 6 chữ số.');
+        const result = await verifyPasswordResetOtp(email, code.trim());
+        setResetToken(result.reset_token);
+        setStep('password');
+      } else {
+        if (password.length < 8 || password !== confirmation) throw new Error('Mật khẩu cần ít nhất 8 ký tự và nhập lại phải khớp.');
+        const result = await resetPassword(email, resetToken, password, confirmation);
+        setSuccess(result.message);
+        setCompleted(true);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Không thể đặt lại mật khẩu.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const title = step === 'email' ? 'Quên mật khẩu' : step === 'otp' ? 'Xác nhận OTP' : 'Tạo mật khẩu mới';
+  return (
+    <AppShell hideHeader hidePlayer hideTabs>
+      <LinearGradient colors={mode === 'dark' ? ['#070B0C', '#062D2A', '#07110E'] : ['#FFFFFF', '#E8FBF8', '#F5FBFA']} style={styles.loginScreen}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top} style={styles.loginScreen}>
+          <ScrollView contentContainerStyle={[styles.passwordLoginScroll, { paddingTop: Math.max(insets.top + 8, 28) }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <View style={styles.loginTopRow}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Quay lại đăng nhập" hitSlop={16} onPress={() => router.back()} style={styles.loginClose}>
+                <AppIcon name="close" color={theme.text} size={22} />
+              </Pressable>
+            </View>
+            <Text style={[styles.passwordPageTitle, { color: theme.text }]}>{title}</Text>
+            <Text style={[styles.passwordPageSubtitle, { color: theme.textSecondary }]}>Đặt lại mật khẩu bằng mã OTP gửi đến email của bạn.</Text>
+            <View style={styles.passwordPageForm}>
+              {!completed && step === 'email' ? <TextInput accessibilityLabel="Email" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} editable={!loading} placeholder="Email đã đăng ký" placeholderTextColor={theme.textMuted} style={[styles.loginField, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]} /> : null}
+              {!completed && step === 'otp' ? <TextInput accessibilityLabel="Mã OTP" keyboardType="number-pad" maxLength={6} value={code} onChangeText={setCode} editable={!loading} placeholder="Mã OTP gồm 6 số" placeholderTextColor={theme.textMuted} style={[styles.loginField, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]} /> : null}
+              {!completed && step === 'password' ? <>
+                <TextInput accessibilityLabel="Mật khẩu mới" secureTextEntry value={password} onChangeText={setPassword} editable={!loading} placeholder="Mật khẩu mới" placeholderTextColor={theme.textMuted} style={[styles.loginField, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]} />
+                <TextInput accessibilityLabel="Nhập lại mật khẩu mới" secureTextEntry value={confirmation} onChangeText={setConfirmation} editable={!loading} placeholder="Nhập lại mật khẩu mới" placeholderTextColor={theme.textMuted} style={[styles.loginField, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]} />
+              </> : null}
+              {error ? <Text style={styles.loginError}>{error}</Text> : null}
+              {success ? <Text style={styles.loginSuccess}>{success}</Text> : null}
+              {completed ? <PrimaryButton label="Quay lại đăng nhập" onPress={() => router.replace('/password-login' as never)} /> : <PrimaryButton disabled={loading} label={loading ? 'Đang xử lý…' : step === 'email' ? 'Gửi mã OTP' : step === 'otp' ? 'Xác nhận mã' : 'Đổi mật khẩu'} onPress={() => void submit()} />}
+              {!completed && step !== 'email' ? <Pressable accessibilityRole="button" disabled={loading} onPress={() => { setStep(step === 'password' ? 'otp' : 'email'); setError(''); setSuccess(''); }} style={{ paddingVertical: 12, alignItems: 'center' }}><Text style={{ color: theme.primary, fontWeight: '600' }}>{step === 'password' ? 'Quay lại nhập OTP' : 'Đổi email'}</Text></Pressable> : null}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -1737,6 +1896,10 @@ const baseStyles = StyleSheet.create({
     backgroundColor: "#00B5AD",
   },
   searchButtonText: { color: "#FFFFFF", fontWeight: "900" },
+  voiceSearchButton: { width: 38, height: 38, margin: 2, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  voiceSearchButtonActive: { backgroundColor: "#EF4444" },
+  voiceHint: { color: "#00B5AD", fontSize: 12, fontWeight: "700" },
+  voiceError: { color: "#DC2626", fontSize: 12 },
   pills: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   pill: {
     paddingVertical: 7,

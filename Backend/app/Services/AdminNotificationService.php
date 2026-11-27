@@ -10,6 +10,11 @@ use App\Models\User;
 
 class AdminNotificationService
 {
+    public static function headerCacheKey(string $adminId): string
+    {
+        return "admin-notifications-header:{$adminId}";
+    }
+
     public function syncFor(Admin $admin): void
     {
         $adminId = (string) $admin->getKey();
@@ -84,7 +89,10 @@ class AdminNotificationService
                 'body' => $definition['body'],
                 'action_url' => $definition['action_url'],
                 ...($changed ? ['is_read' => false, 'read_at' => null] : []),
-            ])->save();
+            ]);
+            if ($notification->isDirty()) {
+                $notification->save();
+            }
         }
     }
 }

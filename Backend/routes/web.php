@@ -70,9 +70,9 @@ Route::prefix('admin')->name('admin.')->middleware('admin.timing')->group(functi
         Route::put('/profile/password', [ProfileController::class, 'password'])->name('profile.password');
         Route::put('/account-settings/notifications', [ProfileController::class, 'notifications'])->name('profile.notifications');
         Route::put('/account-settings/appearance', [ProfileController::class, 'appearance'])->name('profile.appearance');
-        Route::get('/admins', [AdminManagementController::class, 'index'])->name('admins.index');
+        Route::get('/admins', [AdminManagementController::class, 'index'])->middleware('admin.super')->name('admins.index');
         Route::resource('admins', AdminManagementController::class)->only(['edit', 'update']);
-        Route::patch('/admins/{admin}/status', [AdminManagementController::class, 'toggleStatus'])->name('admins.status');
+        Route::patch('/admins/{admin}/status', [AdminManagementController::class, 'toggleStatus'])->middleware('admin.super')->name('admins.status');
 
         Route::middleware('admin.permission:banners.manage')->group(function () {
             Route::delete('/banners/bulk', [BannerController::class, 'destroyBulk'])->name('banners.bulk-destroy');
@@ -133,6 +133,7 @@ Route::prefix('admin')->name('admin.')->middleware('admin.timing')->group(functi
 
         Route::middleware('admin.permission:billing.manage')->group(function () {
             Route::resource('subscriptions', SubscriptionController::class)->except('show');
+            Route::get('/payments/successful', [PaymentController::class, 'successful'])->name('payments.successful');
             Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
             Route::get('/payments/{payment}', [PaymentController::class, 'show'])->name('payments.show');
         });

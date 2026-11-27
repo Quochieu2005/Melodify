@@ -45,7 +45,7 @@ function formatCount(count: number | undefined) {
   return new Intl.NumberFormat('vi-VN').format(count ?? 0);
 }
 
-function LyricBlock({ lyrics, elapsed, isActiveTrack, onSeek }: { lyrics: Lyric[]; elapsed: number; isActiveTrack: boolean; onSeek: (seconds: number) => void }) {
+function LyricBlock({ lyrics, loading, elapsed, isActiveTrack, onSeek }: { lyrics: Lyric[]; loading: boolean; elapsed: number; isActiveTrack: boolean; onSeek: (seconds: number) => void }) {
   const syncedLines = useMemo(() => parseSyncedLyrics(lyrics), [lyrics]);
   const activeIndex = isActiveTrack ? activeLyricIndex(syncedLines, elapsed) : -1;
   const content = useMemo(() => getPlainLyrics(lyrics), [lyrics]);
@@ -76,6 +76,7 @@ function LyricBlock({ lyrics, elapsed, isActiveTrack, onSeek }: { lyrics: Lyric[
     );
   }
 
+  if (loading) return <p role="status" className="text-sm text-white/60">Đang tải lời bài hát…</p>;
   if (!content) return <p className="text-sm text-white/60">Bài hát chưa có lời.</p>;
 
   return (
@@ -111,6 +112,7 @@ export default function SongDetailPage({ slug }: { slug: string }) {
   const [featuredAlbumState, setFeaturedAlbumState] = useState<{ artistKey: string; albums: AlbumRecord[] }>({ artistKey: '', albums: [] });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingLyrics, setIsLoadingLyrics] = useState(true);
   const [isFavoritePending, setIsFavoritePending] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isSharePending, setIsSharePending] = useState(false);
@@ -122,16 +124,21 @@ export default function SongDetailPage({ slug }: { slug: string }) {
 
     const loadSong = async () => {
       setIsLoading(true);
+      setIsLoadingLyrics(true);
       setError('');
       try {
-        const [response, lyricsResponse] = await Promise.all([
-          getSong(slug, getVisitorId()),
-          getSongLyrics(slug),
-        ]);
-        const songResponse = { ...response.data, lyrics: lyricsResponse.data };
+        const lyricsRequest = getSongLyrics(slug).then(({ data }) => data).catch(() => []);
+        const response = await getSong(slug, getVisitorId());
+        const songResponse = { ...response.data, lyrics: [] };
         if (cancelled) return;
         setSong(songResponse);
         recordRecentItem(recentSongItem(songResponse));
+        void lyricsRequest.then((lyrics) => {
+          if (!cancelled) {
+            setSong((current) => current?.id === songResponse.id ? { ...current, lyrics } : current);
+            setIsLoadingLyrics(false);
+          }
+        });
       } catch (cause) {
         if (!cancelled) setError(cause instanceof ApiError && cause.status === 404 ? 'Không tìm thấy bài hát.' : 'Không thể tải bài hát lúc này.');
       } finally {
@@ -312,7 +319,7 @@ export default function SongDetailPage({ slug }: { slug: string }) {
             <h2 id="lyrics-heading" className="text-[26px] font-bold">Lời bài hát</h2>
             <div className="mt-4 rounded-xl bg-[#242424] p-5 sm:p-6">
               <p className="border-b border-white/10 pb-4 text-xs text-white/55">Đăng bởi <span className="font-bold text-white">{song.publisher || 'Melodify'}</span></p>
-              <div className="pt-5"><LyricBlock lyrics={song.lyrics || []} elapsed={currentTrack ? elapsed : 0} isActiveTrack={currentTrack} onSeek={handleLyricSeek} /></div>
+              <div className="pt-5"><LyricBlock lyrics={song.lyrics || []} loading={isLoadingLyrics} elapsed={currentTrack ? elapsed : 0} isActiveTrack={currentTrack} onSeek={handleLyricSeek} /></div>
             </div>
           </section>
           <ArtistPanel artists={artists} />

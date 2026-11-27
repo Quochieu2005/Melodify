@@ -93,6 +93,14 @@ return [
         'callback_url' => env('ZALOPAY_CALLBACK_URL') ?: rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/v1/vip/payments/zalopay/callback',
     ],
 
+    'sepay' => [
+        'merchant_id' => env('SEPAY_MERCHANT_ID'),
+        'secret_key' => env('SEPAY_SECRET_KEY'),
+        'api_url' => env('SEPAY_API_URL', 'https://pgapi.sepay.vn'),
+        'checkout_url' => env('SEPAY_CHECKOUT_URL', 'https://pay.sepay.vn/v1/checkout/init'),
+        'ipn_url' => env('SEPAY_IPN_URL') ?: rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/v1/vip/payments/sepay/ipn',
+    ],
+
     'twilio' => [
         'account_sid' => env('TWILIO_ACCOUNT_SID'),
         'auth_token' => env('TWILIO_AUTH_TOKEN'),

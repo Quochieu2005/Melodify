@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type TransitionEvent as ReactTransitionEvent } from 'react';
 import Image from 'next/image';
-import { listBanners, subscribeCatalogResponse, type Banner as ApiBanner } from '@/lib/api';
+import type { Banner as ApiBanner } from '@/lib/api';
 
 const dragThreshold = 48;
 
@@ -250,10 +250,9 @@ function BannerCarouselView({ banners, className, twoColumns }: { banners: Banne
   );
 }
 
-export default function MorningBannerCarousel() {
+export default function MorningBannerCarousel({ banners: apiBanners }: { banners: ApiBanner[] }) {
   const [greeting, setGreeting] = useState(getVietnamGreeting);
-  const [banners, setBanners] = useState<Banner[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const banners = Array.from(new Map(apiBanners.filter((banner) => banner.image_url).map((banner) => [banner.image_url, banner])).values()).slice(0, 5).map(mapApiBanner);
 
   useEffect(() => {
     const greetingTimer = window.setInterval(() => {
@@ -263,38 +262,6 @@ export default function MorningBannerCarousel() {
     return () => window.clearInterval(greetingTimer);
   }, []);
 
-  useEffect(() => {
-    let isCurrent = true;
-    const applyBanners = (response: Awaited<ReturnType<typeof listBanners>>) => {
-      const uniqueBanners = Array.from(
-        new Map(
-          response.data
-            .filter((banner) => banner.image_url)
-            .map((banner) => [banner.image_url, banner]),
-        ).values(),
-      ).slice(0, 5);
-      if (isCurrent) setBanners(uniqueBanners.map(mapApiBanner));
-    };
-    const unsubscribe = subscribeCatalogResponse<Awaited<ReturnType<typeof listBanners>>>(
-      '/v1/banners?daily=1&limit=5',
-      applyBanners,
-    );
-
-    listBanners({ daily: true, limit: 5 })
-      .then(applyBanners)
-      .catch(() => {
-        if (isCurrent) setBanners([]);
-      })
-      .finally(() => {
-        if (isCurrent) setIsLoading(false);
-      });
-
-    return () => {
-      isCurrent = false;
-      unsubscribe();
-    };
-  }, []);
-
   return (
     <section aria-label="Gợi ý nghe nhạc">
       <h1 className="text-[34px] font-bold leading-tight text-white" style={{ color: '#ffffff', fontSize: '34px', fontWeight: 700 }}>
@@ -302,7 +269,7 @@ export default function MorningBannerCarousel() {
       </h1>
 
       <BannerArrowSymbols />
-      {!isLoading && banners.length > 0 ? (
+      {banners.length > 0 ? (
         <>
           <BannerCarouselView banners={banners} className="xl:hidden" twoColumns={false} />
           <BannerCarouselView banners={banners} className="hidden xl:block" twoColumns />

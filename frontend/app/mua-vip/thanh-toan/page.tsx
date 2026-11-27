@@ -29,6 +29,7 @@ const paymentMethods: {
     logos: ["f_vnpay.png"],
   },
   { id: "zalopay", label: "Ví ZaloPay", logos: ["f_zalopay.png"] },
+  { id: "sepay", label: "SePay", logos: ["f_atm.png", "f_vnpay.png"] },
 ];
 
 function formatMoney(amount: number) {

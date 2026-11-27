@@ -24,7 +24,7 @@ class DashboardController extends Controller
     {
         $data = Cache::store('file')->remember(
             'admin:dashboard:metrics:v2:'.now()->format('Y-m-d-H-i'),
-            now()->addSeconds(30),
+            now()->endOfMinute(),
             fn (): array => $this->dashboardData(),
         );
 

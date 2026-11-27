@@ -169,7 +169,7 @@ export type SubscriptionPlanRecord = {
   unlimited_skip: boolean;
 };
 
-export type VipPaymentMethod = "momo" | "vnpay" | "zalopay";
+export type VipPaymentMethod = "momo" | "vnpay" | "zalopay" | "sepay";
 
 export type VipPaymentGatewayOption = {
   id: VipPaymentMethod;
@@ -378,6 +378,7 @@ export type AuthUser = {
   phone: string | null;
   avatar_url: string | null;
   is_premium: number;
+  vip_expires_at: string | null;
   status: string;
   created_at: string | null;
   google_connected: boolean;
@@ -687,6 +688,16 @@ export function loginWithPassword(
       device_name: "melodify-web",
     }),
   );
+}
+
+export function registerWithPassword(name: string, email: string, password: string, confirmation: string) {
+  return apiFetch<AuthResponse>("/v1/auth/register", jsonRequest({
+    name: name.trim(),
+    email: email.trim().toLowerCase(),
+    password,
+    password_confirmation: confirmation,
+    device_name: "melodify-web",
+  }));
 }
 
 export function requestPhoneOtp(phone: string) {

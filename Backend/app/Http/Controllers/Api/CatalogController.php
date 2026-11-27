@@ -442,7 +442,7 @@ class CatalogController extends Controller
 
         $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
         $revision = $this->catalogContentRevision();
-        Cache::store('file')->forget('api:home-bootstrap:v20:'.$dateKey.':'.$revision);
+        Cache::store('file')->forget('api:home-bootstrap:v21:'.$dateKey.':'.$revision);
         Cache::store('file')->forget('api:trending-artists:v8:'.$dateKey.':'.$revision);
 
         return response()->json(['recorded' => true]);
@@ -912,7 +912,7 @@ class CatalogController extends Controller
     {
         $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
         $revision = $this->catalogContentRevision();
-        $payload = Cache::store('file')->flexible('api:home-bootstrap:v20:'.$dateKey.':'.$revision, [60, 300], function () use ($dateKey): array {
+        $payload = Cache::store('file')->flexible('api:home-bootstrap:v21:'.$dateKey.':'.$revision, [60, 300], function () use ($dateKey): array {
             $banners = $this->responsePayload($this->banners(Request::create('/api/v1/banners', 'GET', [
                 'daily' => 1,
                 'limit' => 5,
@@ -945,7 +945,7 @@ class CatalogController extends Controller
                         'single_new_releases' => [],
                         'popular_songs' => [],
                     ]),
-                    'trending_artists' => array_slice(data_get($trending, 'data', []), 0, 4),
+                    'trending_artists' => array_slice(data_get($trending, 'data', []), 0, 8),
                 ],
                 'meta' => [
                     'date' => $dateKey,
@@ -1418,20 +1418,25 @@ class CatalogController extends Controller
         $visitorId = trim((string) ($data['visitor_id'] ?? ''));
         $visitorId = $visitorId !== '' ? $visitorId : hash('sha256', (string) $request->ip());
         $songId = (string) $song->getKey();
-        SongPlayEvent::query()->create([
-            'user_id' => $request->user()?->getKey() ? (string) $request->user()->getKey() : null,
-            'song_id' => $songId,
-            'visitor_id' => $visitorId,
-            'source' => $data['source'] ?? 'web',
-            'started_at' => now(),
-            'completed' => false,
-        ]);
+        $actor = $request->user()?->getKey() ? 'user:'.$request->user()->getKey() : 'visitor:'.$visitorId;
+        // A replay within a few seconds is the same listen; this stops spam from inflating charts.
+        $isNewListen = Cache::store('file')->add('song-view:'.$songId.':'.hash('sha256', $actor), true, now()->addSeconds(20));
+        if ($isNewListen) {
+            SongPlayEvent::query()->create([
+                'user_id' => $request->user()?->getKey() ? (string) $request->user()->getKey() : null,
+                'song_id' => $songId,
+                'visitor_id' => $visitorId,
+                'source' => $data['source'] ?? 'web',
+                'started_at' => now(),
+                'completed' => false,
+            ]);
+        }
 
         // Rollups refresh after one minute. Invalidating on every play
         // defeats caching for every visitor while music is being played.
 
         return response()->json([
-            'recorded' => true,
+            'recorded' => $isNewListen,
             'views' => $this->songViewCount($song),
         ]);
     }

@@ -8,6 +8,7 @@ type IconName =
   | 'user'
   | 'library'
   | 'search'
+  | 'mic'
   | 'phone'
   | 'music'
   | 'play'
@@ -79,6 +80,10 @@ export function AppIcon({ name, color: requestedColor, size = 22 }: { name: Icon
 
   if (name === 'search') {
     return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Circle cx="10.5" cy="10.5" r="7" stroke={color} strokeWidth="2" /><Path d="m16 16 5 5" stroke={color} strokeWidth="2" strokeLinecap="round" /></Svg>;
+  }
+
+  if (name === 'mic') {
+    return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Rect x="9" y="3" width="6" height="12" rx="3" stroke={color} strokeWidth="2" /><Path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8" stroke={color} strokeWidth="2" strokeLinecap="round" /></Svg>;
   }
 
   if (name === 'phone') {

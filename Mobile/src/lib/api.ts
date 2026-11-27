@@ -325,7 +325,7 @@ export type SubscriptionPlanRecord = {
   unlimited_skip: boolean;
 };
 
-export type VipPaymentMethod = 'momo' | 'vnpay' | 'zalopay';
+export type VipPaymentMethod = 'momo' | 'vnpay' | 'zalopay' | 'sepay';
 
 export type VipPaymentGatewayOption = {
   id: VipPaymentMethod;
@@ -426,6 +426,15 @@ export async function saveAuthSession(auth: AuthResponse): Promise<void> {
   tokenRequest = null;
   await writeAppValue(AUTH_TOKEN_STORAGE_KEY, auth.token);
   await writeAppValue(AUTH_USER_STORAGE_KEY, JSON.stringify(auth.user));
+  void getVisitorId()
+    .then((visitorId) => apiFetch('/v1/me/library/import', jsonRequest({ visitor_id: visitorId })))
+    .catch(() => undefined);
+}
+
+export async function logout(): Promise<void> {
+  const token = await getAuthToken();
+  if (token) void fetchApiResponse('/v1/auth/logout', jsonRequest({}), 'POST', token).catch(() => undefined);
+  await clearAuthSession();
 }
 
 export async function clearAuthSession(): Promise<void> {
@@ -930,6 +939,44 @@ export function addSongsToPlaylist(playlistId: string, songIds: string[]) {
 
 export function loginWithPassword(identifier: string, password: string) {
   return apiFetch<AuthResponse>('/v1/auth/login', jsonRequest({ identifier, password, remember: true, device_name: 'melodify-mobile' }));
+}
+
+export type QrScanResult = {
+  message: string;
+  status: 'scanned';
+  session_id: string;
+  device_name: string;
+  requested_ip: string | null;
+};
+
+// Step 1: claim the QR. The browser is NOT logged in yet; show the device to the user first.
+export function scanQrLogin(qrPayload: string) {
+  return apiFetch<QrScanResult>('/v1/auth/qr/scan', jsonRequest({ qr_payload: qrPayload }));
+}
+
+// Step 2: only after the user confirmed the device on screen.
+export function approveQrLogin(sessionId: string) {
+  return apiFetch<{ message: string; status: 'approved' }>('/v1/auth/qr/approve', jsonRequest({ session_id: sessionId }));
+}
+
+export function requestPasswordReset(email: string) {
+  return fetchApiResponse<{ message: string; expires_at?: string; resend_after_seconds?: number }>(
+    '/v1/auth/password/forgot', jsonRequest({ email: email.trim().toLowerCase() }), 'POST', null,
+  );
+}
+
+export function verifyPasswordResetOtp(email: string, code: string) {
+  return fetchApiResponse<{ message: string; reset_token: string; expires_at: string }>(
+    '/v1/auth/password/verify-otp', jsonRequest({ email: email.trim().toLowerCase(), code }), 'POST', null,
+  );
+}
+
+export function resetPassword(email: string, resetToken: string, password: string, confirmation: string) {
+  return fetchApiResponse<{ message: string }>(
+    '/v1/auth/password/reset', jsonRequest({
+      email: email.trim().toLowerCase(), reset_token: resetToken, password, password_confirmation: confirmation,
+    }), 'POST', null,
+  );
 }
 
 export function registerWithPassword(name: string, email: string, password: string, confirmation: string) {

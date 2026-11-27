@@ -325,13 +325,17 @@ class LibraryAndFollowTest extends TestCase
         $this->freezeTime();
         $song = Song::query()->create(['title' => 'Cached Play', 'slug' => 'cached-play', 'status' => 'published']);
         $suffix = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.Cache::store('file')->get('api:catalog-content-revision:v1');
-        $keys = ['api:home-discovery:v3:', 'api:home-bootstrap:v20:', 'api:trending-artists:v8:', 'api:charts:v8:5:', 'api:charts:v8:50:'];
+        $keys = ['api:home-discovery:v3:', 'api:home-bootstrap:v21:', 'api:trending-artists:v8:', 'api:charts:v8:5:', 'api:charts:v8:50:'];
         foreach ($keys as $key) {
             Cache::store('file')->put($key.$suffix, ['cached' => true], now()->addMinute());
         }
 
         $this->postJson('/api/v1/songs/cached-play/view', ['visitor_id' => 'cache-play-test', 'source' => 'mobile_player'])
             ->assertOk()->assertJsonPath('recorded', true)->assertJsonPath('views', 1);
+        $this->assertSame(1, SongPlayEvent::query()->where('song_id', (string) $song->getKey())->count());
+        // A rapid repeat from the same visitor is not counted again.
+        $this->postJson('/api/v1/songs/cached-play/view', ['visitor_id' => 'cache-play-test'])
+            ->assertOk()->assertJsonPath('recorded', false);
         $this->assertSame(1, SongPlayEvent::query()->where('song_id', (string) $song->getKey())->count());
         foreach ($keys as $key) {
             $this->assertSame(['cached' => true], Cache::store('file')->get($key.$suffix));
@@ -383,7 +387,7 @@ class LibraryAndFollowTest extends TestCase
         }
 
         $revision = (string) Cache::store('file')->get('api:catalog-content-revision:v1', 'initial');
-        $cacheKey = 'api:home-bootstrap:v20:'.now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.$revision;
+        $cacheKey = 'api:home-bootstrap:v21:'.now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.$revision;
         $trendingCacheKey = 'api:trending-artists:v8:'.now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString().':'.$revision;
         Cache::store('file')->forget($cacheKey);
         Cache::store('file')->forget($trendingCacheKey);
