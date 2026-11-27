@@ -44,11 +44,17 @@ class VipPaymentSettlementService
             return true;
         }
 
-        // Claim the pending payment atomically so repeated IPNs cannot grant VIP twice.
+        // Claim the payment atomically so repeated IPNs cannot grant VIP twice.
+        // A verified paid callback also wins over failed/cancelled (the money was taken),
+        // and over a 'processing' claim left behind by a process that died mid-settlement.
         $claimed = Payment::query()
             ->where('_id', (string) $payment->getKey())
-            ->where('status', 'pending')
-            ->update(['status' => 'processing']);
+            ->where(function ($query): void {
+                $query->whereIn('status', ['pending', 'failed', 'cancelled'])
+                    ->orWhere(fn ($stale) => $stale->where('status', 'processing')
+                        ->where('processing_at', '<=', now()->subMinutes(5)));
+            })
+            ->update(['status' => 'processing', 'processing_at' => now()]);
 
         if ($claimed === 0) {
             $payment->refresh();

@@ -266,7 +266,9 @@ class AudioController extends Controller
         if (filled($filename)) {
             $asciiFilename = Str::ascii((string) $filename);
             $asciiFilename = preg_replace('/[^A-Za-z0-9._-]+/', '_', $asciiFilename) ?? '';
-            $attachment .= ':'.(trim($asciiFilename, '._-') ?: 'melodify-audio.mp3');
+            // Cloudinary parses a dot in this flag value as another transformation flag and appends the asset extension itself.
+            $asciiFilename = preg_replace('/\.(?:mp3|m4a|aac|flac|wav)$/i', '', $asciiFilename) ?? '';
+            $attachment .= ':'.(trim($asciiFilename, '._-') ?: 'melodify-audio');
         }
 
         $path = preg_replace(

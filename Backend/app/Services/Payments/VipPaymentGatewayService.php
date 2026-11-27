@@ -446,11 +446,11 @@ class VipPaymentGatewayService
         $list = $auth->get($baseUrl.'/v1/order', ['q' => (string) $payment->payment_code, 'per_page' => 10])->json('data');
         $order = collect(is_array($list) ? $list : [])->first(fn ($item) => is_array($item)
             && hash_equals((string) $payment->payment_code, (string) ($item['order_invoice_number'] ?? '')));
-        if (! is_array($order) || blank($order['order_id'] ?? null)) {
+        if (! is_array($order) || blank($order['order_invoice_number'] ?? null)) {
             return null;
         }
 
-        $detailResponse = $auth->get($baseUrl.'/v1/order/detail/'.rawurlencode((string) $order['order_id']));
+        $detailResponse = $auth->get($baseUrl.'/v1/order/detail/'.rawurlencode((string) $order['order_invoice_number']));
         if (! $detailResponse->successful()) {
             return null;
         }

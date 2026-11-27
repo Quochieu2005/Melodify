@@ -333,6 +333,10 @@ class LibraryAndFollowTest extends TestCase
         $this->postJson('/api/v1/songs/cached-play/view', ['visitor_id' => 'cache-play-test', 'source' => 'mobile_player'])
             ->assertOk()->assertJsonPath('recorded', true)->assertJsonPath('views', 1);
         $this->assertSame(1, SongPlayEvent::query()->where('song_id', (string) $song->getKey())->count());
+        // A rapid repeat from the same visitor is not counted again.
+        $this->postJson('/api/v1/songs/cached-play/view', ['visitor_id' => 'cache-play-test'])
+            ->assertOk()->assertJsonPath('recorded', false);
+        $this->assertSame(1, SongPlayEvent::query()->where('song_id', (string) $song->getKey())->count());
         foreach ($keys as $key) {
             $this->assertSame(['cached' => true], Cache::store('file')->get($key.$suffix));
         }

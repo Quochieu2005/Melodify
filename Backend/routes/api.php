@@ -139,6 +139,9 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
         Route::post('/auth/qr/scan', [QrAuthController::class, 'scan'])
             ->middleware('throttle:20,1')
             ->name('auth.qr.scan');
+        Route::post('/auth/qr/approve', [QrAuthController::class, 'approve'])
+            ->middleware('throttle:20,1')
+            ->name('auth.qr.approve');
         Route::post('/vip/checkout', [VipCheckoutController::class, 'store'])
             ->middleware('throttle:10,1')
             ->name('vip.checkout');
@@ -230,7 +233,7 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
         ->middleware('api.user.optional')
         ->name('songs.audio');
     Route::post('/songs/{slug}/view', [CatalogController::class, 'recordSongView'])
-        ->middleware('api.user.optional')
+        ->middleware(['api.user.optional', 'throttle:120,1,song-view'])
         ->name('songs.view');
     Route::post('/songs/{slug}/favorite', [CatalogController::class, 'toggleSongFavorite'])
         ->middleware(['api.user', 'throttle:60,1'])

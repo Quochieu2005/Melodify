@@ -24,6 +24,7 @@ import { useRemoteData } from '@/hooks/useRemoteData';
 import {
   logout,
   approveQrLogin,
+  scanQrLogin,
   createUserPlaylist,
   getLibrary,
   getSavedAuthUser,
@@ -94,9 +95,25 @@ export function MyProfileScreen() {
     if (scannedQr.current || !payload.startsWith('melodify://login?')) return;
     scannedQr.current = true;
     try {
-      const result = await approveQrLogin(payload);
+      const scan = await scanQrLogin(payload);
       setQrScannerOpen(false);
-      Alert.alert('Đã xác nhận đăng nhập', result.message || 'Trang web sẽ tự đăng nhập.');
+      const device = `${scan.device_name}${scan.requested_ip ? ` (IP ${scan.requested_ip})` : ''}`;
+      Alert.alert(
+        'Cho phép đăng nhập?',
+        `Thiết bị ${device} muốn đăng nhập vào tài khoản của bạn. Chỉ đồng ý nếu chính bạn vừa mở mã QR này.`,
+        [
+          { text: 'Từ chối', style: 'cancel', onPress: () => { scannedQr.current = false; } },
+          {
+            text: 'Đồng ý',
+            onPress: () => {
+              void approveQrLogin(scan.session_id)
+                .then((result) => Alert.alert('Đã xác nhận đăng nhập', result.message || 'Trang web sẽ tự đăng nhập.'))
+                .catch((reason) => Alert.alert('Không thể xác nhận', reason instanceof Error ? reason.message : 'Vui lòng thử lại.'))
+                .finally(() => { scannedQr.current = false; });
+            },
+          },
+        ],
+      );
     } catch (reason) {
       scannedQr.current = false;
       Alert.alert('Không thể xác nhận', reason instanceof Error ? reason.message : 'Vui lòng thử lại.');

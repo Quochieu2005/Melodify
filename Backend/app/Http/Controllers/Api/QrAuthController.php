@@ -36,6 +36,7 @@ class QrAuthController extends Controller
             'qr_token_hash' => hash('sha256', $qrToken),
             'poll_token_hash' => hash('sha256', $pollToken),
             'device_name' => $data['device_name'] ?? 'qr-web',
+            'requested_ip' => $request->ip(),
             'remember' => array_key_exists('remember', $data) ? $request->boolean('remember') : null,
             'status' => 'pending',
             'expires_at' => $expiresAt->toIso8601String(),
@@ -81,6 +82,36 @@ class QrAuthController extends Controller
             || $expiresAt->isPast()
         ) {
             return response()->json(['message' => 'QR code đã hết hạn hoặc đã được sử dụng.'], 422);
+        }
+
+        // Scanning only claims the session. The phone must show the device and IP and
+        // call approve(); otherwise a QR shown to someone else would log in the attacker.
+        $session['status'] = 'scanned';
+        $session['scanned_user_id'] = (string) $request->user()->getKey();
+        $this->storeSession($session, $expiresAt);
+
+        return response()->json([
+            'message' => 'Hãy xác nhận thiết bị đang đăng nhập.',
+            'status' => 'scanned',
+            'session_id' => $session['session_id'],
+            'device_name' => $session['device_name'] ?? 'qr-web',
+            'requested_ip' => $session['requested_ip'] ?? null,
+        ]);
+    }
+
+    public function approve(Request $request): JsonResponse
+    {
+        $data = $request->validate(['session_id' => ['required', 'string', 'max:64']]);
+        $session = $this->getSession($data['session_id']);
+        $expiresAt = is_array($session) && isset($session['expires_at']) ? Carbon::parse($session['expires_at']) : null;
+
+        if (! is_array($session)
+            || ($session['status'] ?? null) !== 'scanned'
+            || ! hash_equals((string) ($session['scanned_user_id'] ?? ''), (string) $request->user()->getKey())
+            || ! $expiresAt
+            || $expiresAt->isPast()
+        ) {
+            return response()->json(['message' => 'Yêu cầu đăng nhập đã hết hạn hoặc không hợp lệ.'], 422);
         }
 
         $session['status'] = 'approved';
