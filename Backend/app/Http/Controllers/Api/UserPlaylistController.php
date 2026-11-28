@@ -8,6 +8,7 @@ use App\Models\PlaylistFavorite;
 use App\Models\PlaylistShare;
 use App\Models\PlaylistSong;
 use App\Models\Song;
+use App\Services\Analytics\EventCounts;
 use App\Services\CloudinaryService;
 use App\Support\CatalogRevision;
 use Illuminate\Http\JsonResponse;
@@ -19,6 +20,8 @@ use Throwable;
 
 class UserPlaylistController extends Controller
 {
+    private const MAX_PLAYLISTS_PER_USER = 200;
+
     public function index(Request $request): JsonResponse
     {
         $userId = (string) $request->user()->getKey();
@@ -27,8 +30,15 @@ class UserPlaylistController extends Controller
             ->orderByDesc('updated_at')
             ->get();
 
+        // One aggregate for all song counts: a count per playlist is one Atlas round trip each.
+        $counts = $playlists->isEmpty() ? [] : EventCounts::by(PlaylistSong::class, 'playlist_id', match: [
+            'playlist_id' => ['$in' => $playlists->map(fn (Playlist $playlist): string => (string) $playlist->getKey())->all()],
+        ]);
+
         return response()->json([
-            'data' => $playlists->map(fn (Playlist $playlist): array => $this->playlistSummary($playlist))->values(),
+            'data' => $playlists
+                ->map(fn (Playlist $playlist): array => $this->playlistSummary($playlist, $counts[(string) $playlist->getKey()] ?? 0))
+                ->values(),
         ]);
     }
 
@@ -39,6 +49,9 @@ class UserPlaylistController extends Controller
             'visibility' => ['sometimes', 'in:public,private'],
         ]);
         $userId = (string) $request->user()->getKey();
+        if (Playlist::query()->where('user_id', $userId)->count() >= self::MAX_PLAYLISTS_PER_USER) {
+            throw ValidationException::withMessages(['name' => 'Bạn đã đạt giới hạn '.self::MAX_PLAYLISTS_PER_USER.' playlist. Hãy xóa bớt playlist cũ trước khi tạo mới.']);
+        }
         $baseSlug = Str::slug($data['name']) ?: 'playlist';
         $playlist = Playlist::query()->create([
             'user_id' => $userId,
@@ -82,6 +95,7 @@ class UserPlaylistController extends Controller
             ->findOrFail($playlistId);
         abort_unless(! (bool) $playlist->is_system, 404);
         $uploadedImage = null;
+        $replacedCoverId = (string) ($playlist->cover_public_id ?? '');
 
         try {
             $updates = [];
@@ -109,6 +123,9 @@ class UserPlaylistController extends Controller
             if ($updates !== []) {
                 $playlist->update($updates);
             }
+            if ($replacedCoverId !== '' && isset($updates['cover_public_id']) && $updates['cover_public_id'] !== $replacedCoverId) {
+                $this->deleteCover($cloudinary, $replacedCoverId);
+            }
             $this->syncAutomaticCover($playlist);
         } catch (Throwable $exception) {
             if (filled($uploadedImage['public_id'] ?? null)) {
@@ -131,7 +148,7 @@ class UserPlaylistController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, string $playlistId): JsonResponse
+    public function destroy(Request $request, string $playlistId, CloudinaryService $cloudinary): JsonResponse
     {
         $playlist = Playlist::query()
             ->where('user_id', (string) $request->user()->getKey())
@@ -142,7 +159,11 @@ class UserPlaylistController extends Controller
         PlaylistSong::query()->where('playlist_id', $playlistKey)->delete();
         PlaylistFavorite::query()->where('playlist_id', $playlistKey)->delete();
         PlaylistShare::query()->where('playlist_id', $playlistKey)->delete();
+        $coverPublicId = (string) ($playlist->cover_public_id ?? '');
         $playlist->delete();
+        if ($coverPublicId !== '') {
+            $this->deleteCover($cloudinary, $coverPublicId);
+        }
         $this->invalidateCatalogCache();
 
         return response()->json(['message' => 'Đã xóa playlist.']);
@@ -177,23 +198,31 @@ class UserPlaylistController extends Controller
             ->all();
         $existingLookup = array_fill_keys($existingIds, true);
         $position = count($existingIds);
-        $addedCount = 0;
+        $now = now();
+        $rows = [];
 
         foreach ($songIds as $songId) {
             if (isset($existingLookup[$songId])) {
                 continue;
             }
 
-            PlaylistSong::query()->create([
+            $rows[] = [
                 'playlist_id' => $playlistKey,
                 'song_id' => $songId,
                 'position' => $position,
                 'added_by_user_id' => $userId,
-            ]);
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
             $existingLookup[$songId] = true;
             $position++;
-            $addedCount++;
         }
+
+        // One insert for all songs instead of one round trip per song (up to 500).
+        if ($rows !== []) {
+            PlaylistSong::query()->insert($rows);
+        }
+        $addedCount = count($rows);
 
         $this->syncAutomaticCover($playlist);
         $this->invalidateCatalogCache();
@@ -207,14 +236,14 @@ class UserPlaylistController extends Controller
     /**
      * @return array{id: string, name: string, slug: string, cover_url: string|null, song_count: int, visibility: string}
      */
-    private function playlistSummary(Playlist $playlist): array
+    private function playlistSummary(Playlist $playlist, ?int $songCount = null): array
     {
         return [
             'id' => (string) $playlist->getKey(),
             'name' => (string) $playlist->name,
             'slug' => (string) $playlist->slug,
             'cover_url' => $playlist->cover_url ? (string) $playlist->cover_url : null,
-            'song_count' => PlaylistSong::query()->where('playlist_id', (string) $playlist->getKey())->count(),
+            'song_count' => $songCount ?? PlaylistSong::query()->where('playlist_id', (string) $playlist->getKey())->count(),
             'visibility' => (string) $playlist->visibility,
         ];
     }
@@ -238,6 +267,16 @@ class UserPlaylistController extends Controller
 
         if ((string) ($playlist->cover_url ?? '') !== (string) ($coverUrl ?? '')) {
             $playlist->update(['cover_url' => $coverUrl]);
+        }
+    }
+
+    /** An uploaded cover that is no longer used would stay on Cloudinary forever. */
+    private function deleteCover(CloudinaryService $cloudinary, string $publicId): void
+    {
+        try {
+            $cloudinary->deleteImage($publicId);
+        } catch (Throwable $exception) {
+            report($exception);
         }
     }
 
