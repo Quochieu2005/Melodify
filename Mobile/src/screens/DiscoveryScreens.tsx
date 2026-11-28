@@ -73,6 +73,9 @@ const searchTypes: { id: SearchKind; title: string }[] = [
   { id: "playlist", title: "Playlist" },
 ];
 
+// Address of the Melodify website, where the terms and the privacy policy are published.
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL?.trim().replace(/\/+$/, "");
+
 export function SearchScreen() {
   const styles = useAdaptiveStyles(baseStyles);
   const theme = useTheme();
@@ -877,7 +880,8 @@ export function LoginScreen() {
   const [success, setSuccess] = useState("");
   const [phoneMode, setPhoneMode] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const [consent, setConsent] = useState(true);
+  // Not pre-ticked: consent to the terms and personal data processing has to be an explicit choice.
+  const [consent, setConsent] = useState(false);
   const finishLogin = async (
     auth: Awaited<ReturnType<typeof verifyPhoneLoginOtp>>,
   ) => {
@@ -1042,8 +1046,29 @@ export function LoginScreen() {
               <Text
                 style={[styles.consentText, { color: theme.textSecondary }]}
               >
-                Tôi đã đọc, hiểu và đồng ý với các điều khoản, chính sách bảo
-                mật và xử lý dữ liệu cá nhân của Melodify.
+                Tôi đã đọc, hiểu và đồng ý với{" "}
+                {WEB_URL ? (
+                  <>
+                    <Text
+                      accessibilityRole="link"
+                      style={{ color: theme.primary }}
+                      onPress={() => void Linking.openURL(`${WEB_URL}/dieu-khoan-su-dung`)}
+                    >
+                      Điều khoản sử dụng
+                    </Text>
+                    {" "}và{" "}
+                    <Text
+                      accessibilityRole="link"
+                      style={{ color: theme.primary }}
+                      onPress={() => void Linking.openURL(`${WEB_URL}/chinh-sach-bao-mat`)}
+                    >
+                      Chính sách bảo mật
+                    </Text>
+                  </>
+                ) : (
+                  "các điều khoản và chính sách bảo mật"
+                )}{" "}
+                và việc xử lý dữ liệu cá nhân của Melodify.
               </Text>
             </Pressable>
 

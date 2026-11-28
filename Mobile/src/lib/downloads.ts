@@ -70,6 +70,21 @@ function updateStoredDownloads<T>(update: (downloads: DownloadedSong[]) => { dow
   return mutation;
 }
 
+/**
+ * The saved record keeps an absolute path, and the app's data folder can move (an app update or a restore changes
+ * the container path on iOS). The file name is what stays; look for it in the current downloads folder.
+ */
+function currentLocation(item: DownloadedSong): DownloadedSong {
+  try {
+    const name = decodeURIComponent(item.fileUri.split('?')[0].split('/').pop() ?? '');
+    if (!name) return item;
+    const file = new File(getDownloadsDirectory(), name);
+    return file.exists && file.size > 0 ? { ...item, fileUri: file.uri } : item;
+  } catch {
+    return item;
+  }
+}
+
 function isDownloadFileAvailable(item: DownloadedSong) {
   try {
     const file = new File(item.fileUri);
@@ -82,15 +97,18 @@ function isDownloadFileAvailable(item: DownloadedSong) {
 export async function listDownloadedSongs(): Promise<DownloadedSong[]> {
   if (Platform.OS === 'web') return [];
   const stored = await readStoredDownloads();
+  const resolved = stored.map(currentLocation);
+  const available = resolved.filter(isDownloadFileAvailable);
+  const moved = resolved.some((item, index) => item.fileUri !== stored[index].fileUri);
 
-  const available = stored.filter(isDownloadFileAvailable);
-
-  if (available.length !== stored.length) {
-    const unavailableIds = new Set(
-      stored.filter((item) => !isDownloadFileAvailable(item)).map((item) => item.downloadId),
-    );
+  if (available.length !== stored.length || moved) {
+    const healed = new Map(available.map((item) => [item.downloadId, item]));
     await updateStoredDownloads((current) => ({
-      downloads: current.filter((item) => !unavailableIds.has(item.downloadId) || isDownloadFileAvailable(item)),
+      downloads: current.flatMap((item) => {
+        const found = healed.get(item.downloadId);
+        if (found) return [found];
+        return isDownloadFileAvailable(currentLocation(item)) ? [item] : [];
+      }),
       result: undefined,
     }));
   }
@@ -111,7 +129,8 @@ export async function downloadSong(
 
   const task = (async () => {
     const stored = await readStoredDownloads();
-    const existing = stored.find((item) => item.downloadId === downloadId);
+    const storedRecord = stored.find((item) => item.downloadId === downloadId);
+    const existing = storedRecord ? currentLocation(storedRecord) : undefined;
     if (existing) {
       const existingFile = new File(existing.fileUri);
       if (existingFile.exists && existingFile.size > 0) return existing;
