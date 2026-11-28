@@ -87,7 +87,7 @@ class InitializeMongoDb extends Command
             'admin_notifications' => [[['admin_id' => 1, 'is_read' => 1], []], [['admin_id' => 1, 'created_at' => -1], []]],
             'banners' => [[['slug' => 1], ['unique' => true]], [['sort_order' => 1], []], [['status' => 1], []]],
             'users' => [[['slug' => 1], ['unique' => true]], [['email' => 1], ['unique' => true, 'sparse' => true]], [['username' => 1], ['unique' => true, 'sparse' => true]], [['phone' => 1], ['unique' => true, 'sparse' => true]], [['is_premium' => 1], []], [['created_at' => -1], []]],
-            'artists' => [[['slug' => 1], ['unique' => true]], [['user_id' => 1], ['unique' => true, 'sparse' => true]]],
+            'artists' => [[['slug' => 1], ['unique' => true]], [['user_id' => 1], ['unique' => true, 'sparse' => true]], [['name_key' => 1], []]],
             'artist_followers' => [[['user_id' => 1, 'artist_id' => 1], ['unique' => true]], [['artist_id' => 1, 'user_id' => 1], []]],
             'artist_view_events' => [[['viewed_at' => -1, 'artist_id' => 1], []]],
             'genres' => [[['slug' => 1], ['unique' => true]], [['name' => 1], ['unique' => true]]],
