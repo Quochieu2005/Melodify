@@ -44,6 +44,7 @@ RUN composer install \
 
 COPY . .
 COPY docker/000-default.conf /etc/apache2/sites-available/000-default.conf
+COPY docker/php-melodify.ini /usr/local/etc/php/conf.d/99-melodify.ini
 COPY docker/entrypoint.sh /usr/local/bin/melodify-entrypoint
 
 RUN chmod +x /usr/local/bin/melodify-entrypoint \
