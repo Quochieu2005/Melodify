@@ -75,18 +75,12 @@ class AppServiceProvider extends ServiceProvider
 
             try {
                 $adminId = (string) $admin->getKey();
-                // Notification definitions are snapshots, not request data.
-                // Avoid rebuilding them on every page navigation while still
-                // refreshing often enough for the admin header.
-                Cache::remember(
-                    "admin-notifications-sync:{$adminId}",
-                    now()->addSeconds(30),
-                    function () use ($admin): bool {
-                        app(AdminNotificationService::class)->syncFor($admin);
-
-                        return true;
-                    },
-                );
+                // Notification definitions are snapshots, not request data. Rebuild them at most every 30 seconds,
+                // after the response has been sent, so the page never waits for the counting queries. The throttle is
+                // per server (file cache): an Atlas round trip just to read it would be paid on every page view.
+                if (Cache::store('file')->add("admin-notifications-sync:{$adminId}", true, 30)) {
+                    defer(fn () => app(AdminNotificationService::class)->syncFor($admin));
+                }
                 $header = Cache::store('file')->remember(
                     AdminNotificationService::headerCacheKey($adminId),
                     now()->addSeconds(10),

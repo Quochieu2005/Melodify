@@ -14,7 +14,8 @@ class CatalogGroupService
     /** @return Collection<int, string> */
     public function customTypeNames(string $model): Collection
     {
-        return collect(Cache::remember(
+        // Per-server file cache: this feeds the sidebar of every admin page, so an Atlas round trip here is paid on each page view.
+        return collect(Cache::store('file')->remember(
             $this->cacheKey($model),
             now()->addMinutes(self::CACHE_TTL_MINUTES),
             fn (): array => $model::query()
@@ -44,8 +45,8 @@ class CatalogGroupService
 
     public function forget(): void
     {
-        Cache::forget($this->cacheKey(Playlist::class));
-        Cache::forget($this->cacheKey(Topic::class));
+        Cache::store('file')->forget($this->cacheKey(Playlist::class));
+        Cache::store('file')->forget($this->cacheKey(Topic::class));
     }
 
     /** @param array<string, string> $configuredTypes */

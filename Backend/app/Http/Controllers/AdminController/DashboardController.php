@@ -20,11 +20,15 @@ use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
+    public const METRICS_CACHE_KEY = 'admin:dashboard:metrics:v3';
+
     public function index(): View
     {
-        $data = Cache::store('file')->remember(
-            'admin:dashboard:metrics:v2:'.now()->format('Y-m-d-H-i'),
-            now()->endOfMinute(),
+        // Fresh for a minute; for the next ten minutes the previous result is served at once while a new one is
+        // computed after the response, so the page never waits for the aggregates once it has been built.
+        $data = Cache::store('file')->flexible(
+            self::METRICS_CACHE_KEY,
+            [60, 600],
             fn (): array => $this->dashboardData(),
         );
 

@@ -15,7 +15,7 @@ class AdminNotificationController extends Controller
     {
         $admin = auth('admin')->user();
         $adminId = (string) $admin->getKey();
-        Cache::remember(
+        Cache::store('file')->remember(
             "admin-notifications-sync:{$adminId}",
             now()->addSeconds(30),
             function () use ($notificationService, $admin): bool {
