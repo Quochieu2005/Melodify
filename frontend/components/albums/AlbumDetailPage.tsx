@@ -10,6 +10,7 @@ import { getAlbum, getVisitorId, recordAlbumShare, toggleAlbumFavorite, type Alb
 
 import styles from './AlbumDetailPage.module.css';
 import { ArtistLink, ArtistNames } from '@/components/artists';
+import { SongListLimitNotice } from '@/components/songs/SongListLimitNotice';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { AddSongsToPlaylistDialog } from '@/components/playlists/AddSongsToPlaylistDialog';
 import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
@@ -418,6 +419,7 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
               <span aria-hidden="true">⌄</span>
             </button>
           ) : null}
+          <SongListLimitNotice truncated={album.songs_truncated} shown={album.songs.length} total={album.song_count} />
         </section>
 
         <AddSongsToPlaylistDialog songs={selectedSongs} open={isPlaylistDialogOpen} onClose={() => setIsPlaylistDialogOpen(false)} onAdded={setShareStatus} />

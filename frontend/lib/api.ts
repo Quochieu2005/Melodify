@@ -258,6 +258,8 @@ export type ArtistDetail = Artist & {
   songs?: Song[];
   featured_songs?: Song[];
   song_count?: number;
+  /** True when the artist has more songs than the API returns (at most 500, sorted by title). */
+  songs_truncated?: boolean;
   featured_song_count?: number;
   followers_count?: number;
   albums?: AlbumRecord[];
@@ -315,6 +317,8 @@ export type AlbumRecord = {
 
 export type AlbumDetail = AlbumRecord & {
   songs: Song[];
+  /** True when the API cut the list (it returns at most 500 songs); song_count is the real total. */
+  songs_truncated?: boolean;
 };
 
 export type Banner = {

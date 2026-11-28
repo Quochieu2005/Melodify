@@ -9,7 +9,6 @@ import {
   pickDailyTopics,
   topicHref,
   topicRecordToCard,
-  type TopicCard,
   vietnamDateKey,
 } from '@/lib/topic-data';
 
