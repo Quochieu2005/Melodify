@@ -72,21 +72,37 @@ class PaymentController extends Controller
         }
 
         $payments = $query
-            ->with(['user', 'subscription.plan', 'details.plan', 'transactions'])
+            ->with(['user', 'subscription.plan', 'transactions'])
             ->latest()
             ->paginate(15)
             ->withQueryString();
-        $summary = Payment::query()->raw(fn ($collection) => $collection->aggregate([
-            ['$match' => ['status' => ['$in' => $successStatuses]]],
+        // The plan of a payment comes from its subscription; the payment's own lines are only read when the
+        // subscription has no plan, so they are loaded for those rows alone.
+        $payments->getCollection()
+            ->filter(fn (Payment $payment): bool => $payment->subscription?->plan === null)
+            ->load('details.plan');
+
+        // One query for the totals and the pending count: payments grouped by status.
+        $byStatus = Payment::query()->raw(fn ($collection) => $collection->aggregate([
+            ['$match' => ['status' => ['$in' => [...$successStatuses, 'pending', 'processing']]]],
             ['$group' => [
-                '_id' => null,
+                '_id' => '$status',
                 'count' => ['$sum' => 1],
                 'amount' => ['$sum' => ['$ifNull' => ['$amount', 0]]],
             ]],
-        ], ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']])->toArray())[0] ?? [];
-        $successfulPaymentCount = (int) ($summary['count'] ?? 0);
-        $totalAmount = (float) (string) ($summary['amount'] ?? 0);
-        $pendingCount = Payment::query()->whereIn('status', ['pending', 'processing'])->count();
+        ], ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']])->toArray());
+        $successfulPaymentCount = 0;
+        $totalAmount = 0.0;
+        $pendingCount = 0;
+        foreach ($byStatus as $row) {
+            $status = (string) ($row['_id'] ?? '');
+            if (in_array($status, $successStatuses, true)) {
+                $successfulPaymentCount += (int) ($row['count'] ?? 0);
+                $totalAmount += (float) (string) ($row['amount'] ?? 0);
+            } else {
+                $pendingCount += (int) ($row['count'] ?? 0);
+            }
+        }
 
         return view('Admin.payments.index', compact('payments', 'successfulPaymentCount', 'totalAmount', 'pendingCount', 'search', 'successfulOnly'));
     }

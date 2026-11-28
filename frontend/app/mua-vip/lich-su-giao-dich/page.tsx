@@ -2,14 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLoginModal } from "@/components/auth/LoginModalProvider";
-import { ApiError, getVipTransactionHistory, type VipTransactionHistory } from "@/lib/api";
+import { ApiError, getVipPaymentStatus, getVipTransactionHistory, type VipTransactionHistory } from "@/lib/api";
 
 const paymentLogos = ["f_jcb.png", "f_visa.png", "f_master.png", "f_vnpay.png", "f_zalopay.png", "f_momo.png", "f_shopeepay.png", "f_atm.png"];
 
 const methodNames: Record<string, string> = {
-  card: "Thẻ tín dụng / Thẻ ghi nợ", shopeepay: "ShopeePay", atm: "Thẻ ATM", momo: "MoMo", zalopay: "ZaloPay", vnpay: "VNPAY", viettelpay: "Viettel Money",
+  card: "Thẻ tín dụng / Thẻ ghi nợ", shopeepay: "ShopeePay", atm: "Thẻ ATM", momo: "MoMo", zalopay: "ZaloPay", vnpay: "VNPAY", sepay: "SePay", viettelpay: "Viettel Money",
 };
 
 function money(value: number) {
@@ -22,11 +22,38 @@ function dateTime(value: string | null) {
 }
 
 export default function VipTransactionHistoryPage() {
-  const { user, authReady, openLogin } = useLoginModal();
+  const { user, authReady, openLogin, refreshUser } = useLoginModal();
   const [history, setHistory] = useState<VipTransactionHistory | null>(null);
   const [tab, setTab] = useState<"vip" | "xu">("vip");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [checkingPaymentCode, setCheckingPaymentCode] = useState("");
+  const [paymentCheckMessage, setPaymentCheckMessage] = useState("");
+
+  const checkPayment = useCallback(async (paymentCode: string, silent = false) => {
+    setCheckingPaymentCode(paymentCode);
+    if (!silent) setPaymentCheckMessage("");
+    try {
+      const response = await getVipPaymentStatus(paymentCode);
+      setHistory((current) => current ? {
+        ...current,
+        data: current.data.map((item) => item.payment_code === paymentCode
+          ? { ...item, status: response.data.status }
+          : item),
+      } : current);
+      const successful = ["success", "paid", "completed"].includes(response.data.status);
+      if (successful) {
+        void refreshUser();
+        setPaymentCheckMessage(`Đã xác nhận thanh toán ${paymentCode}; VIP đã được cập nhật.`);
+      } else if (!silent) {
+        setPaymentCheckMessage("SePay chưa xác nhận đơn này. Nếu tài khoản ngân hàng đã bị trừ tiền, đừng thanh toán lại; hãy gửi mã đơn cho hỗ trợ.");
+      }
+    } catch (cause) {
+      if (!silent) setPaymentCheckMessage(cause instanceof Error ? cause.message : "Chưa kiểm tra được trạng thái thanh toán.");
+    } finally {
+      setCheckingPaymentCode("");
+    }
+  }, [refreshUser]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -36,7 +63,12 @@ export default function VipTransactionHistoryPage() {
     }
     let cancelled = false;
     getVipTransactionHistory()
-      .then((data) => { if (!cancelled) setHistory(data); })
+      .then((data) => {
+        if (cancelled) return;
+        setHistory(data);
+        const pendingSePay = data.data.find((item) => item.method === "sepay" && ["pending", "processing"].includes(item.status.toLowerCase()));
+        if (pendingSePay) void checkPayment(pendingSePay.payment_code, true);
+      })
       .catch((cause) => {
         if (cancelled) return;
         if (cause instanceof ApiError && cause.status === 401) openLogin("/mua-vip/lich-su-giao-dich");
@@ -44,7 +76,7 @@ export default function VipTransactionHistoryPage() {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [authReady, user, openLogin]);
+  }, [authReady, checkPayment, user, openLogin]);
 
   if (authReady && !user) {
     return (
@@ -122,7 +154,7 @@ export default function VipTransactionHistoryPage() {
                   <table className="w-full min-w-[620px] text-left text-xs">
                     <thead className="bg-[#f7f7f7] font-bold"><tr><th className="px-5 py-3">Mã đơn</th><th className="px-3 py-3">Thời gian</th><th className="px-3 py-3">Kênh thanh toán</th><th className="px-3 py-3">Gói cước</th><th className="px-5 py-3 text-right">Số tiền</th></tr></thead>
                     <tbody className="divide-y divide-black/5">
-                      {loading ? <tr><td colSpan={5} className="px-5 py-6 text-center text-[#87949c]">Đang tải lịch sử…</td></tr> : error ? <tr><td colSpan={5} className="px-5 py-6 text-center text-red-600">{error}</td></tr> : !history?.data.length ? <tr><td colSpan={5} className="px-5 py-6 text-[#9aa4aa]">Chưa có giao dịch</td></tr> : history.data.map((item) => <tr key={item.id}><td className="px-5 py-4 font-semibold">{item.payment_code || "—"}<span className="mt-1 block font-normal text-[#8b969d]">{item.status}</span></td><td className="px-3 py-4">{dateTime(item.created_at)}</td><td className="px-3 py-4">{methodNames[item.method] || item.method || "—"}</td><td className="px-3 py-4">{item.plan_name}</td><td className="px-5 py-4 text-right font-semibold">{money(item.amount)}</td></tr>)}
+                      {loading ? <tr><td colSpan={5} className="px-5 py-6 text-center text-[#87949c]">Đang tải lịch sử…</td></tr> : error ? <tr><td colSpan={5} className="px-5 py-6 text-center text-red-600">{error}</td></tr> : !history?.data.length ? <tr><td colSpan={5} className="px-5 py-6 text-[#9aa4aa]">Chưa có giao dịch</td></tr> : history.data.map((item) => <tr key={item.id}><td className="px-5 py-4 font-semibold">{item.payment_code || "—"}<span className="mt-1 block font-normal text-[#8b969d]">{item.status}</span>{item.method === "sepay" && ["pending", "processing"].includes(item.status.toLowerCase()) ? <button type="button" disabled={checkingPaymentCode === item.payment_code} onClick={() => void checkPayment(item.payment_code)} className="mt-2 text-xs font-semibold text-[#168bd8] disabled:opacity-50">{checkingPaymentCode === item.payment_code ? "Đang đối soát…" : "Kiểm tra thanh toán"}</button> : null}</td><td className="px-3 py-4">{dateTime(item.created_at)}</td><td className="px-3 py-4">{methodNames[item.method] || item.method || "—"}</td><td className="px-3 py-4">{item.plan_name}</td><td className="px-5 py-4 text-right font-semibold">{money(item.amount)}</td></tr>)}
                     </tbody>
                   </table>
                 </div>
@@ -145,6 +177,7 @@ export default function VipTransactionHistoryPage() {
                   </table>
                 </div>
               )}
+              {paymentCheckMessage ? <p role="status" className="border-t border-black/5 px-5 py-3 text-sm text-[#52616a]">{paymentCheckMessage}</p> : null}
             </div>
           </section>
         </div>

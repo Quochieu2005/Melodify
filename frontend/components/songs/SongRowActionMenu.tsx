@@ -15,6 +15,7 @@ import {
   type SongAudioQuality,
   type SongReportReason,
 } from '@/lib/api';
+import { attachMediaToken } from '@/lib/mediaToken';
 import { songPath } from '@/lib/recent-history';
 
 type DownloadTier = 'standard' | 'high' | 'lossless';
@@ -103,6 +104,8 @@ function ChevronIcon() {
 
 export function SongRowActionMenu({
   song,
+  trigger = 'more',
+  showDownloadAction = true,
   buttonClassName = '',
   menuClassName = 'w-[218px]',
   onStatus,
@@ -114,6 +117,8 @@ export function SongRowActionMenu({
   onMenuOpenChange,
 }: {
   song: Song;
+  trigger?: 'more' | 'download';
+  showDownloadAction?: boolean;
   buttonClassName?: string;
   menuClassName?: string;
   onStatus?: (message: string) => void;
@@ -195,9 +200,15 @@ export function SongRowActionMenu({
     if (requiresVip) {
       const accessToken = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
       if (accessToken) {
-        const download = new URL(url, window.location.origin);
-        download.searchParams.set('access_token', accessToken);
-        url = download.toString();
+        // A short-lived media ticket when we have one; the login token only as a fallback during the transition.
+        const ticketUrl = attachMediaToken(url);
+        if (ticketUrl) {
+          url = ticketUrl;
+        } else {
+          const download = new URL(url, window.location.origin);
+          download.searchParams.set('access_token', accessToken);
+          url = download.toString();
+        }
       }
     }
     anchor.href = url;
@@ -271,44 +282,51 @@ export function SongRowActionMenu({
     }
   };
 
+  const renderDownloadMenu = (className: string) => (
+    <div role="menu" aria-label={`Chất lượng tải ${song.title}`} className={className}>
+      {downloadTiers.map((tier) => {
+        const quality = qualityForSong(song, tier.id);
+        const available = quality !== undefined
+          && (Boolean(quality) || hasFallbackDownloadForSong(song, downloadUrl));
+        const requiresVip = tier.premium || Boolean(song.premium_only) || Boolean(quality?.premium_only) || Boolean(quality && isLosslessQuality(quality));
+        const disabled = !available;
+        const size = estimatedSize(song, tier, quality);
+
+        return <button key={tier.id} type="button" role="menuitem" disabled={disabled} title={disabled ? 'Bài hát chưa có file tải ở chất lượng này' : undefined} onClick={() => handleDownload(tier.id)} className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5] disabled:cursor-not-allowed disabled:opacity-50">
+          <span>{tier.label}{size ? ` (~${size})` : ''}</span>
+          {requiresVip ? <span className="shrink-0 rounded bg-[#f4b84a] px-1.5 py-0.5 text-[10px] font-extrabold text-[#38240b]">VIP</span> : null}
+        </button>;
+      })}
+    </div>
+  );
+
   return (
     <div ref={rootRef} className="relative grid place-items-center">
       <button
         type="button"
-        aria-label={`Tùy chọn bài ${song.title}`}
+        aria-label={trigger === 'download' ? `Tải về ${song.title}` : `Tùy chọn bài ${song.title}`}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
-        onClick={() => { updateMenuOpen(!menuOpen); setShareOpen(false); setDownloadOpen(false); }}
-        className={`grid size-8 place-items-center rounded-full text-white/75 outline-none transition-[opacity,background-color,color] hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-[#00d3e5] ${buttonClassName}`}
+        onClick={() => {
+          const opening = !menuOpen;
+          updateMenuOpen(opening);
+          setShareOpen(false);
+          setDownloadOpen(trigger === 'download' && opening);
+        }}
+        className={`${trigger === 'more' ? 'grid size-8 place-items-center rounded-full text-white/75 hover:bg-white/10 hover:text-white' : 'inline-flex items-center justify-center gap-3 rounded-full text-sm font-bold text-white transition-colors hover:bg-white/25'} outline-none focus-visible:ring-2 focus-visible:ring-[#00d3e5] ${buttonClassName}`}
       >
-        <MoreIcon className={iconClassName} />
+        {trigger === 'more' ? <MoreIcon className={iconClassName} /> : <><ActionIcon kind="download" />Tải về</>}
       </button>
       {menuOpen ? (
-        <div className={`absolute right-0 z-40 ${placement === 'up' ? 'bottom-full mb-2' : 'top-full mt-1'}`}>
+        trigger === 'download' ? renderDownloadMenu("absolute right-0 top-full z-40 mt-2 w-[260px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-white/[0.06] bg-[#292c2b] p-1.5 text-[13px] font-bold text-white shadow-2xl") : <div className={`absolute right-0 z-40 ${placement === 'up' ? 'bottom-full mb-2' : 'top-full mt-1'}`}>
           <div role="menu" aria-label={`Thao tác bài ${song.title}`} className={`${menuClassName} overflow-hidden rounded-xl border border-white/[0.06] bg-[#292c2b] p-1.5 text-[13px] font-bold text-white shadow-2xl`}>
-            <button type="button" role="menuitem" aria-controls={`song-download-menu-${song.id}`} aria-expanded={downloadOpen} onClick={toggleDownloadMenu} className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5] ${downloadOpen ? 'bg-white/[0.09] text-[#00d3e5]' : ''}`}><span className="flex items-center gap-3"><ActionIcon kind="download" />Tải về</span><ChevronIcon /></button>
+            {showDownloadAction ? <button type="button" role="menuitem" aria-controls={`song-download-menu-${song.id}`} aria-expanded={downloadOpen} onClick={toggleDownloadMenu} className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5] ${downloadOpen ? 'bg-white/[0.09] text-[#00d3e5]' : ''}`}><span className="flex items-center gap-3"><ActionIcon kind="download" />Tải về</span><ChevronIcon /></button> : null}
             <button type="button" role="menuitem" onClick={() => { updateMenuOpen(false); setDownloadOpen(false); setPlaylistOpen(true); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5]"><ActionIcon kind="playlist" />Thêm vào playlist</button>
             <button type="button" role="menuitem" aria-controls={`song-share-menu-${song.id}`} aria-expanded={shareOpen} onClick={() => { setDownloadOpen(false); setShareOpen((value) => !value); }} className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5]"><span className="flex items-center gap-3"><ActionIcon kind="share" />Chia sẻ</span><span aria-hidden="true" className="text-white/45">›</span></button>
             {onRemoveFromQueue ? <button type="button" role="menuitem" onClick={() => { updateMenuOpen(false); setDownloadOpen(false); onRemoveFromQueue(); notify('Đã xóa khỏi danh sách phát.'); }} className="flex w-full items-center gap-3 whitespace-nowrap rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5]"><ActionIcon kind="remove" />Xóa khỏi danh sách phát</button> : null}
             <button type="button" role="menuitem" onClick={() => { updateMenuOpen(false); setShareOpen(false); setDownloadOpen(false); setReportOpen(true); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5]"><ActionIcon kind="report" />Báo cáo</button>
           </div>
-          {downloadOpen ? (
-            <div id={`song-download-menu-${song.id}`} role="menu" aria-label={`Chất lượng tải ${song.title}`} className={`absolute top-0 z-50 w-[260px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-white/[0.06] bg-[#292c2b] p-1.5 text-[13px] font-bold text-white shadow-2xl ${downloadSubmenuSide === 'right' ? 'left-full ml-1' : 'right-full mr-1'}`}>
-              {downloadTiers.map((tier) => {
-                const quality = qualityForSong(song, tier.id);
-                const available = quality !== undefined
-                  && (Boolean(quality) || hasFallbackDownloadForSong(song, downloadUrl));
-                const requiresVip = tier.premium || Boolean(song.premium_only) || Boolean(quality?.premium_only) || Boolean(quality && isLosslessQuality(quality));
-                const disabled = !available;
-                const size = estimatedSize(song, tier, quality);
-
-                return <button key={tier.id} type="button" role="menuitem" disabled={disabled} title={disabled ? 'Bài hát chưa có file tải ở chất lượng này' : undefined} onClick={() => handleDownload(tier.id)} className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5] disabled:cursor-not-allowed disabled:opacity-50">
-                  <span>{tier.label}{size ? ` (~${size})` : ''}</span>
-                  {requiresVip ? <span className="shrink-0 rounded bg-[#f4b84a] px-1.5 py-0.5 text-[10px] font-extrabold text-[#38240b]">VIP</span> : null}
-                </button>;
-              })}
-            </div>
-          ) : null}
+          {downloadOpen ? renderDownloadMenu(`absolute top-0 z-50 w-[260px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-white/[0.06] bg-[#292c2b] p-1.5 text-[13px] font-bold text-white shadow-2xl ${downloadSubmenuSide === 'right' ? 'left-full ml-1' : 'right-full mr-1'}`) : null}
           {shareOpen ? (
             <div id={`song-share-menu-${song.id}`} role="menu" aria-label={`Chia sẻ bài ${song.title}`} className="absolute right-full top-1/2 mr-2 w-[190px] -translate-y-1/2 overflow-hidden rounded-xl border border-white/[0.06] bg-[#292c2b] p-1.5 text-[13px] font-bold text-white shadow-2xl">
               <button type="button" role="menuitem" onClick={() => void handleShare('facebook')} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.09] hover:text-[#00d3e5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00d3e5]"><span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-[#1877f2] text-[14px] font-extrabold text-white">f</span>Facebook</button>

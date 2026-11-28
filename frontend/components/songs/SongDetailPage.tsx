@@ -7,7 +7,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArtistLink, ArtistNames } from '@/components/artists';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { usePlayer } from '@/components/player';
-import { ApiError, getArtist, getSong, getSongLyrics, getSongDownloadUrl, getVisitorId, recordSongShare, toggleSongFavorite, type AlbumRecord, type Lyric, type Song, type SongArtistCredit } from '@/lib/api';
+import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
+import { ApiError, getArtist, getSong, getSongLyrics, getVisitorId, recordSongShare, toggleSongFavorite, type AlbumRecord, type Lyric, type Song, type SongArtistCredit } from '@/lib/api';
 import { recentAlbumItem, recentSongItem, recordRecentItem } from '@/lib/recent-history';
 import { activeLyricIndex, getPlainLyrics, parseSyncedLyrics } from '@/lib/lyrics';
 import { LyricText } from '@/components/player/LyricText';
@@ -27,14 +28,6 @@ function HeartIcon() {
 
 function ShareIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 fill-current"><path d="M14 3 23 11l-9 8v-5C8.2 14 4.4 15.5 1 21c.7-8 4.3-12.1 13-12.8V3Z" /></svg>;
-}
-
-function MoreIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-current"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>;
-}
-
-function DownloadIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-none stroke-current stroke-[1.8]"><path d="M12 3v11m0 0 4-4m-4 4-4-4M4 20h16" strokeLinecap="round" /></svg>;
 }
 
 function songArtists(song: Song): SongArtistCredit[] {
@@ -107,7 +100,7 @@ function ArtistPanel({ artists }: { artists: SongArtistCredit[] }) {
 }
 
 export default function SongDetailPage({ slug }: { slug: string }) {
-  const { track, isPlaying, isPremium, elapsed, requestVipAccess, playSong, togglePlay, seek, refreshTrackMetadata } = usePlayer();
+  const { track, isPlaying, elapsed, playSong, togglePlay, seek, refreshTrackMetadata } = usePlayer();
   const [song, setSong] = useState<(Song & { lyrics: Lyric[] }) | null>(null);
   const [featuredAlbumState, setFeaturedAlbumState] = useState<{ artistKey: string; albums: AlbumRecord[] }>({ artistKey: '', albums: [] });
   const [error, setError] = useState('');
@@ -296,20 +289,23 @@ export default function SongDetailPage({ slug }: { slug: string }) {
                     <button type="button" role="menuitem" onClick={() => void handleShare('copy_link')} className="w-full rounded-lg px-3 py-2.5 text-left hover:bg-white/[0.09]">Sao chép đường dẫn</button>
                   </div> : null}
                 </div>
-                <button type="button" aria-label="Thêm tùy chọn" className="grid size-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"><MoreIcon /></button>
+                <SongRowActionMenu
+                  song={song}
+                  showDownloadAction={false}
+                  onStatus={setEngagementStatus}
+                  onShareRecorded={(shares) => setSong((current) => current ? { ...current, share_count: shares } : current)}
+                  buttonClassName="!size-9 bg-white/10"
+                />
               </div>
               <p role="status" aria-live="polite" className="sr-only">{engagementStatus}</p>
               <div className="mt-6 flex flex-wrap gap-4">
                 <button type="button" onClick={handlePlay} className="inline-flex h-11 items-center gap-3 rounded-full bg-[#00cfe3] px-8 text-sm font-bold text-[#07363a] transition-colors hover:bg-[#34dbea]">{currentTrack && isPlaying ? <PauseIcon /> : <PlayGlyph className="ml-0.5 size-4" />}{currentTrack && isPlaying ? 'Tạm dừng' : 'Phát'}</button>
-                <a href={currentTrack && track?.downloadUrl ? track.downloadUrl : getSongDownloadUrl(song, currentTrack ? track?.selectedQualityId : null)} onClick={(event) => {
-                  const selectedQuality = currentTrack
-                    ? track?.audioQualities?.find((quality) => quality.quality_id === track.selectedQualityId)
-                    : undefined;
-                  if ((song.premium_only || selectedQuality?.premium_only) && !isPremium) {
-                    event.preventDefault();
-                    requestVipAccess();
-                  }
-                }} download className="inline-flex h-11 items-center gap-3 rounded-full bg-white/15 px-8 text-sm font-bold transition-colors hover:bg-white/25"><DownloadIcon />Tải về</a>
+                <SongRowActionMenu
+                  song={song}
+                  trigger="download"
+                  onStatus={setEngagementStatus}
+                  buttonClassName="h-11 bg-white/15 px-8"
+                />
               </div>
             </div>
         </div>

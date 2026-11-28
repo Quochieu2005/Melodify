@@ -400,14 +400,14 @@ export type QrLoginStartResponse = {
   session_id: string;
   qr_payload: string;
   poll_token: string;
-  status: "pending" | "approved" | "completed" | "expired";
+  status: "pending" | "scanned" | "approved" | "completed" | "expired";
   expires_at: string;
   poll_interval_seconds: number;
 };
 
 export type QrLoginStatusResponse = {
   message?: string;
-  status: "pending" | "approved" | "completed" | "expired";
+  status: "pending" | "scanned" | "approved" | "completed" | "expired";
   token?: string;
   token_type?: string;
   expires_at?: string;
@@ -439,7 +439,7 @@ const PERSISTED_CATALOG_PATHS = new Set([
   "/v1/artists/trending",
 ]);
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
-const catalogResponseCache = new Map<string, { expiresAt: number; staleUntil: number; value: unknown }>();
+const catalogResponseCache = new Map<string, { expiresAt: number; value: unknown }>();
 let catalogCacheGeneration = 0;
 
 function clearCatalogResponseCache() {
@@ -449,6 +449,10 @@ function clearCatalogResponseCache() {
   if (typeof window !== "undefined") {
     try {
       window.localStorage.removeItem(HOME_BOOTSTRAP_PERSISTED_CACHE_KEY);
+      for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+        const key = window.localStorage.key(index);
+        if (key?.startsWith(CATALOG_PERSISTED_CACHE_PREFIX)) window.localStorage.removeItem(key);
+      }
     } catch {
       // Browser storage may be disabled or full; the in-memory cache still works.
     }
@@ -567,15 +571,6 @@ function catalogCacheTtl(path: string): number {
   return /^\/v1\/(banners|home\/bootstrap|topics|genres|albums|playlists|artists|artists\/trending|charts(?:\/[^/]+)?|subscription-plans)$/.test(pathname) ? 30_000 : 0;
 }
 
-function catalogCacheStaleWindow(path: string): number {
-  if (path.split('?')[0] === '/v1/home/bootstrap') return HOME_BOOTSTRAP_PERSISTED_MAX_AGE;
-  if (/^\/v1\/(topics|genres)(\?|$)/.test(path)) return 24 * 60 * 60 * 1_000;
-  if (path.startsWith('/v1/banners?daily=1')) return 6 * 60 * 60 * 1_000;
-  if (/^\/v1\/(albums|playlists)(\?|$)/.test(path)) return 30 * 60 * 1_000;
-  if (path === '/v1/charts' || path === '/v1/home/discovery') return 5 * 60 * 1_000;
-  if (path === '/v1/artists/trending') return 15 * 60 * 1_000;
-  return 30_000;
-}
 const songFavoriteStates = new Map<string, boolean>();
 const importedLibraries = new Map<string, Promise<void>>();
 
@@ -765,8 +760,6 @@ export async function apiFetch<T>(
   const shareRequest = method === "GET" && !Object.keys(init ?? {}).some((key) => key !== 'method');
   const ttl = shareRequest && typeof window !== "undefined" ? catalogCacheTtl(path) : 0;
   const generation = catalogCacheGeneration;
-  let hasStaleValue = false;
-  let staleValue: unknown;
 
   if (ttl > 0) {
     let cached = catalogResponseCache.get(requestKey);
@@ -775,7 +768,6 @@ export async function apiFetch<T>(
       if (persisted) {
         cached = {
           expiresAt: persisted.savedAt + ttl,
-          staleUntil: persisted.savedAt + HOME_BOOTSTRAP_PERSISTED_MAX_AGE,
           value: persisted.value,
         };
         catalogResponseCache.set(requestKey, cached);
@@ -786,23 +778,17 @@ export async function apiFetch<T>(
       if (persisted) {
         cached = {
           expiresAt: persisted.savedAt + ttl,
-          staleUntil: persisted.savedAt + ttl + catalogCacheStaleWindow(path),
           value: persisted.value,
         };
         catalogResponseCache.set(requestKey, cached);
       }
     }
     if (cached && cached.expiresAt > Date.now()) return cached.value as T;
-    if (cached && cached.staleUntil > Date.now()) {
-      hasStaleValue = true;
-      staleValue = cached.value;
-    } else {
-      catalogResponseCache.delete(requestKey);
-    }
+    catalogResponseCache.delete(requestKey);
   }
   if (shareRequest) {
     const pending = inFlightGetRequests.get(requestKey);
-    if (pending) return hasStaleValue ? staleValue as T : pending as Promise<T>;
+    if (pending) return pending as Promise<T>;
   }
 
   const request = (async () => {
@@ -850,7 +836,6 @@ export async function apiFetch<T>(
       const expiresAt = Date.now() + ttl;
       catalogResponseCache.set(requestKey, {
         expiresAt,
-        staleUntil: expiresAt + catalogCacheStaleWindow(path),
         value: payload,
       });
       if (method === "GET" && path === "/v1/home/bootstrap") {
@@ -871,14 +856,6 @@ export async function apiFetch<T>(
   if (!shareRequest) return request;
 
   inFlightGetRequests.set(requestKey, request);
-  if (hasStaleValue) {
-    void request.finally(() => {
-      if (inFlightGetRequests.get(requestKey) === request) {
-        inFlightGetRequests.delete(requestKey);
-      }
-    }).catch(() => undefined);
-    return staleValue as T;
-  }
   try {
     return await request;
   } finally {

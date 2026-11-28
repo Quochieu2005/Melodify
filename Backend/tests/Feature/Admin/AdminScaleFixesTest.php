@@ -8,13 +8,18 @@ use App\Models\Album;
 use App\Models\Artist;
 use App\Models\Favorite;
 use App\Models\Genre;
+use App\Models\Lyric;
 use App\Models\Payment;
+use App\Models\PaymentDetail;
 use App\Models\Playlist;
 use App\Models\PlaylistSong;
 use App\Models\Song;
+use App\Models\SongArtist;
 use App\Models\SongAudioFile;
 use App\Models\SongPlayEvent;
 use App\Models\SongShare;
+use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\Analytics\EventCounts;
 use App\Services\CloudinaryService;
@@ -51,7 +56,7 @@ class AdminScaleFixesTest extends TestCase
         try {
             $connection = DB::connection('mongodb');
             if ($connection->getTablePrefix() === $this->prefix && preg_match('/^test_admin_scale_[a-f0-9]{16}_$/', $this->prefix)) {
-                foreach (['admins', 'admin_notifications', 'logs', 'songs', 'artists', 'albums', 'playlists', 'playlist_songs', 'song_artists', 'genres', 'song_play_events', 'favorites', 'song_shares', 'payments', 'users', 'song_audio_files', 'lyrics'] as $collection) {
+                foreach (['admins', 'admin_notifications', 'logs', 'songs', 'artists', 'albums', 'playlists', 'playlist_songs', 'song_artists', 'genres', 'song_play_events', 'favorites', 'song_shares', 'payments', 'users', 'song_audio_files', 'lyrics', 'subscriptions', 'subscription_plans', 'payment_details', 'transactions'] as $collection) {
                     $connection->getCollection($collection)->drop();
                 }
             }
@@ -303,5 +308,46 @@ class AdminScaleFixesTest extends TestCase
             'name' => $name, 'username' => $name, 'slug' => $name, 'email' => $name.'@example.test',
             'password' => 'x', 'status' => 'active', 'is_premium' => 0,
         ]);
+    }
+
+    public function test_the_payments_page_totals_and_shows_the_plan_from_the_subscription_or_the_payment_line(): void
+    {
+        $fromSubscription = SubscriptionPlan::query()->create(['name' => 'Plan From Subscription']);
+        $fromLine = SubscriptionPlan::query()->create(['name' => 'Plan From Line']);
+        $subscription = Subscription::query()->create(['plan_id' => (string) $fromSubscription->getKey()]);
+        Payment::query()->create(['payment_code' => 'PAY-A', 'status' => 'success', 'amount' => 100000, 'subscription_id' => (string) $subscription->getKey()]);
+        $bare = Payment::query()->create(['payment_code' => 'PAY-B', 'status' => 'paid', 'amount' => 50000]);
+        PaymentDetail::query()->create(['payment_id' => (string) $bare->getKey(), 'plan_id' => (string) $fromLine->getKey()]);
+        Payment::query()->create(['payment_code' => 'PAY-C', 'status' => 'pending', 'amount' => 70000]);
+        Payment::query()->create(['payment_code' => 'PAY-D', 'status' => 'processing', 'amount' => 1]);
+        Payment::query()->create(['payment_code' => 'PAY-E', 'status' => 'failed', 'amount' => 999999]);
+
+        $response = $this->get(route('admin.payments.index'))->assertOk();
+
+        $this->assertSame(2, $response->viewData('successfulPaymentCount'));
+        $this->assertEquals(150000.0, $response->viewData('totalAmount'));
+        $this->assertSame(2, $response->viewData('pendingCount'));
+        $response->assertSee('Plan From Subscription')->assertSee('Plan From Line');
+        $this->get(route('admin.payments.successful'))->assertOk()->assertDontSee('PAY-E')->assertSee('PAY-A');
+    }
+
+    public function test_song_analytics_shows_the_linked_artist_when_no_name_is_written_and_counts_songs_with_lyrics(): void
+    {
+        $artist = Artist::query()->create(['name' => 'Linked Artist', 'slug' => 'linked-artist', 'status' => 'active']);
+        $named = $this->song('Named', ['artist_name' => 'Written Name']);
+        $linked = $this->song('Linked');
+        $this->song('Nobody');
+        SongArtist::query()->create(['song_id' => (string) $linked->getKey(), 'artist_id' => (string) $artist->getKey(), 'artist_role' => 'primary']);
+        foreach ([$named, $linked] as $song) {
+            Lyric::query()->create(['song_id' => (string) $song->getKey(), 'language' => 'vi', 'content' => 'la la']);
+        }
+
+        $response = $this->get(route('admin.analytics.song-views'))->assertOk();
+        $rows = collect($response->viewData('items')->items())->keyBy(fn (array $item): string => $item['song']->title);
+
+        $this->assertSame('Written Name', $rows['Named']['artist']);
+        $this->assertSame('Linked Artist', $rows['Linked']['artist']);
+        $this->assertNull($rows['Nobody']['artist']);
+        $this->assertSame(2, $response->viewData('songsWithLyrics'));
     }
 }

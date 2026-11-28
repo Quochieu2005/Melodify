@@ -434,58 +434,29 @@ class SongViewController extends Controller
             });
         }
 
-        $songs = $songQuery->get();
+        // Only the columns the list and the ranking read: this page ranks every song, so a full document per song
+        // (and every lyric text, audio file and artist link) grows with the catalog.
+        $songs = $songQuery->get(['title', 'slug', 'status', 'artist_name', 'cover_url', 'duration_seconds']);
         $songIds = $songs->map(fn (Song $song): string => (string) $song->getKey())->values()->all();
-
-        // Fetch the page relations and counters in batches. This replaces the
-        // previous six-to-seven queries per song with a fixed number of queries.
-        $artistLinksBySong = $songIds === []
-            ? collect()
-            : SongArtist::query()
-                ->whereIn('song_id', $songIds)
-                ->get()
-                ->sortBy(fn (SongArtist $link): int => mb_strtolower(trim((string) ($link->artist_role ?? ''))) === 'primary' ? 0 : 1)
-                ->groupBy(fn (SongArtist $link): string => (string) $link->song_id)
-                ->map(fn ($links): SongArtist => $links->first());
-        $artistIds = $artistLinksBySong->pluck('artist_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all();
-        $artists = $artistIds === []
-            ? collect()
-            : Artist::query()->whereIn('_id', $artistIds)->get()->keyBy(fn (Artist $artist): string => (string) $artist->getKey());
-        $lyricsBySong = $songIds === []
-            ? collect()
-            : Lyric::query()->whereIn('song_id', $songIds)->get()->keyBy(fn (Lyric $lyric): string => (string) $lyric->song_id);
-        $fullAudioBySong = $songIds === []
-            ? collect()
-            : SongAudioFile::query()
-                ->whereIn('song_id', $songIds)
-                ->where('file_type', 'full')
-                ->where('status', 'active')
-                ->get()
-                ->keyBy(fn (SongAudioFile $audio): string => (string) $audio->song_id);
 
         // Counted inside MongoDB: a play event is stored per listen, so loading them all grows without limit.
         $viewsBySong = $songIds === [] ? collect() : collect(EventCounts::by(SongPlayEvent::class, 'song_id', 'started_at', $from));
         $favoritesBySong = $songIds === [] ? collect() : collect(EventCounts::by(Favorite::class, 'song_id', 'created_at', $from));
         $sharesBySong = $songIds === [] ? collect() : collect(EventCounts::by(SongShare::class, 'song_id', 'created_at', $from));
+        // Which songs have lyrics, without downloading the lyric texts.
+        $withLyrics = $songIds === [] ? [] : EventCounts::by(Lyric::class, 'song_id');
 
         $allItems = $songs
-            ->map(function (Song $song) use ($artists, $artistLinksBySong, $lyricsBySong, $fullAudioBySong, $viewsBySong, $favoritesBySong, $sharesBySong): array {
+            ->map(function (Song $song) use ($viewsBySong, $favoritesBySong, $sharesBySong, $withLyrics): array {
                 $songId = (string) $song->getKey();
-                $artistLink = $artistLinksBySong->get($songId);
-                $lyric = $lyricsBySong->get($songId);
-                $hasFullAudio = $fullAudioBySong->has($songId);
 
                 return [
                     'song' => $song,
-                    'artist' => $song->artist_name ?: $artists->get((string) ($artistLink?->artist_id))?->name,
+                    'artist' => $song->artist_name,
                     'views' => $viewsBySong->get($songId, 0),
                     'favorites' => $favoritesBySong->get($songId, 0),
                     'shares' => $sharesBySong->get($songId, 0),
-                    'has_lyrics' => $lyric !== null,
-                    'has_plain_lyrics' => filled($lyric?->plain_lyrics) || (blank($lyric?->synced_lyrics) && filled($lyric?->content)),
-                    'has_synced_lyrics' => $this->hasTimedLyrics($lyric),
-                    'has_audio' => $hasFullAudio || filled($song->preview_url),
-                    'has_full_audio' => $hasFullAudio,
+                    'has_lyrics' => isset($withLyrics[$songId]),
                 ];
             })
             ->sort(function (array $left, array $right) use ($sort): int {
@@ -498,8 +469,28 @@ class SongViewController extends Controller
             ->values();
 
         $page = LengthAwarePaginator::resolveCurrentPage();
+        $pageItems = $allItems->forPage($page, 20)->values();
+
+        // Songs without a written artist name show the name of their linked artist: looked up for this page only.
+        $needArtist = $pageItems->filter(fn (array $item): bool => blank($item['artist']))->map(fn (array $item): string => (string) $item['song']->getKey())->values()->all();
+        if ($needArtist !== []) {
+            $links = SongArtist::query()->whereIn('song_id', $needArtist)->get()
+                ->sortBy(fn (SongArtist $link): int => mb_strtolower(trim((string) ($link->artist_role ?? ''))) === 'primary' ? 0 : 1)
+                ->groupBy(fn (SongArtist $link): string => (string) $link->song_id)
+                ->map(fn ($group): SongArtist => $group->first());
+            $artistNames = Artist::query()->whereIn('_id', $links->pluck('artist_id')->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all())->get(['name'])
+                ->mapWithKeys(fn (Artist $artist): array => [(string) $artist->getKey() => $artist->name]);
+            $pageItems = $pageItems->map(function (array $item) use ($links, $artistNames): array {
+                if (blank($item['artist'])) {
+                    $item['artist'] = $artistNames->get((string) $links->get((string) $item['song']->getKey())?->artist_id);
+                }
+
+                return $item;
+            });
+        }
+
         $items = new LengthAwarePaginator(
-            $allItems->forPage($page, 20)->values(),
+            $pageItems,
             $allItems->count(),
             20,
             $page,
