@@ -30,6 +30,7 @@ use App\Models\SongVideo;
 use App\Models\Topic;
 use App\Models\TopicSong;
 use App\Models\VideoFavorite;
+use App\Services\Analytics\EventCounts;
 use App\Services\Music\LyricsClient;
 use App\Services\Music\NhacCuaTuiClient;
 use App\Services\Music\SongImportService;
@@ -493,11 +494,10 @@ class CatalogController extends Controller
             return response()->json(['data' => [], 'meta' => ['total' => 0]]);
         }
 
-        $favoriteCounts = Favorite::query()
-            ->whereIn('song_id', $orderedSongs->map(fn (Song $song): string => (string) $song->getKey())->all())
-            ->get(['song_id'])
-            ->groupBy(fn (Favorite $favorite): string => (string) $favorite->song_id)
-            ->map(fn (Collection $favorites): int => $favorites->count());
+        // Counted by MongoDB: a popular song can have many thousands of favorites from other accounts.
+        $favoriteCounts = collect(EventCounts::by(Favorite::class, 'song_id', match: [
+            'song_id' => ['$in' => $orderedSongs->map(fn (Song $song): string => (string) $song->getKey())->all()],
+        ]));
         $data = collect($this->localSongsData($orderedSongs))
             ->map(function (array $song) use ($favoriteCounts): array {
                 $song['is_favorite'] = true;
@@ -598,7 +598,7 @@ class CatalogController extends Controller
             'content_revision' => $this->catalogContentRevision(),
             'model' => $model,
             'statuses' => $statuses,
-            'query' => $request->query(),
+            'query' => $this->cacheableQuery($request->query()),
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
         $payload = Cache::store('file')->remember($cacheKey, now()->addMinutes(5), function () use ($request, $model, $statuses, $transform, $searchField, $scope): array {
@@ -626,22 +626,12 @@ class CatalogController extends Controller
 
             if ($model === Topic::class) {
                 $topicIds = $pageItems->map(fn (Topic $topic): string => (string) $topic->getKey())->all();
-                $topicCounts = TopicSong::query()
-                    ->whereIn('topic_id', $topicIds)
-                    ->get()
-                    ->groupBy(fn (TopicSong $link): string => (string) $link->topic_id)
-                    ->map(fn (Collection $links): int => $links->count())
-                    ->all();
+                $topicCounts = $topicIds === [] ? [] : EventCounts::by(TopicSong::class, 'topic_id', match: ['topic_id' => ['$in' => $topicIds]]);
             }
 
             if ($model === Genre::class) {
                 $genreIds = $pageItems->map(fn (Genre $genre): string => (string) $genre->getKey())->all();
-                $genreCounts = SongGenre::query()
-                    ->whereIn('genre_id', $genreIds)
-                    ->get()
-                    ->groupBy(fn (SongGenre $link): string => (string) $link->genre_id)
-                    ->map(fn (Collection $links): int => $links->count())
-                    ->all();
+                $genreCounts = $genreIds === [] ? [] : EventCounts::by(SongGenre::class, 'genre_id', match: ['genre_id' => ['$in' => $genreIds]]);
             }
 
             if ($model === Album::class) {
@@ -652,12 +642,7 @@ class CatalogController extends Controller
                     ->get()
                     ->keyBy(fn (Artist $artist): string => (string) $artist->getKey())
                     ->all();
-                $albumCounts = Song::query()
-                    ->whereIn('album_id', $albumIds)
-                    ->get()
-                    ->groupBy(fn (Song $song): string => (string) $song->album_id)
-                    ->map(fn (Collection $songs): int => $songs->count())
-                    ->all();
+                $albumCounts = $albumIds === [] ? [] : EventCounts::by(Song::class, 'album_id', match: ['album_id' => ['$in' => $albumIds]]);
             }
 
             $data = $pageItems->map(function ($item) use ($model, $transform, $topicCounts, $genreCounts, $albumArtists, $albumCounts): array {
@@ -690,6 +675,21 @@ class CatalogController extends Controller
         return response()->json($payload);
     }
 
+    /**
+     * The query parameters that can change a catalog response. The whole query string used to be part of the cache
+     * key, so every made-up parameter (?x=1, ?x=2, ...) wrote a new cache file and skipped the cache.
+     *
+     * @param  array<string, mixed>  $query
+     * @return array<string, mixed>
+     */
+    private function cacheableQuery(array $query): array
+    {
+        return array_intersect_key($query, array_flip([
+            'q', 'query', 'page', 'per_page', 'limit', 'topic', 'genre', 'summary', 'daily',
+            'genre_ids', 'artist_ids', 'exclude_song_ids', 'language',
+        ]));
+    }
+
     private function responsePayload(JsonResponse $response): array
     {
         $payload = json_decode($response->getContent(), true);
@@ -705,7 +705,7 @@ class CatalogController extends Controller
             'model' => $model,
             'slug' => $slug,
             'statuses' => $statuses,
-            'query' => array_diff_key(request()->query(), ['visitor_id' => true]),
+            'query' => $this->cacheableQuery(request()->query()),
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         $payload = Cache::store('file')->remember($cacheKey, now()->addMinutes(5), function () use ($model, $slug, $statuses, $transform, $scope): array {
             $query = $model::query()->whereIn('status', $statuses);

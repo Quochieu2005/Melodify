@@ -184,46 +184,46 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::get('/users/{identifier}', [FollowController::class, 'show'])->name('users.show');
     Route::get('/search', [CatalogController::class, 'search'])->middleware('throttle:60,1,search')->name('search');
 
-    Route::get('/topics', [CatalogController::class, 'topics'])->name('topics.index');
-    Route::get('/topics/{slug}', [CatalogController::class, 'topic'])->name('topics.show');
-    Route::get('/genres', [CatalogController::class, 'genres'])->name('genres.index');
-    Route::get('/genres/{slug}', [CatalogController::class, 'genre'])->name('genres.show');
-    Route::get('/for-you/artists', [CatalogController::class, 'forYouArtists'])->name('for-you.artists');
-    Route::get('/for-you/song', [CatalogController::class, 'forYouSong'])->name('for-you.song');
-    Route::get('/banners', [CatalogController::class, 'banners'])->name('banners.index');
-    Route::get('/banners/{slug}', [CatalogController::class, 'banner'])->name('banners.show');
-    Route::get('/albums', [CatalogController::class, 'albums'])->name('albums.index');
+    Route::get('/topics', [CatalogController::class, 'topics'])->middleware('throttle:240,1,catalog')->name('topics.index');
+    Route::get('/topics/{slug}', [CatalogController::class, 'topic'])->middleware('throttle:240,1,catalog')->name('topics.show');
+    Route::get('/genres', [CatalogController::class, 'genres'])->middleware('throttle:240,1,catalog')->name('genres.index');
+    Route::get('/genres/{slug}', [CatalogController::class, 'genre'])->middleware('throttle:240,1,catalog')->name('genres.show');
+    Route::get('/for-you/artists', [CatalogController::class, 'forYouArtists'])->middleware('throttle:240,1,catalog')->name('for-you.artists');
+    Route::get('/for-you/song', [CatalogController::class, 'forYouSong'])->middleware('throttle:240,1,catalog')->name('for-you.song');
+    Route::get('/banners', [CatalogController::class, 'banners'])->middleware('throttle:240,1,catalog')->name('banners.index');
+    Route::get('/banners/{slug}', [CatalogController::class, 'banner'])->middleware('throttle:240,1,catalog')->name('banners.show');
+    Route::get('/albums', [CatalogController::class, 'albums'])->middleware('throttle:240,1,catalog')->name('albums.index');
     Route::post('/albums/{slug}/favorite', [CatalogController::class, 'toggleAlbumFavorite'])
         ->middleware(['api.user', 'throttle:60,1'])
         ->name('albums.favorite');
     Route::post('/albums/{slug}/share', [CatalogController::class, 'recordAlbumShare'])
         ->middleware('throttle:60,1')
         ->name('albums.share');
-    Route::get('/albums/{slug}', [CatalogController::class, 'album'])->name('albums.show');
-    Route::get('/artists', [CatalogController::class, 'artists'])->name('artists.index');
-    Route::get('/artists/trending', [CatalogController::class, 'trendingArtists'])->name('artists.trending');
+    Route::get('/albums/{slug}', [CatalogController::class, 'album'])->middleware('throttle:240,1,catalog')->name('albums.show');
+    Route::get('/artists', [CatalogController::class, 'artists'])->middleware('throttle:240,1,catalog')->name('artists.index');
+    Route::get('/artists/trending', [CatalogController::class, 'trendingArtists'])->middleware('throttle:240,1,catalog')->name('artists.trending');
     Route::post('/artists/{slug}/view', [CatalogController::class, 'recordArtistView'])
         ->middleware(['api.user.optional', 'throttle:60,1,artist-view'])
         ->name('artists.view');
-    Route::get('/artists/{slug}', [CatalogController::class, 'artist'])->name('artists.show');
-    Route::get('/playlists', [CatalogController::class, 'playlists'])->name('playlists.index');
-    Route::get('/playlists/{slug}', [CatalogController::class, 'playlist'])->name('playlists.show');
+    Route::get('/artists/{slug}', [CatalogController::class, 'artist'])->middleware('throttle:240,1,catalog')->name('artists.show');
+    Route::get('/playlists', [CatalogController::class, 'playlists'])->middleware('throttle:240,1,catalog')->name('playlists.index');
+    Route::get('/playlists/{slug}', [CatalogController::class, 'playlist'])->middleware('throttle:240,1,catalog')->name('playlists.show');
     Route::post('/playlists/{slug}/favorite', [CatalogController::class, 'togglePlaylistFavorite'])
         ->middleware(['api.user', 'throttle:60,1'])
         ->name('playlists.favorite');
     Route::post('/playlists/{slug}/share', [CatalogController::class, 'recordPlaylistShare'])
         ->middleware('throttle:60,1')
         ->name('playlists.share');
-    Route::get('/charts', [CatalogController::class, 'charts'])->name('charts.index');
+    Route::get('/charts', [CatalogController::class, 'charts'])->middleware('throttle:240,1,catalog')->name('charts.index');
     Route::post('/charts/{slug}/share', [CatalogController::class, 'recordChartShare'])
         ->middleware('throttle:60,1')
         ->name('charts.share');
-    Route::get('/charts/{slug}', [CatalogController::class, 'chart'])->name('charts.show');
+    Route::get('/charts/{slug}', [CatalogController::class, 'chart'])->middleware('throttle:240,1,catalog')->name('charts.show');
     Route::get('/subscription-plans', [SubscriptionPlanController::class, 'index'])->name('subscription-plans.index');
-    Route::get('/home/bootstrap', [CatalogController::class, 'homeBootstrap'])->name('home.bootstrap');
-    Route::get('/home/discovery', [CatalogController::class, 'homeDiscovery'])->name('home.discovery');
-    Route::get('/songs', [CatalogController::class, 'songs'])->name('songs.index');
-    Route::get('/songs/popular', [CatalogController::class, 'popularSongs'])->name('songs.popular');
+    Route::get('/home/bootstrap', [CatalogController::class, 'homeBootstrap'])->middleware('throttle:240,1,catalog')->name('home.bootstrap');
+    Route::get('/home/discovery', [CatalogController::class, 'homeDiscovery'])->middleware('throttle:240,1,catalog')->name('home.discovery');
+    Route::get('/songs', [CatalogController::class, 'songs'])->middleware('throttle:240,1,catalog')->name('songs.index');
+    Route::get('/songs/popular', [CatalogController::class, 'popularSongs'])->middleware('throttle:240,1,catalog')->name('songs.popular');
     Route::get('/favorites/songs', [CatalogController::class, 'favoriteSongs'])
         ->middleware('api.user')
         ->name('favorites.songs');
@@ -251,9 +251,9 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::post('/songs/{slug}/report', [SongReportController::class, 'store'])
         ->middleware(['api.user.optional', 'throttle:10,1'])
         ->name('songs.report');
-    Route::get('/songs/{slug}/lyrics', [CatalogController::class, 'lyrics'])->name('songs.lyrics');
-    Route::get('/songs/{slug}', [CatalogController::class, 'song'])->name('songs.show');
-    Route::get('/videos', [CatalogController::class, 'videos'])->name('videos.index');
+    Route::get('/songs/{slug}/lyrics', [CatalogController::class, 'lyrics'])->middleware('throttle:240,1,catalog')->name('songs.lyrics');
+    Route::get('/songs/{slug}', [CatalogController::class, 'song'])->middleware('throttle:240,1,catalog')->name('songs.show');
+    Route::get('/videos', [CatalogController::class, 'videos'])->middleware('throttle:240,1,catalog')->name('videos.index');
     Route::post('/videos/{slug}/view', [CatalogController::class, 'recordVideoView'])
         ->middleware('throttle:60,1')
         ->name('videos.view');
@@ -268,5 +268,5 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
         ->name('videos.report');
     Route::get('/videos/{slug}/download', [VideoController::class, 'download'])->middleware('throttle:300,1,media-stream')->name('videos.download');
     Route::get('/videos/{slug}/stream', [VideoController::class, 'stream'])->middleware('throttle:300,1,media-stream')->name('videos.stream');
-    Route::get('/videos/{slug}', [CatalogController::class, 'video'])->name('videos.show');
+    Route::get('/videos/{slug}', [CatalogController::class, 'video'])->middleware('throttle:240,1,catalog')->name('videos.show');
 });

@@ -19,6 +19,39 @@ use Illuminate\Support\Facades\Cache;
 
 trait RecordsEngagement
 {
+    /**
+     * True when this view or share should be counted. One person counts once per window: the account, or for guests
+     * the visitor id the client sent. A script can send a new visitor id with every request, so guests are also capped
+     * per address (many real visitors can share one address on a mobile network or in a school, so the cap is a
+     * ceiling, not one per address).
+     */
+    /** The cache key that remembers a person has already been counted for this target. */
+    private function engagementKey(string $type, string $targetId, string $channel, Request $request, ?string $visitorId): string
+    {
+        $userId = $request->user()?->getKey();
+        $guestId = trim((string) $visitorId);
+        $person = $userId ? 'user:'.$userId : 'guest:'.($guestId !== '' ? $guestId : 'ip:'.$request->ip());
+
+        return "{$type}:{$targetId}:{$channel}:".hash('sha256', $person);
+    }
+
+    private function firstEngagement(Request $request, string $type, string $targetId, ?string $visitorId, int $visitorWindowSeconds, string $channel = '', int $addressLimit = 10, int $addressWindowSeconds = 1800): bool
+    {
+        $store = Cache::store('file');
+
+        if (! $store->add($this->engagementKey($type, $targetId, $channel, $request, $visitorId), true, $visitorWindowSeconds)) {
+            return false;
+        }
+        if ($request->user()?->getKey()) {
+            return true;
+        }
+
+        $addressKey = "{$type}-address:{$targetId}:{$channel}:".hash('sha256', (string) $request->ip());
+        $store->add($addressKey, 0, $addressWindowSeconds);
+
+        return $store->increment($addressKey) <= $addressLimit;
+    }
+
     public function recordAlbumShare(string $slug, Request $request): JsonResponse
     {
         $album = $this->findPublishedAlbum($slug);
@@ -29,14 +62,17 @@ trait RecordsEngagement
             'source' => ['nullable', 'string', 'in:facebook,copy_link,web', 'max:30'],
         ]);
         $albumId = (string) $album->getKey();
-        AlbumShare::query()->create([
-            'album_id' => $albumId,
-            'visitor_id' => $this->engagementActorId($request, $data['visitor_id'] ?? null),
-            'source' => $data['source'] ?? 'web',
-        ]);
+        $recorded = $this->firstEngagement($request, 'share-album', $albumId, $data['visitor_id'] ?? null, 1800, $data['source'] ?? 'web');
+        if ($recorded) {
+            AlbumShare::query()->create([
+                'album_id' => $albumId,
+                'visitor_id' => $this->engagementActorId($request, $data['visitor_id'] ?? null),
+                'source' => $data['source'] ?? 'web',
+            ]);
+        }
 
         return response()->json([
-            'recorded' => true,
+            'recorded' => $recorded,
             'shares' => AlbumShare::query()->where('album_id', $albumId)->count(),
         ]);
     }
@@ -51,15 +87,17 @@ trait RecordsEngagement
             'source' => ['nullable', 'string', 'in:facebook,copy_link', 'max:30'],
         ]);
         $playlistId = (string) $playlist->getKey();
-
-        PlaylistShare::query()->create([
-            'playlist_id' => $playlistId,
-            'visitor_id' => $this->engagementActorId($request, $data['visitor_id'] ?? null),
-            'source' => $data['source'] ?? 'copy_link',
-        ]);
+        $recorded = $this->firstEngagement($request, 'share-playlist', $playlistId, $data['visitor_id'] ?? null, 1800, $data['source'] ?? 'copy_link');
+        if ($recorded) {
+            PlaylistShare::query()->create([
+                'playlist_id' => $playlistId,
+                'visitor_id' => $this->engagementActorId($request, $data['visitor_id'] ?? null),
+                'source' => $data['source'] ?? 'copy_link',
+            ]);
+        }
 
         return response()->json([
-            'recorded' => true,
+            'recorded' => $recorded,
             'shares' => PlaylistShare::query()->where('playlist_id', $playlistId)->count(),
         ]);
     }
@@ -72,14 +110,17 @@ trait RecordsEngagement
             'visitor_id' => ['nullable', 'string', 'max:120'],
             'source' => ['nullable', 'string', 'in:facebook,copy_link,web', 'max:30'],
         ]);
-        ChartShare::query()->create([
-            'chart_slug' => $slug,
-            'visitor_id' => $this->engagementActorId($request, $data['visitor_id'] ?? null),
-            'source' => $data['source'] ?? 'web',
-        ]);
+        $recorded = $this->firstEngagement($request, 'share-chart', $slug, $data['visitor_id'] ?? null, 1800, $data['source'] ?? 'web');
+        if ($recorded) {
+            ChartShare::query()->create([
+                'chart_slug' => $slug,
+                'visitor_id' => $this->engagementActorId($request, $data['visitor_id'] ?? null),
+                'source' => $data['source'] ?? 'web',
+            ]);
+        }
 
         return response()->json([
-            'recorded' => true,
+            'recorded' => $recorded,
             'shares' => ChartShare::query()->where('chart_slug', $slug)->count(),
         ]);
     }
@@ -92,10 +133,13 @@ trait RecordsEngagement
         ]);
         $video = $this->activeVideoByIdentifier($slug);
         abort_unless($video, 404, 'Không tìm thấy video.');
-        $video->increment('share_count');
+        $recorded = $this->firstEngagement($request, 'share-video', (string) $video->getKey(), $data['visitor_id'] ?? null, 1800, $data['source'] ?? 'web');
+        if ($recorded) {
+            $video->increment('share_count');
+        }
 
         return response()->json([
-            'recorded' => true,
+            'recorded' => $recorded,
             'shares' => (int) ($video->fresh()?->share_count ?? 0),
         ]);
     }
@@ -111,17 +155,20 @@ trait RecordsEngagement
             'source' => ['nullable', 'string', 'max:30'],
         ]);
         $actorId = $this->engagementActorId($request, $data['visitor_id'] ?? null);
+        $recorded = $this->firstEngagement($request, 'share-song', (string) $song->getKey(), $data['visitor_id'] ?? null, 1800, $data['source'] ?? 'web');
 
-        SongShare::query()->create([
-            'song_id' => (string) $song->getKey(),
-            'visitor_id' => $actorId,
-            'source' => $data['source'] ?? 'web',
-        ]);
+        if ($recorded) {
+            SongShare::query()->create([
+                'song_id' => (string) $song->getKey(),
+                'visitor_id' => $actorId,
+                'source' => $data['source'] ?? 'web',
+            ]);
 
-        $this->forgetSongDetailCache($song, $slug);
+            $this->forgetSongDetailCache($song, $slug);
+        }
 
         return response()->json([
-            'recorded' => true,
+            'recorded' => $recorded,
             'shares' => $this->songShareCount($song),
         ]);
     }
@@ -139,9 +186,9 @@ trait RecordsEngagement
         $visitorId = trim((string) ($data['visitor_id'] ?? ''));
         $visitorId = $visitorId !== '' ? $visitorId : hash('sha256', (string) $request->ip());
         $songId = (string) $song->getKey();
-        $actor = $request->user()?->getKey() ? 'user:'.$request->user()->getKey() : 'visitor:'.$visitorId;
-        // A replay within a few seconds is the same listen; this stops spam from inflating charts.
-        $isNewListen = Cache::store('file')->add('song-view:'.$songId.':'.hash('sha256', $actor), true, now()->addSeconds(20));
+        // A replay within a few seconds is the same listen; a guest can add at most 20 listens of one song per
+        // address in half an hour, however many visitor ids a script sends.
+        $isNewListen = $this->firstEngagement($request, 'view-song', $songId, $data['visitor_id'] ?? null, 20, '', 20);
         if ($isNewListen) {
             SongPlayEvent::query()->create([
                 'user_id' => $request->user()?->getKey() ? (string) $request->user()->getKey() : null,
@@ -179,11 +226,11 @@ trait RecordsEngagement
             ? 'user:'.$request->user()->getKey()
             : 'visitor:'.(trim((string) ($data['visitor_id'] ?? '')) ?: $request->ip());
         $visitorHash = hash('sha256', $actor);
-        $cacheKey = 'artist-view:'.$artistId.':'.$visitorHash;
         // Repeated renders, refreshes and canonical redirects count as one visit.
-        if (! Cache::store('file')->add($cacheKey, true, now()->addMinutes(30))) {
+        if (! $this->firstEngagement($request, 'view-artist', $artistId, $data['visitor_id'] ?? null, 1800)) {
             return response()->json(['recorded' => false]);
         }
+        $cacheKey = $this->engagementKey('view-artist', $artistId, '', $request, $data['visitor_id'] ?? null);
 
         try {
             ArtistViewEvent::query()->create([
@@ -212,11 +259,10 @@ trait RecordsEngagement
         $video = $this->activeVideoByIdentifier($slug);
         abort_unless($video, 404, 'Không tìm thấy video.');
 
-        $actorId = $this->engagementActorId($request, $data['visitor_id'] ?? null);
-        $cacheKey = 'video-view:'.(string) $video->getKey().':'.hash('sha256', $actorId);
-        if (! Cache::store('file')->add($cacheKey, true, now()->addMinutes(30))) {
+        if (! $this->firstEngagement($request, 'view-video', (string) $video->getKey(), $data['visitor_id'] ?? null, 1800)) {
             return response()->json(['recorded' => false, 'views' => (int) ($video->view_count ?? 0)]);
         }
+        $cacheKey = $this->engagementKey('view-video', (string) $video->getKey(), '', $request, $data['visitor_id'] ?? null);
 
         try {
             $video->increment('view_count');
@@ -385,11 +431,14 @@ trait RecordsEngagement
             abort(422, 'Danh sách bài hát yêu thích đã thay đổi. Hãy tải lại trang rồi thử lại.');
         }
 
-        foreach ($requestedIds as $position => $songId) {
-            Favorite::query()
-                ->where('user_id', $actorId)
-                ->where('song_id', $songId)
-                ->update(['sort_order' => $position]);
+        // One bulk write: an update per favorite is one Atlas round trip each (up to 500 for a long list).
+        if ($requestedIds->isNotEmpty()) {
+            Favorite::raw(fn ($collection) => $collection->bulkWrite(
+                $requestedIds->map(fn (string $songId, int $position): array => ['updateOne' => [
+                    ['user_id' => $actorId, 'song_id' => $songId],
+                    ['$set' => ['sort_order' => $position]],
+                ]])->values()->all(),
+            ));
         }
 
         return response()->json(['ordered' => true]);
