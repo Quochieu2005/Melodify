@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,7 +18,7 @@ import { useRouter } from 'expo-router';
 
 import { useMusic, useMusicControls } from '@/components/music';
 import { AppIcon } from '@/components/shared/AppIcon';
-import { getVisitorId, toggleSongFavorite } from '@/lib/api';
+import { getLibrary, getSavedAuthUser, getVisitorId, setFollowing, toggleSongFavorite } from '@/lib/api';
 import { downloadSong } from '@/lib/downloads';
 import { formatTime } from '@/lib/lyrics';
 import { QueueBottomSheet } from './QueueBottomSheet';
@@ -55,12 +55,42 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
   } = useMusic();
 
   const [showFullLyrics, setShowFullLyrics] = useState(false);
-  const [favorite, setFavorite] = useState(Boolean(track?.is_favorite));
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [queueSheetOpen, setQueueSheetOpen] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [barWidth, setBarWidth] = useState(SCREEN_WIDTH - 48);
   const [activeTopTab, setActiveTopTab] = useState<'forYou' | 'downloaded'>('forYou');
   const [downloadBusy, setDownloadBusy] = useState(false);
+
+  const trackId = track?.id;
+  const trackIsFavorite = Boolean(track?.is_favorite);
+  const followArtist = track?.artists?.[0] ?? track?.artist ?? null;
+  const followArtistId = followArtist?.id ?? null;
+
+  // The heart and the follow button belong to the song and artist on screen. Each value remembers whose it is, so
+  // a new song starts from its own state instead of the previous song's.
+  const [favoriteState, setFavoriteState] = useState<{ trackId?: string; value: boolean }>({ value: false });
+  const favorite = favoriteState.trackId === trackId ? favoriteState.value : trackIsFavorite;
+  const setFavorite = (value: boolean) => setFavoriteState({ trackId, value });
+  const [followState, setFollowState] = useState<{ artistId: string | null; value: boolean }>({ artistId: null, value: false });
+  const isFollowing = followState.artistId === followArtistId ? followState.value : false;
+  const setIsFollowing = (value: boolean) => setFollowState({ artistId: followArtistId, value });
+
+  // Whether the signed-in user already follows this song's artist. Only looked up while the player is open.
+  useEffect(() => {
+    if (!visible || !followArtistId) return;
+    let active = true;
+    void (async () => {
+      if (!(await getSavedAuthUser())) return;
+      const library = await getLibrary(await getVisitorId());
+      if (active) {
+        setFollowState({ artistId: followArtistId, value: library.data.following_artists.some((artist) => artist.id === followArtistId) });
+      }
+    })().catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [visible, followArtistId]);
 
   if (!track) {
     return null;
@@ -75,8 +105,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
     duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
 
   const handleProgressBarPress = (event: { nativeEvent: { locationX: number } }) => {
-    if (duration <= 0) return;
-    const barWidth = SCREEN_WIDTH - 48;
+    if (duration <= 0 || barWidth <= 0) return;
     const clickX = Math.max(0, Math.min(event.nativeEvent.locationX, barWidth));
     const targetSeconds = (clickX / barWidth) * duration;
     seekTo(targetSeconds);
@@ -95,6 +124,29 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
       setFavoriteBusy(false);
     }
   };
+
+  const handleToggleFollow = async () => {
+    if (followBusy || !followArtist || !followArtistId) return;
+    if (!(await getSavedAuthUser())) {
+      onClose();
+      router.push('/login' as never);
+      return;
+    }
+    setFollowBusy(true);
+    try {
+      const result = await setFollowing('artist', (followArtist as { slug?: string | null }).slug || followArtistId, !isFollowing);
+      setIsFollowing(result.following);
+    } catch (error) {
+      Alert.alert('Không thể theo dõi', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+    } finally {
+      setFollowBusy(false);
+    }
+  };
+
+  const qualityLabel =
+    track.audio_qualities?.find((quality) => quality.quality_id === selectedQualityId)?.label ||
+    track.audio_quality ||
+    null;
 
   const handleDownloadTrack = async () => {
     if (!track || downloadBusy) return;
@@ -254,9 +306,10 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
 
                 <Pressable
                   onPress={handleProgressBarPress}
+                  onLayout={(event) => setBarWidth(event.nativeEvent.layout.width)}
                   style={styles.progressBarWrapper}
                 >
-                  <View style={styles.progressBarTrack}>
+                  <View pointerEvents="none" style={styles.progressBarTrack}>
                     <View
                       style={[
                         styles.progressBarFill,
@@ -382,9 +435,11 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                   <Text numberOfLines={1} style={styles.mainTitle}>
                     {track.title}
                   </Text>
-                  <View style={styles.qualityBadge}>
-                    <Text style={styles.qualityText}>128kbps</Text>
-                  </View>
+                  {qualityLabel ? (
+                    <View style={styles.qualityBadge}>
+                      <Text numberOfLines={1} style={styles.qualityText}>{qualityLabel}</Text>
+                    </View>
+                  ) : null}
                 </View>
 
                 {/* Artist & Follow Button */}
@@ -392,11 +447,13 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                   <Text numberOfLines={1} style={styles.artistName}>
                     {artistsText}
                   </Text>
-                  <Pressable
-                    onPress={() => setIsFollowing((prev) => !prev)}
+                  {followArtistId ? <Pressable
+                    disabled={followBusy}
+                    onPress={() => void handleToggleFollow()}
                     style={[
                       styles.followBtn,
                       isFollowing && styles.followBtnActive,
+                      followBusy && { opacity: 0.6 },
                     ]}
                   >
                     <Text
@@ -407,7 +464,7 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                     >
                       {isFollowing ? 'Đang theo dõi' : 'Theo dõi'}
                     </Text>
-                  </Pressable>
+                  </Pressable> : null}
                 </View>
               </View>
 
@@ -426,18 +483,8 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
                       color={favorite ? '#EF4444' : theme.text}
                       size={24}
                     />
-                    <Text style={styles.actionCount}>
-                      {favorite ? 1 : 0}
-                    </Text>
                   </Pressable>
 
-
-
-                  {/* Share / Facebook */}
-                  <View style={styles.actionCol}>
-                    <AppIcon name="facebook" color={theme.text} size={24} />
-                    <Text style={styles.actionCount}>138</Text>
-                  </View>
                 </View>
 
                 {/* Right group: Download & 3-Gạch Menu Button */}
@@ -469,9 +516,10 @@ export function FullPlayerModal({ visible, onClose }: FullPlayerModalProps) {
               <View style={styles.scrubberBox}>
                 <Pressable
                   onPress={handleProgressBarPress}
+                  onLayout={(event) => setBarWidth(event.nativeEvent.layout.width)}
                   style={styles.progressBarWrapper}
                 >
-                  <View style={styles.progressBarTrack}>
+                  <View pointerEvents="none" style={styles.progressBarTrack}>
                     <View
                       style={[
                         styles.progressBarFill,
