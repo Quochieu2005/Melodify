@@ -63,6 +63,8 @@ export function MusicProvider({ children }: PropsWithChildren) {
 
   const repeatModeRef = useRef(repeatMode);
   const nextRef = useRef<() => void>(() => {});
+  // Each load takes a number; a load that finishes after a newer one started must not touch the player.
+  const loadSequence = useRef(0);
 
   useEffect(() => {
     repeatModeRef.current = repeatMode;
@@ -106,6 +108,8 @@ export function MusicProvider({ children }: PropsWithChildren) {
 
   const loadSong = useCallback(
     async (song: Song, nextQueue: Song[], index: number) => {
+      const sequence = ++loadSequence.current;
+      const isStale = () => sequence !== loadSequence.current;
       setError('');
       setTrack(song);
       setQueue(nextQueue);
@@ -115,12 +119,14 @@ export function MusicProvider({ children }: PropsWithChildren) {
         // Set the iOS audio session before awaiting storage or network work.
         await configureBackgroundAudio();
         const savedUser = await getSavedAuthUser();
+        if (isStale()) return;
         const isPremium = Number(savedUser?.is_premium ?? 0) === 1;
         const playableQualities = song.audio_qualities?.filter((quality) => quality.available !== false && Boolean(quality.audio_url)) ?? [];
         const defaultQuality = playableQualities.find((quality) => !quality.premium_only)
           ?? (isPremium ? playableQualities[0] : undefined);
         setSelectedQualityId(defaultQuality?.quality_id ?? null);
         const source = await getAudioSource(song, defaultQuality?.quality_id);
+        if (isStale()) return;
         player.replace(source);
         player.setActiveForLockScreen(true, {
           title: song.title,
@@ -152,6 +158,7 @@ export function MusicProvider({ children }: PropsWithChildren) {
             .catch(() => undefined);
         }
       } catch (cause) {
+        if (isStale()) return;
         console.error('[Melodify audio] load/play failed:', cause);
         setError(cause instanceof Error ? cause.message : 'Bài hát chưa có luồng phát hoặc máy chủ không thể tải âm thanh.');
         player.pause();

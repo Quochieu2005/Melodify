@@ -52,6 +52,12 @@ export function warmUpApi(): Promise<void> {
 
 const GET_RETRY_DELAY_MS = 1_500;
 
+// Login, registration, OTP, social and password-reset calls answer 401 for wrong credentials, which says nothing
+// about the saved session. Only /auth/me and /auth/logout speak for the saved token.
+function isAuthAttemptPath(path: string): boolean {
+  return /^\/v1\/auth\/(?!me(?:[?/]|$)|logout(?:[?/]|$))/.test(path);
+}
+
 const AUTH_TOKEN_STORAGE_KEY = 'melodify_access_token';
 const AUTH_USER_STORAGE_KEY = 'melodify_auth_user';
 const VISITOR_ID_STORAGE_KEY = 'melodify_visitor_id';
@@ -533,6 +539,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
 async function fetchApiResponse<T>(path: string, init: RequestInit, method: string, token: string | null, baseUrl = API_URL, attempt = 0): Promise<T> {
   const headers = new Headers(init.headers);
+  const callerSentAuthorization = headers.has('Authorization');
   if (!headers.has('Accept')) headers.set('Accept', 'application/json');
   if (token && !headers.has('Authorization')) headers.set('Authorization', 'Bearer ' + token);
   if (typeof init.body === 'string' && !headers.has('Content-Type')) {
@@ -554,6 +561,11 @@ async function fetchApiResponse<T>(path: string, init: RequestInit, method: stri
       headers,
       ...(controller ? { signal: controller.signal } : {}),
     });
+    if (response.status === 401 && token && !callerSentAuthorization && !isAuthAttemptPath(path) && tokenValue === token) {
+      // The saved token was rejected (expired, revoked, or the account was disabled). Keeping it would leave the
+      // app showing a signed-in user whose every request fails; the screens read the session again on focus.
+      await clearAuthSession();
+    }
     if (!response.ok) {
       let message = 'Không thể kết nối máy chủ. Vui lòng thử lại.';
       try {
