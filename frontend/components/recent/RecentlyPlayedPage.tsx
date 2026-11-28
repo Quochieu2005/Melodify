@@ -14,6 +14,7 @@ import {
   readRecentItems,
   recordRecentItem,
   subscribeRecentHistory,
+  syncRecentFromServer,
   type RecentCategory,
   type RecentItem,
 } from '@/lib/recent-history';
@@ -249,8 +250,16 @@ export default function RecentlyPlayedPage() {
 
   useEffect(() => {
     const refresh = () => setItems(readRecentItems());
+    // The history lives on the server: load it when the page opens and again after signing in or out.
+    const loadFromServer = () => void syncRecentFromServer().catch(() => undefined);
     refresh();
-    return subscribeRecentHistory(refresh);
+    loadFromServer();
+    const unsubscribe = subscribeRecentHistory(refresh);
+    window.addEventListener('melodify-auth-changed', loadFromServer);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('melodify-auth-changed', loadFromServer);
+    };
   }, []);
 
   const visibleItems = useMemo(() => items.filter((item) => item.category === activeTab), [activeTab, items]);

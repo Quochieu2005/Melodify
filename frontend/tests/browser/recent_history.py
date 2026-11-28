@@ -60,7 +60,10 @@ def main() -> int:
             else:
                 failures.append(f"{category}: '{title}' was not recorded after opening {path}")
 
+        # The history is kept on the server: with this device's copy erased, the page still lists everything.
+        page.evaluate("localStorage.removeItem('melodify_recent_history')")
         page.goto(FRONTEND + "/recent", wait_until="networkidle", timeout=120_000)
+        page.wait_for_timeout(1500)
         labels = page.locator("[role=tab]").all_inner_texts()
         if any("Radio" in label for label in labels):
             failures.append(f"the Radios tab is still there: {labels}")
@@ -79,10 +82,19 @@ def main() -> int:
             checkbox.first.check(force=True)
             page.get_by_role("button", name="Xóa", exact=False).first.click()
             page.wait_for_timeout(400)
-            if page.get_by_text(title, exact=True).count() == 0:
-                passed.append(f"{category}: selected item deleted from the {tab} tab")
-            else:
+            if page.get_by_text(title, exact=True).count() != 0:
                 failures.append(f"{category}: '{title}' is still listed after deleting it")
+                continue
+            # Deleted on the server too: erase the local copy and load again.
+            page.wait_for_timeout(800)
+            page.evaluate("localStorage.removeItem('melodify_recent_history')")
+            page.reload(wait_until="networkidle")
+            page.wait_for_timeout(1500)
+            page.get_by_role("tab", name=tab, exact=True).click()
+            if page.get_by_text(title, exact=True).count() == 0:
+                passed.append(f"{category}: deleted from the {tab} tab and from the server")
+            else:
+                failures.append(f"{category}: '{title}' came back from the server after deleting it")
 
         browser.close()
 

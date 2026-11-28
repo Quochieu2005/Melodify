@@ -1,4 +1,4 @@
-import type { AlbumRecord, Playlist, Song, SongArtistCredit, SongVideo } from './api';
+import { deleteRecentHistory, getRecentHistory, recordRecentVisit, type AlbumRecord, type Playlist, type RecentHistoryCard, type Song, type SongArtistCredit, type SongVideo } from './api';
 
 export type RecentCategory = 'song' | 'playlist' | 'album' | 'artist' | 'video';
 
@@ -46,13 +46,66 @@ export function readRecentItems(): RecentItem[] {
   }
 }
 
+// The server keeps the history of an account or visitor; this device keeps a copy so the page opens at once and
+// items the server cannot hold (songs from outside the catalog) are not lost. Server ids are MongoDB ids.
+const SERVER_ID = /^[a-f0-9]{24}$/i;
+const lastReported = new Map<string, number>();
+const REPORT_EVERY_MS = 30_000;
+
+function reportToServer(category: RecentCategory, id: string) {
+  if (!SERVER_ID.test(id)) return;
+  const key = `${category}:${id}`;
+  const now = Date.now();
+  if (now - (lastReported.get(key) ?? 0) < REPORT_EVERY_MS) return;
+  lastReported.set(key, now);
+  void recordRecentVisit(category, id).catch(() => lastReported.delete(key));
+}
+
+function writeItems(items: RecentItem[]) {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, MAX_ITEMS)));
+  window.dispatchEvent(new Event(HISTORY_EVENT));
+}
+
 export function recordRecentItem(item: Omit<RecentItem, 'updatedAt'>) {
   if (!canUseStorage() || !item.id || !item.title || !item.href) return;
 
   const nextItem: RecentItem = { ...item, updatedAt: Date.now() };
-  const nextItems = [nextItem, ...readRecentItems().filter((entry) => itemKey(entry) !== itemKey(nextItem))].slice(0, MAX_ITEMS);
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextItems));
-  window.dispatchEvent(new Event(HISTORY_EVENT));
+  writeItems([nextItem, ...readRecentItems().filter((entry) => itemKey(entry) !== itemKey(nextItem))]);
+  reportToServer(item.category, item.id);
+}
+
+function hrefFor(card: RecentHistoryCard) {
+  const target = card.slug?.trim() || card.id;
+  if (card.category === 'song') return songPath({ id: card.id, slug: card.slug, title: card.title });
+  return `/${card.category}/${encodeURIComponent(target)}`;
+}
+
+function itemFromServer(card: RecentHistoryCard): RecentItem {
+  return {
+    id: card.id,
+    category: card.category,
+    title: card.title,
+    subtitle: card.subtitle,
+    imageUrl: card.image_url || fallbackCover,
+    href: hrefFor(card),
+    publisher: card.publisher,
+    durationSeconds: card.duration_seconds ?? null,
+    updatedAt: card.played_at ? Date.parse(card.played_at) || 0 : 0,
+  };
+}
+
+/**
+ * Replaces the local copy with the server's history (the account's, or this visitor's), keeping the items the server
+ * cannot hold. Called when the history page opens and after signing in or out.
+ */
+export async function syncRecentFromServer() {
+  if (!canUseStorage()) return;
+
+  const { data } = await getRecentHistory();
+  const fromServer = data.map(itemFromServer);
+  const localOnly = readRecentItems().filter((item) => !SERVER_ID.test(item.id));
+  const merged = [...fromServer, ...localOnly].sort((left, right) => right.updatedAt - left.updatedAt);
+  writeItems(merged);
 }
 
 export function removeRecentSongs(songIds: string[]) {
@@ -67,10 +120,11 @@ export function removeRecentItems(category: RecentCategory, ids: string[]) {
   const currentItems = readRecentItems();
   const nextItems = currentItems.filter((item) => item.category !== category || !idsToRemove.has(item.id));
   const removedCount = currentItems.length - nextItems.length;
+  const serverIds = ids.filter((id) => SERVER_ID.test(id));
+  if (serverIds.length > 0) void deleteRecentHistory(category, serverIds).catch(() => undefined);
   if (removedCount === 0) return 0;
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextItems));
-  window.dispatchEvent(new Event(HISTORY_EVENT));
+  writeItems(nextItems);
   return removedCount;
 }
 

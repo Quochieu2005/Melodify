@@ -11,6 +11,7 @@ use App\Models\Favorite;
 use App\Models\Playlist;
 use App\Models\PlaylistFavorite;
 use App\Models\PlaylistSong;
+use App\Models\RecentItem;
 use App\Models\Song;
 use App\Models\User;
 use App\Models\UserFollower;
@@ -99,6 +100,19 @@ class UserLibraryController extends Controller
                 } else {
                     $favorite->update(['user_id' => $userId]);
                 }
+            }
+        }
+
+        // What the visitor opened recently follows the account, keeping the newest time of an item both have.
+        foreach (RecentItem::query()->where('actor_id', $data['visitor_id'])->get() as $entry) {
+            $existing = RecentItem::query()->where('actor_id', $userId)->where('category', $entry->category)->where('item_id', $entry->item_id)->first();
+            if ($existing) {
+                if ($entry->played_at > $existing->played_at) {
+                    $existing->update(['played_at' => $entry->played_at]);
+                }
+                $entry->delete();
+            } else {
+                $entry->update(['actor_id' => $userId]);
             }
         }
 

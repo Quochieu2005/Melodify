@@ -811,7 +811,7 @@ export async function apiFetch<T>(
   }
 
   const request = (async () => {
-    if (storedToken && (/^\/v1\/(me\/library|favorites\/songs)/.test(path) || /\/(favorite)(\?|$)/.test(path) || /^\/v1\/(songs|albums|playlists)\/[^/]+(?:\?|$)/.test(path))) {
+    if (storedToken && (/^\/v1\/(me\/(library|recent)|favorites\/songs)/.test(path) || /\/(favorite)(\?|$)/.test(path) || /^\/v1\/(songs|albums|playlists)\/[^/]+(?:\?|$)/.test(path))) {
       await importLegacyLibrary(storedToken);
     }
     const requestInit: RequestInit = {
@@ -850,7 +850,7 @@ export async function apiFetch<T>(
     }
 
     const payload = await response.json() as T;
-    if (method !== "GET" && !/\/view(?:\?|$)/.test(path)) clearCatalogResponseCache();
+    if (method !== "GET" && !/\/view(?:\?|$)|^\/v1\/me\/recent/.test(path)) clearCatalogResponseCache();
     if (ttl > 0 && generation === catalogCacheGeneration) {
       const expiresAt = Date.now() + ttl;
       catalogResponseCache.set(requestKey, {
@@ -1536,6 +1536,35 @@ export async function getPlaylist(playlistId: string, visitorId?: string) {
   return apiFetch<{ data: Playlist }>(
     `/v1/playlists/${encodeURIComponent(playlistId)}${query}`,
   );
+}
+
+/** One entry of "Nghe gần đây" as the server returns it: read from the catalog, so it is always current. */
+export type RecentHistoryCard = {
+  id: string;
+  category: "song" | "playlist" | "album" | "artist" | "video";
+  title: string;
+  subtitle: string;
+  slug: string | null;
+  image_url: string | null;
+  duration_seconds?: number | null;
+  publisher?: string;
+  played_at: string | null;
+};
+
+export function getRecentHistory() {
+  return apiFetch<{ data: RecentHistoryCard[] }>(`/v1/me/recent?visitor_id=${encodeURIComponent(getVisitorId())}`);
+}
+
+export function recordRecentVisit(category: RecentHistoryCard["category"], id: string) {
+  return apiFetch<{ recorded: boolean }>("/v1/me/recent", jsonRequest({ category, id, visitor_id: getVisitorId() }));
+}
+
+export function deleteRecentHistory(category: RecentHistoryCard["category"], ids: string[]) {
+  return apiFetch<{ deleted: number }>("/v1/me/recent", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category, ids, visitor_id: getVisitorId() }),
+  });
 }
 
 export function getVisitorId() {

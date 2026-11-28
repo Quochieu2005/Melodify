@@ -57,6 +57,7 @@ import {
 import {
   getRecentEntities,
   getRecentSongs,
+  syncRecentFromServer,
   type RecentEntity,
   type RecentSong,
 } from "@/lib/recent-history";
@@ -420,7 +421,10 @@ export function RecentScreen() {
   };
   useEffect(() => {
     let active = true;
-    void Promise.all([getRecentSongs(), getRecentEntities()])
+    // The history is kept on the server: bring this device's copy up to date first, then show it.
+    void syncRecentFromServer()
+      .catch(() => undefined)
+      .then(() => Promise.all([getRecentSongs(), getRecentEntities()]))
       .then(([recentSongs, recentEntities]) => {
         if (!active) return;
         setSongs(recentSongs);

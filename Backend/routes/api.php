@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\MobileSocialAuthController;
 use App\Http\Controllers\Api\PasswordAuthController;
 use App\Http\Controllers\Api\PhoneAuthController;
 use App\Http\Controllers\Api\QrAuthController;
+use App\Http\Controllers\Api\RecentHistoryController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\SongReportController;
 use App\Http\Controllers\Api\SubscriptionPlanController;
@@ -181,6 +182,9 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     });
 
     Route::get('/me/library', [UserLibraryController::class, 'index'])->name('me.library');
+    Route::get('/me/recent', [RecentHistoryController::class, 'index'])->middleware('throttle:120,1,recent')->name('me.recent.index');
+    Route::post('/me/recent', [RecentHistoryController::class, 'store'])->middleware('throttle:120,1,recent')->name('me.recent.store');
+    Route::delete('/me/recent', [RecentHistoryController::class, 'destroy'])->middleware('throttle:60,1,recent')->name('me.recent.destroy');
     Route::get('/users/{identifier}', [FollowController::class, 'show'])->name('users.show');
     Route::get('/search', [CatalogController::class, 'search'])->middleware('throttle:60,1,search')->name('search');
 
