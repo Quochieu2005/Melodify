@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SongVideo;
 use App\Services\Music\NhacCuaTuiClient;
+use App\Support\PublicUrl;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Throwable;
@@ -76,7 +77,12 @@ class VideoController extends Controller
         abort_if(blank($url), 404, 'Video này chưa có tệp để tải xuống.');
         $filename = (Str::slug((string) $video->title) ?: 'melodify-video').'.mp4';
 
-        return $this->proxy((string) $url, $request, $nhaccuatui, $filename);
+        // Only NhacCuaTui URLs come from a provider API. Any other URL was typed by an admin, so never let the
+        // server fetch it blindly for an anonymous visitor (it could point at an internal service).
+        $untrusted = ! ($video->source === 'nhaccuatui' && filled($video->external_id));
+        abort_if($untrusted && ! PublicUrl::isSafe((string) $url), 422, 'URL video không hợp lệ.');
+
+        return $this->proxy((string) $url, $request, $nhaccuatui, $filename, $untrusted);
     }
 
     private function findActiveVideo(string $identifier): ?SongVideo
@@ -93,9 +99,17 @@ class VideoController extends Controller
         }
     }
 
-    private function proxy(string $url, Request $request, NhacCuaTuiClient $nhaccuatui, ?string $downloadFilename = null)
+    private function proxy(string $url, Request $request, NhacCuaTuiClient $nhaccuatui, ?string $downloadFilename = null, bool $untrusted = false)
     {
-        $remote = $nhaccuatui->stream($url, $request->header('Range'), 'video/mp4,video/*;q=0.9,*/*;q=0.8');
+        $remote = $nhaccuatui->stream($url, $request->header('Range'), 'video/mp4,video/*;q=0.9,*/*;q=0.8', followRedirects: ! $untrusted);
+        if ($untrusted && $remote->redirect()) {
+            // Do not follow redirects on the server (a public URL can redirect to an internal one); hand the
+            // browser the next hop instead, but only when it is itself a public URL.
+            $location = (string) $remote->header('Location');
+            abort_unless($location !== '' && PublicUrl::isSafe($location), 422, 'URL video không hợp lệ.');
+
+            return redirect()->away($location);
+        }
         if ($remote->failed()) {
             abort(502, 'Không thể tải video từ NhacCuaTui.');
         }

@@ -182,9 +182,22 @@ class SongController extends CrudResourceController
                 return back()->withErrors([
                     'external_id' => 'Không thể lấy dữ liệu bài hát từ NhacCuaTui. Vui lòng chọn lại bài hoặc thử lại.',
                 ])->withInput();
+            } catch (Throwable $exception) {
+                // e.g. a database error: the files already sent to Cloudinary would be orphaned.
+                $this->discardUploadedAudio($cloudinary, $uploadedAudio);
+                $this->discardUploadedCover($cloudinary, $uploadedCover);
+
+                throw $exception;
             }
         } else {
-            $song = ($this->model)::query()->create($data);
+            try {
+                $song = ($this->model)::query()->create($data);
+            } catch (Throwable $exception) {
+                $this->discardUploadedAudio($cloudinary, $uploadedAudio);
+                $this->discardUploadedCover($cloudinary, $uploadedCover);
+
+                throw $exception;
+            }
         }
 
         $this->syncArtist($song, $request->input('artist_name'));
@@ -265,10 +278,23 @@ class SongController extends CrudResourceController
                 return back()->withErrors([
                     'external_id' => 'Không thể lấy lại dữ liệu bài hát từ NhacCuaTui. Vui lòng thử lại.',
                 ])->withInput();
+            } catch (Throwable $exception) {
+                $this->discardUploadedAudio($cloudinary, $uploadedAudio);
+                $this->discardUploadedCover($cloudinary, $uploadedCover);
+
+                throw $exception;
             }
         }
 
-        $item->update($data);
+        try {
+            $item->update($data);
+        } catch (Throwable $exception) {
+            // The new files were never attached to the song; the old ones stay as they are.
+            $this->discardUploadedAudio($cloudinary, $uploadedAudio);
+            $this->discardUploadedCover($cloudinary, $uploadedCover);
+
+            throw $exception;
+        }
         if ($oldCoverPublicId !== '' && $oldCoverPublicId !== (string) ($item->cover_public_id ?? '')) {
             try {
                 $cloudinary->deleteImage($oldCoverPublicId);
@@ -562,11 +588,8 @@ class SongController extends CrudResourceController
 
     private function forgetHomeCache(): void
     {
-        $dateKey = now(config('app.timezone', 'Asia/Ho_Chi_Minh'))->toDateString();
+        // Every catalog cache key includes this revision, so changing it invalidates them all.
         Cache::store('file')->put('api:catalog-content-revision:v1', (string) Str::uuid());
-        Cache::store('file')->forget('api:home-discovery:v2:'.$dateKey);
-        Cache::store('file')->forget('api:home-bootstrap:v6:'.$dateKey);
-        Cache::store('file')->forget('api:trending-artists:v3:'.$dateKey);
     }
 
     private function availableTopics()

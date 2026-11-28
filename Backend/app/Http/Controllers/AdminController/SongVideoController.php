@@ -209,6 +209,7 @@ class SongVideoController extends Controller
             return back()->withErrors(['video_file' => 'Hãy chọn file video hoặc nhập URL video.'])->withInput();
         }
 
+        $media = null;
         try {
             $media = $this->resolveMedia($request, $data, $cloudinary);
             $artistData = $this->syncVideoArtists($data, $youtube, $songImport);
@@ -218,6 +219,7 @@ class SongVideoController extends Controller
             $video->save();
         } catch (Throwable $exception) {
             report($exception);
+            $this->discardServerUpload($request, $data, $media, $cloudinary);
 
             return back()->withErrors(['video_file' => 'Không thể upload video: '.Str::limit($exception->getMessage(), 240)])->withInput();
         }
@@ -249,6 +251,7 @@ class SongVideoController extends Controller
         $hasNewMedia = $request->hasFile('video_file') || filled($data['video_url'] ?? null) || filled($data['cloudinary_video_public_id'] ?? null);
         $artistData = $this->syncVideoArtists($data, $youtube, $songImport);
         if ($hasNewMedia) {
+            $media = null;
             try {
                 $media = $this->resolveMedia($request, $data, $cloudinary);
                 $oldSource = $video->source;
@@ -261,6 +264,7 @@ class SongVideoController extends Controller
                 }
             } catch (Throwable $exception) {
                 report($exception);
+                $this->discardServerUpload($request, $data, $media, $cloudinary);
 
                 return back()->withErrors(['video_file' => 'Không thể cập nhật video: '.Str::limit($exception->getMessage(), 240)])->withInput();
             }
@@ -472,6 +476,26 @@ class SongVideoController extends Controller
         $video->duration_seconds = $media['duration_seconds'] ?: ($data['duration_seconds'] ?? null);
         $video->sort_order = (int) ($data['sort_order'] ?? 0);
         $video->status = $data['status'];
+    }
+
+    /**
+     * A video the server uploaded in this request is orphaned when saving fails (a file input cannot be
+     * re-filled, so the admin must upload again). A direct browser upload is kept: the form resubmits its id.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array{public_id: ?string, source: string}|null  $media
+     */
+    private function discardServerUpload(Request $request, array $data, ?array $media, CloudinaryService $cloudinary): void
+    {
+        if ($media === null
+            || ! $request->hasFile('video_file')
+            || filled($data['cloudinary_video_public_id'] ?? null)
+            || ($media['source'] ?? '') !== 'cloudinary'
+            || blank($media['public_id'] ?? null)) {
+            return;
+        }
+
+        $this->deleteCloudinaryPublicId($cloudinary, (string) $media['public_id']);
     }
 
     private function deleteCloudinaryVideo(SongVideo $video, CloudinaryService $cloudinary): void
