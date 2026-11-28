@@ -353,7 +353,7 @@ class CatalogController extends Controller
                 'per_page' => $items->perPage(),
                 'total' => $items->total(),
             ],
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function video(string $slug, Request $request): JsonResponse
@@ -528,7 +528,7 @@ class CatalogController extends Controller
                 }
 
                 abort_unless(preg_match('/^[A-Za-z0-9]+$/', $slug), 404);
-                $track = $this->nhaccuatui->getSong($slug);
+                $track = $this->nctSong($slug);
 
                 return ['data' => $this->nctTrackData($track), '_local_song_id' => null];
             });
@@ -567,7 +567,7 @@ class CatalogController extends Controller
 
         try {
             abort_unless(preg_match('/^[A-Za-z0-9]+$/', $slug), 404);
-            $track = $this->nhaccuatui->getSong($slug);
+            $track = $this->nctSong($slug);
             $lyrics = $this->nhaccuatui->getLyrics($slug, $track);
 
             if (! $lyrics) {
@@ -1367,6 +1367,30 @@ class CatalogController extends Controller
         return in_array($id, array_map('strval', is_array($value) ? $value : []), true);
     }
 
+    /**
+     * NhacCuaTui lookup that remembers a failure for two minutes. Any made-up id of letters and digits reaches the
+     * upstream service, and a failed lookup is not cached by the callers, so repeating one would call it every time.
+     */
+    private function nctSong(string $id): array
+    {
+        $store = Cache::store('file');
+        $key = 'api:nct-miss:'.sha1($id);
+
+        if ($store->has($key)) {
+            throw new RuntimeException((string) $store->get($key));
+        }
+
+        try {
+            return $this->nhaccuatui->getSong($id);
+        } catch (RuntimeException $exception) {
+            if (! $exception instanceof HttpExceptionInterface) {
+                $store->put($key, $exception->getMessage(), 120);
+            }
+
+            throw $exception;
+        }
+    }
+
     private function nctTrackData(array $track): array
     {
         $id = (string) ($track['trackId'] ?? '');
@@ -1496,16 +1520,17 @@ class CatalogController extends Controller
             return $stats;
         }
 
-        $favorites = VideoFavorite::query()->whereIn('video_id', $videoIds->all())->get(['video_id', 'actor_id']);
-        foreach ($favorites as $favorite) {
-            $videoId = (string) $favorite->video_id;
-            if (! isset($stats[$videoId])) {
-                continue;
+        // Counted by MongoDB; only the caller's own favorites are read as rows.
+        foreach (EventCounts::by(VideoFavorite::class, 'video_id', match: ['video_id' => ['$in' => $videoIds->all()]]) as $videoId => $count) {
+            if (isset($stats[$videoId])) {
+                $stats[$videoId]['favorite_count'] = $count;
             }
-
-            $stats[$videoId]['favorite_count']++;
-            if ($actorId !== null && (string) $favorite->actor_id === $actorId) {
-                $stats[$videoId]['is_favorite'] = true;
+        }
+        if ($actorId !== null) {
+            foreach (VideoFavorite::query()->whereIn('video_id', $videoIds->all())->where('actor_id', $actorId)->get(['video_id']) as $favorite) {
+                if (isset($stats[(string) $favorite->video_id])) {
+                    $stats[(string) $favorite->video_id]['is_favorite'] = true;
+                }
             }
         }
 

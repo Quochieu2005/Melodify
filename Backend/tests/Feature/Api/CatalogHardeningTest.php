@@ -14,6 +14,8 @@ use App\Models\SongShare;
 use App\Models\SongVideo;
 use App\Models\User;
 use App\Models\UserApiToken;
+use App\Models\VideoFavorite;
+use App\Services\Music\NhacCuaTuiClient;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -38,7 +40,7 @@ class CatalogHardeningTest extends TestCase
         try {
             $connection = DB::connection('mongodb');
             if ($connection->getTablePrefix() === $this->prefix && preg_match('/^test_catalog_hard_[a-f0-9]{16}_$/', $this->prefix)) {
-                foreach (['songs', 'albums', 'genres', 'song_genres', 'playlists', 'favorites', 'song_play_events', 'song_shares', 'album_shares', 'playlist_shares', 'song_videos', 'users', 'user_api_tokens', 'artists', 'playlist_songs'] as $collection) {
+                foreach (['songs', 'albums', 'genres', 'song_genres', 'playlists', 'favorites', 'song_play_events', 'song_shares', 'album_shares', 'playlist_shares', 'song_videos', 'users', 'user_api_tokens', 'artists', 'playlist_songs', 'video_favorites'] as $collection) {
                     $connection->getCollection($collection)->drop();
                 }
             }
@@ -241,5 +243,37 @@ class CatalogHardeningTest extends TestCase
         $names = collect($this->getJson("/api/v1/songs/{$song->slug}")->assertOk()->json('data.playlists'))->pluck('name')->all();
 
         $this->assertSame(['Public One'], $names);
+    }
+
+    public function test_a_failed_lookup_of_an_unknown_external_id_is_not_repeated_upstream(): void
+    {
+        $id = 'Zz'.bin2hex(random_bytes(6));
+        $this->mock(NhacCuaTuiClient::class, fn ($mock) => $mock->shouldReceive('getSong')->once()->andThrow(new \RuntimeException('Data does not exist')));
+
+        $this->getJson("/api/v1/songs/{$id}")->assertStatus(503);
+        $this->getJson("/api/v1/songs/{$id}")->assertStatus(503);
+        $this->getJson("/api/v1/songs/{$id}/lyrics")->assertStatus(503);
+    }
+
+    public function test_video_favorite_counts_and_the_callers_own_favorite_are_correct(): void
+    {
+        [$me, $headers] = $this->account();
+        [$other] = $this->account();
+        $video = SongVideo::query()->create(['title' => 'Counted', 'slug' => 'counted-video', 'status' => 'active']);
+        SongVideo::query()->create(['title' => 'Quiet', 'slug' => 'quiet-video', 'status' => 'active']);
+        foreach ([$me, $other] as $user) {
+            VideoFavorite::query()->create(['video_id' => (string) $video->getKey(), 'actor_id' => (string) $user->getKey()]);
+        }
+
+        $rows = collect($this->getJson('/api/v1/videos', $headers)->assertOk()->json('data'))->keyBy('slug');
+        $this->assertSame(2, $rows['counted-video']['favorite_count']);
+        $this->assertTrue($rows['counted-video']['is_favorite']);
+        $this->assertSame(0, $rows['quiet-video']['favorite_count']);
+        $this->assertFalse($rows['quiet-video']['is_favorite']);
+
+        $this->app['auth']->forgetGuards();
+        $guest = collect($this->getJson('/api/v1/videos')->assertOk()->json('data'))->keyBy('slug');
+        $this->assertSame(2, $guest['counted-video']['favorite_count']);
+        $this->assertFalse($guest['counted-video']['is_favorite']);
     }
 }
