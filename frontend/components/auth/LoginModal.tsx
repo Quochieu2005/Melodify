@@ -483,8 +483,8 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
                   <input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className="relative mt-0.5 size-5 shrink-0 appearance-none rounded-[3px] border border-[#a8b2b9] bg-white transition-colors checked:border-[#299fe8] checked:bg-[#299fe8] after:absolute after:left-[6px] after:top-[2px] after:h-[10px] after:w-[5px] after:rotate-45 after:border-b-2 after:border-r-2 after:border-white after:opacity-0 after:content-[''] checked:after:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#299fe8]/40" />
                   <span>
                     Tôi đã đọc, hiểu rõ và tự nguyện đồng ý các điều khoản về việc thu thập, xử lý dữ liệu cá nhân, quyền và nghĩa vụ của tôi được quy định tại{' '}
-                    <span className="text-[#168df0]">Chính sách bảo mật</span> và{' '}
-                    <span className="text-[#168df0]">Thỏa thuận sử dụng</span>.
+                    <a href="/chinh-sach-bao-mat" target="_blank" rel="noopener noreferrer" className="text-[#168df0] hover:underline">Chính sách bảo mật</a> và{' '}
+                    <a href="/dieu-khoan-su-dung" target="_blank" rel="noopener noreferrer" className="text-[#168df0] hover:underline">Thỏa thuận sử dụng</a>.
                   </span>
                 </label>
 
@@ -646,7 +646,7 @@ export default function LoginModal({ onClose, onLoginSuccess, variant = 'default
               <label className="mt-3 flex cursor-pointer items-start gap-2 text-[11px] leading-[1.45] text-white/85">
                 <input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className={`${darkCheckboxClass} mt-0.5`} />
                 <span>
-                  Tôi đã đọc, hiểu và đồng ý với <button type="button" className="text-cyan-400 hover:underline">Chính sách bảo mật</button> và <button type="button" className="text-cyan-400 hover:underline">Điều khoản sử dụng</button> của Melodify.
+                  Tôi đã đọc, hiểu và đồng ý với <a href="/chinh-sach-bao-mat" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Chính sách bảo mật</a> và <a href="/dieu-khoan-su-dung" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Điều khoản sử dụng</a> của Melodify.
                 </span>
               </label>
 

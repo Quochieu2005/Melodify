@@ -32,7 +32,7 @@ function AlbumCard({ album }: { album: AlbumCard }) {
 }
 
 export default function AlbumHotSection({ albums: apiAlbums }: { albums: AlbumRecord[] }) {
-  const albums = useMemo(() => pickDailyAlbums(apiAlbums.map(albumRecordToCard), 6, vietnamDateKey()), [apiAlbums]);
+  const albums = useMemo(() => pickDailyAlbums(apiAlbums.map(albumRecordToCard), 7, vietnamDateKey()), [apiAlbums]);
   if (albums.length === 0) return null;
 
   return (
