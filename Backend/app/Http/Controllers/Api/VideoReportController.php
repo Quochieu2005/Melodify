@@ -42,7 +42,22 @@ class VideoReportController extends Controller
             $reason .= ': '.$details;
         }
 
+        // The same account (or, for guests, the same address) reporting the same thing again within a day is
+        // one report, so the moderation queue cannot be flooded with copies.
+        $reporterKey = $request->user()?->getKey() ? 'user:'.$request->user()->getKey() : 'ip:'.hash('sha256', (string) $request->ip());
+        $existing = Report::query()
+            ->where('target_type', 'video')
+            ->where('target_id', (string) $video->getKey())
+            ->where('reporter_key', $reporterKey)
+            ->where('reason', $reason)
+            ->where('created_at', '>=', now()->subDay())
+            ->first();
+        if ($existing) {
+            return response()->json(['message' => 'Bạn đã báo cáo video này rồi. Cảm ơn bạn.', 'report_id' => (string) $existing->getKey()]);
+        }
+
         $report = Report::query()->create([
+            'reporter_key' => $reporterKey,
             'reporter_user_id' => $request->user()?->getKey() ? (string) $request->user()->getKey() : null,
             'reporter_visitor_id' => $data['visitor_id'] ?? null,
             'target_type' => 'video',
