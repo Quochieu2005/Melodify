@@ -1365,7 +1365,7 @@ export function PasswordLoginScreen() {
     try {
       await saveAuthSession(
         registering
-          ? await registerWithPassword(name, identifier, password, confirmation)
+          ? await registerWithPassword(name.trim(), identifier.trim(), password, confirmation)
           : await loginWithPassword(identifier.trim(), password),
       );
       router.replace("/me" as never);
@@ -1545,17 +1545,17 @@ export function ForgotPasswordScreen() {
     try {
       if (step === 'email') {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) throw new Error('Nhập email hợp lệ.');
-        const result = await requestPasswordReset(email);
+        const result = await requestPasswordReset(email.trim());
         setStep('otp');
         setSuccess(result.message);
       } else if (step === 'otp') {
         if (!/^\d{6}$/.test(code.trim())) throw new Error('Mã OTP gồm 6 chữ số.');
-        const result = await verifyPasswordResetOtp(email, code.trim());
+        const result = await verifyPasswordResetOtp(email.trim(), code.trim());
         setResetToken(result.reset_token);
         setStep('password');
       } else {
         if (password.length < 8 || password !== confirmation) throw new Error('Mật khẩu cần ít nhất 8 ký tự và nhập lại phải khớp.');
-        const result = await resetPassword(email, resetToken, password, confirmation);
+        const result = await resetPassword(email.trim(), resetToken, password, confirmation);
         setSuccess(result.message);
         setCompleted(true);
       }
