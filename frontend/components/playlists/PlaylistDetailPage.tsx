@@ -16,7 +16,7 @@ import { AddSongsToOwnedPlaylistDialog } from '@/components/playlists/AddSongsTo
 import { EditUserPlaylistDialog } from '@/components/playlists/EditUserPlaylistDialog';
 import { useLibrary } from '@/components/library/LibraryProvider';
 import { useLoginModal } from '@/components/auth/LoginModalProvider';
-import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
+import { recentPlaylistItem, recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 import { downloadSongFiles, setSongFavorites } from '@/lib/song-actions';
 
 import styles from '@/components/albums/AlbumDetailPage.module.css';
@@ -255,6 +255,8 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
       .then((response) => {
         if (!cancelled) {
           setRequest({ slug, ownerId, retryCount, playlist: response.data, visibleCount: 30, isLoading: false, error: '', errorStatus: null });
+          // A private playlist opens from the library, not from /playlist, so only shared ones go to the history.
+          if (response.data.visibility !== 'private') recordRecentItem(recentPlaylistItem(response.data));
           setSelectedIds([]);
           setIsFavorite(response.data.is_favorite ?? false);
           setFavoriteCount(response.data.favorite_count ?? 0);

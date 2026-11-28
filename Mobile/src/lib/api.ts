@@ -421,6 +421,29 @@ async function getAuthToken(): Promise<string | null> {
   return tokenRequest;
 }
 
+/** One entry of "Nghe gần đây" as the server returns it: read from the catalog, so it is always current. */
+export type RecentHistoryCard = {
+  id: string;
+  category: 'song' | 'playlist' | 'album' | 'artist' | 'video';
+  title: string;
+  subtitle: string;
+  slug: string | null;
+  image_url: string | null;
+  duration_seconds?: number | null;
+  publisher?: string;
+  played_at: string | null;
+};
+
+export async function getRecentHistory() {
+  const visitorId = await getVisitorId();
+  return apiFetch<{ data: RecentHistoryCard[] }>('/v1/me/recent?visitor_id=' + encodeURIComponent(visitorId), { cache: 'no-store' });
+}
+
+export async function recordRecentVisit(category: RecentHistoryCard['category'], id: string) {
+  const visitorId = await getVisitorId();
+  return apiFetch<{ recorded: boolean }>('/v1/me/recent', jsonRequest({ category, id, visitor_id: visitorId }));
+}
+
 export async function getVisitorId(): Promise<string> {
   if (visitorIdValue) {
     return visitorIdValue;
@@ -497,7 +520,8 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   const token = await getAuthToken();
   if (method !== 'GET') {
     const value = await fetchApiResponse<T>(path, init, method, token);
-    if (!path.endsWith('/view')) {
+    // Counting a view or noting a recent visit changes nothing the cached catalog shows.
+    if (!path.endsWith('/view') && !path.startsWith('/v1/me/recent')) {
       clearApiResponseCache();
     }
     return value;

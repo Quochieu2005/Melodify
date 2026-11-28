@@ -13,7 +13,7 @@ import { ArtistLink, ArtistNames } from '@/components/artists';
 import { SongListLimitNotice } from '@/components/songs/SongListLimitNotice';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { AddSongsToPlaylistDialog } from '@/components/playlists/AddSongsToPlaylistDialog';
-import { recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
+import { recentAlbumItem, recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 import { downloadSongFiles, setSongFavorites } from '@/lib/song-actions';
 import { copyTextToClipboard } from '@/lib/clipboard';
 
@@ -166,6 +166,7 @@ export default function AlbumDetailPage({ slug }: { slug: string }) {
       .then((response) => {
         if (!cancelled) {
           setRequest({ slug, album: response.data, visibleCount: 30, isLoading: false, error: '' });
+          recordRecentItem(recentAlbumItem(response.data));
           setSelectedIds([]);
           setIsFavorite(Boolean(response.data.is_favorite));
           setFavoriteCount(response.data.favorite_count ?? 0);

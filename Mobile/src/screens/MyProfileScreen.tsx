@@ -31,7 +31,7 @@ import {
   getVisitorId,
   type AuthUser,
 } from '@/lib/api';
-import { getRecentSongs } from '@/lib/recent-history';
+import { getRecentSongs, syncRecentFromServer } from '@/lib/recent-history';
 import { listDownloadedSongs } from '@/lib/downloads';
 import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
 import { useTheme } from '@/hooks/use-theme';
@@ -136,11 +136,14 @@ export function MyProfileScreen() {
           setAuthChecking(false);
         }
       });
-    void getRecentSongs().then((items) => {
-      if (active) {
-        setRecentCount(items.length);
-      }
-    });
+    void syncRecentFromServer()
+      .catch(() => undefined)
+      .then(() => getRecentSongs())
+      .then((items) => {
+        if (active) {
+          setRecentCount(items.length);
+        }
+      });
     void listDownloadedSongs().then((items) => {
       if (active) setDownloadCount(items.length);
     }).catch(() => {

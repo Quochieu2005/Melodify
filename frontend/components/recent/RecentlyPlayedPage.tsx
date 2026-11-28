@@ -10,10 +10,11 @@ import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { getSong, type Song } from '@/lib/api';
 import { usePlayerControls } from '@/components/player';
 import {
-  removeRecentSongs,
+  removeRecentItems,
   readRecentItems,
   recordRecentItem,
   subscribeRecentHistory,
+  syncRecentFromServer,
   type RecentCategory,
   type RecentItem,
 } from '@/lib/recent-history';
@@ -23,11 +24,17 @@ const tabs: Array<{ label: string; value: RecentCategory }> = [
   { label: 'Playlist', value: 'playlist' },
   { label: 'Album', value: 'album' },
   { label: 'Nghệ sĩ', value: 'artist' },
-  { label: 'Radios', value: 'radio' },
   { label: 'Video', value: 'video' },
 ];
 
 const fallbackCover = '/images/cover-placeholder.svg';
+
+const entityHeadings: Partial<Record<RecentCategory, string>> = {
+  playlist: 'Playlist đã xem',
+  album: 'Album đã xem',
+  artist: 'Nghệ sĩ đã xem',
+  video: 'Video đã xem',
+};
 
 function PauseIcon() {
   return <span aria-hidden="true" className="flex gap-1"><span className="h-4 w-1.5 rounded-sm bg-current" /><span className="h-4 w-1.5 rounded-sm bg-current" /></span>;
@@ -78,18 +85,53 @@ function remember(item: RecentItem) {
   recordRecentItem(rest);
 }
 
-function EntityGrid({ items }: { items: RecentItem[] }) {
-  return items.length > 0 ? (
-    <div className="mt-7 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-      {items.map((item) => (
-        <Link key={`${item.category}-${item.id}`} href={item.href} onClick={() => remember(item)} className="group min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
-          <div role="img" aria-label={item.title} className="aspect-square overflow-hidden rounded-xl bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.03]" style={imageStyle(item)} />
-          <h2 className="mt-3 truncate text-base font-bold text-white transition-colors group-hover:text-cyan-300">{item.title}</h2>
-          <p className="mt-1 truncate text-sm text-white/55">{item.subtitle}</p>
-        </Link>
-      ))}
-    </div>
-  ) : <EmptyState />;
+function EntityGrid({ items, heading, selectedIds, onToggle, onToggleAll, onDeleteSelected }: {
+  items: RecentItem[];
+  heading: string;
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  onToggleAll: () => void;
+  onDeleteSelected: () => void;
+}) {
+  if (items.length === 0) return <EmptyState />;
+  const allSelected = items.every((item) => selectedIds.includes(item.id));
+
+  return (
+    <section className="mt-8">
+      <div className="flex flex-wrap items-center gap-4">
+        <h2 className="text-[29px] font-extrabold tracking-[-0.03em]">{heading} <span className="text-sm font-medium text-white/70">({displayCount(items.length)})</span></h2>
+        {selectedIds.length > 0 ? (
+          <div className="flex items-center gap-4" aria-label="Thao tác với mục đã chọn">
+            <label className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-white/80">
+              <SelectionCheckbox checked={allSelected} label="Chọn tất cả" onChange={onToggleAll} />
+              Chọn tất cả
+            </label>
+            <button type="button" onClick={onDeleteSelected} aria-label={`Xóa ${selectedIds.length} mục khỏi Nghe gần đây`} title="Xóa khỏi Nghe gần đây" className="inline-flex h-8 items-center gap-2 rounded-full border border-white/45 px-3 text-[12px] font-bold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+              <TrashIcon />
+              <span>Xóa</span>
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-7 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
+        {items.map((item) => {
+          const checked = selectedIds.includes(item.id);
+          return (
+            <div key={`${item.category}-${item.id}`} className="group relative min-w-0">
+              <Link href={item.href} onClick={() => remember(item)} className="block min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+                <div role="img" aria-label={item.title} className="aspect-square overflow-hidden rounded-xl bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.03]" style={imageStyle(item)} />
+                <h3 className="mt-3 truncate text-base font-bold text-white transition-colors group-hover:text-cyan-300">{item.title}</h3>
+                <p className="mt-1 truncate text-sm text-white/55">{item.subtitle}</p>
+              </Link>
+              <div className={`absolute left-2 top-2 rounded-md bg-black/55 p-1 ${checked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 has-[:focus-visible]:opacity-100'}`}>
+                <SelectionCheckbox checked={checked} label={`Chọn ${item.title}`} onChange={() => onToggle(item.id)} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function EmptyState() {
@@ -203,12 +245,21 @@ export default function RecentlyPlayedPage() {
   const [items, setItems] = useState<RecentItem[]>([]);
   const [isLoadingSong, setIsLoadingSong] = useState(false);
   const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
+  const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
   const [status, setStatus] = useState('');
 
   useEffect(() => {
     const refresh = () => setItems(readRecentItems());
+    // The history lives on the server: load it when the page opens and again after signing in or out.
+    const loadFromServer = () => void syncRecentFromServer().catch(() => undefined);
     refresh();
-    return subscribeRecentHistory(refresh);
+    loadFromServer();
+    const unsubscribe = subscribeRecentHistory(refresh);
+    window.addEventListener('melodify-auth-changed', loadFromServer);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('melodify-auth-changed', loadFromServer);
+    };
   }, []);
 
   const visibleItems = useMemo(() => items.filter((item) => item.category === activeTab), [activeTab, items]);
@@ -242,10 +293,31 @@ export default function RecentlyPlayedPage() {
   };
 
   const deleteSelectedSongs = () => {
-    const removedCount = removeRecentSongs(selectedSongIds);
+    const removedCount = removeRecentItems('song', selectedSongIds);
     setItems(readRecentItems());
     setSelectedSongIds([]);
     setStatus(`Đã xóa ${removedCount} bài khỏi Nghe gần đây.`);
+  };
+
+  const toggleEntitySelection = (id: string) => {
+    setSelectedEntityIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
+  };
+
+  const toggleAllEntitySelection = () => {
+    const allSelected = visibleItems.length > 0 && visibleItems.every((item) => selectedEntityIds.includes(item.id));
+    setSelectedEntityIds(allSelected ? [] : visibleItems.map((item) => item.id));
+  };
+
+  const deleteSelectedEntities = () => {
+    const removedCount = removeRecentItems(activeTab, selectedEntityIds);
+    setItems(readRecentItems());
+    setSelectedEntityIds([]);
+    setStatus(`Đã xóa ${removedCount} mục khỏi Nghe gần đây.`);
+  };
+
+  const changeTab = (tab: RecentCategory) => {
+    setActiveTab(tab);
+    setSelectedEntityIds([]);
   };
 
   return (
@@ -254,7 +326,7 @@ export default function RecentlyPlayedPage() {
         <h1 className="text-[34px] font-extrabold tracking-[-0.04em]">Recently played</h1>
         <div role="tablist" aria-label="Các mục nghe gần đây" className="mt-7 flex gap-9 border-b border-white/10">
           {tabs.map((tab) => (
-            <button key={tab.value} type="button" role="tab" aria-selected={activeTab === tab.value} onClick={() => setActiveTab(tab.value)} className={['relative pb-3 text-base font-semibold outline-none transition-colors focus-visible:text-cyan-300', activeTab === tab.value ? 'text-white' : 'text-white/50 hover:text-white'].join(' ')}>
+            <button key={tab.value} type="button" role="tab" aria-selected={activeTab === tab.value} onClick={() => changeTab(tab.value)} className={['relative pb-3 text-base font-semibold outline-none transition-colors focus-visible:text-cyan-300', activeTab === tab.value ? 'text-white' : 'text-white/50 hover:text-white'].join(' ')}>
               {tab.label}
               {activeTab === tab.value ? <span className="absolute inset-x-0 bottom-0 h-1 rounded-full bg-cyan-400" /> : null}
             </button>
@@ -282,10 +354,15 @@ export default function RecentlyPlayedPage() {
               isLoading={isLoadingSong}
             />
           </section>
-        ) : activeTab === 'radio' ? (
-          <EmptyState />
         ) : (
-          <EntityGrid items={visibleItems} />
+          <EntityGrid
+            items={visibleItems}
+            heading={entityHeadings[activeTab] ?? 'Đã xem'}
+            selectedIds={selectedEntityIds}
+            onToggle={toggleEntitySelection}
+            onToggleAll={toggleAllEntitySelection}
+            onDeleteSelected={deleteSelectedEntities}
+          />
         )}
         <p role="status" aria-live="polite" className="sr-only">{status}</p>
       </div>

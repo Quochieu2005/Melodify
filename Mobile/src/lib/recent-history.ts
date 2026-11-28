@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { Song } from './api';
+import { getRecentHistory, recordRecentVisit, type RecentHistoryCard, type Song } from './api';
 
 const RECENT_SONGS_KEY = 'melodify_mobile_recent_songs';
 const RECENT_ENTITIES_KEY = 'melodify_mobile_recent_entities';
@@ -35,6 +35,53 @@ export type RecentSong = Pick<
   | 'is_favorite'
 >;
 
+// The server keeps the history of an account or visitor; this device keeps a copy so the screens open at once and
+// items the server cannot hold (songs from outside the catalog) are not lost. Server ids are MongoDB ids.
+const SERVER_ID = /^[a-f0-9]{24}$/i;
+const lastReported = new Map<string, number>();
+const REPORT_EVERY_MS = 30_000;
+
+function reportToServer(category: RecentHistoryCard['category'], id: string) {
+  if (!SERVER_ID.test(id)) return;
+  const key = category + ':' + id;
+  const now = Date.now();
+  if (now - (lastReported.get(key) ?? 0) < REPORT_EVERY_MS) return;
+  lastReported.set(key, now);
+  void recordRecentVisit(category, id).catch(() => lastReported.delete(key));
+}
+
+/**
+ * Replaces the local copy with the server's history (the account's, or this visitor's), keeping the items the server
+ * cannot hold. Called when a screen that shows the history opens.
+ */
+export async function syncRecentFromServer(): Promise<void> {
+  const { data } = await getRecentHistory();
+  const songs: RecentSong[] = data
+    .filter((card) => card.category === 'song')
+    .map((card) => ({
+      id: card.id,
+      title: card.title,
+      slug: card.slug,
+      duration_seconds: card.duration_seconds ?? null,
+      artist: { id: null, name: card.subtitle },
+      artists: [],
+      publisher: card.publisher ?? null,
+      preview_url: null,
+      cover_url: card.image_url,
+    }));
+  const entities: RecentEntity[] = data
+    .filter((card): card is RecentHistoryCard & { category: RecentEntityKind } => card.category === 'playlist' || card.category === 'album' || card.category === 'artist')
+    .map((card) => ({ kind: card.category, id: card.id, slug: card.slug, name: card.title, image: card.image_url, subtitle: card.subtitle }));
+
+  const [localSongs, localEntities] = await Promise.all([getRecentSongs(), getRecentEntities()]);
+  const keptSongs = localSongs.filter((song) => !SERVER_ID.test(song.id));
+  const keptEntities = localEntities.filter((entity) => !SERVER_ID.test(entity.id));
+  await Promise.all([
+    AsyncStorage.setItem(RECENT_SONGS_KEY, JSON.stringify([...songs, ...keptSongs].slice(0, MAX_RECENT_SONGS))),
+    AsyncStorage.setItem(RECENT_ENTITIES_KEY, JSON.stringify([...entities, ...keptEntities].slice(0, MAX_RECENT_ENTITIES))),
+  ]);
+}
+
 export async function getRecentSongs(): Promise<RecentSong[]> {
   const stored = await AsyncStorage.getItem(RECENT_SONGS_KEY);
   if (!stored) {
@@ -68,6 +115,7 @@ export async function recordRecentSong(song: Song): Promise<void> {
   };
   const next = [compactSong, ...current.filter((item) => item.id !== song.id)].slice(0, MAX_RECENT_SONGS);
   await AsyncStorage.setItem(RECENT_SONGS_KEY, JSON.stringify(next));
+  reportToServer('song', song.id);
 }
 
 export async function clearRecentSongs(): Promise<void> {
@@ -90,4 +138,5 @@ export async function recordRecentEntity(entity: RecentEntity): Promise<void> {
   const next = [entity, ...current.filter((item) => item.kind !== entity.kind || item.id !== entity.id)]
     .slice(0, MAX_RECENT_ENTITIES);
   await AsyncStorage.setItem(RECENT_ENTITIES_KEY, JSON.stringify(next));
+  reportToServer(entity.kind, entity.id);
 }

@@ -57,6 +57,7 @@ import {
 import {
   getRecentEntities,
   getRecentSongs,
+  syncRecentFromServer,
   type RecentEntity,
   type RecentSong,
 } from "@/lib/recent-history";
@@ -401,7 +402,7 @@ export function RecentScreen() {
   const [entities, setEntities] = useState<RecentEntity[] | null>(null);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "song" | "playlist" | "album" | "artist" | "radio"
+    "song" | "playlist" | "album" | "artist"
   >("song");
   const reload = async () => {
     try {
@@ -420,7 +421,10 @@ export function RecentScreen() {
   };
   useEffect(() => {
     let active = true;
-    void Promise.all([getRecentSongs(), getRecentEntities()])
+    // The history is kept on the server: bring this device's copy up to date first, then show it.
+    void syncRecentFromServer()
+      .catch(() => undefined)
+      .then(() => Promise.all([getRecentSongs(), getRecentEntities()]))
       .then(([recentSongs, recentEntities]) => {
         if (!active) return;
         setSongs(recentSongs);
@@ -482,7 +486,6 @@ export function RecentScreen() {
     { id: "playlist", label: "Playlist" },
     { id: "album", label: "Album" },
     { id: "artist", label: "Nghệ sĩ" },
-    { id: "radio", label: "Radio" },
   ] as const;
   return (
     <AppShell>
@@ -609,9 +612,6 @@ export function RecentScreen() {
         entities &&
         !entities.some((item) => item.kind === "playlist") ? (
           <StateMessage empty="Playlist đã xem sẽ xuất hiện tại đây." />
-        ) : null}
-        {activeTab === "radio" ? (
-          <StateMessage empty="Ứng dụng hiện chưa có API Radio/lịch sử Radio." />
         ) : null}
       </ScrollPage>
     </AppShell>
