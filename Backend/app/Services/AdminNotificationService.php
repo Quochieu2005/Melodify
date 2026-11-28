@@ -48,14 +48,6 @@ class AdminNotificationService
                 'action_url' => '/admin/payments',
                 'active' => $pendingPaymentCount > 0,
             ],
-            [
-                'key' => "system-health:{$today}",
-                'type' => 'system',
-                'title' => 'Hệ thống ổn định',
-                'body' => 'Tất cả dịch vụ đang hoạt động bình thường.',
-                'action_url' => '/admin/dashboard',
-                'active' => true,
-            ],
         ];
 
         foreach ($definitions as $definition) {

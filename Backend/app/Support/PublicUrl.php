@@ -37,4 +37,25 @@ final class PublicUrl
 
         return true;
     }
+
+    /**
+     * Guzzle `allow_redirects` option for fetching a URL we did not type ourselves: follow a few redirects but
+     * stop (throw) as soon as one points at a private address, because a public URL can redirect inwards.
+     *
+     * @return array<string, mixed>
+     */
+    public static function redirectOptions(): array
+    {
+        return [
+            'max' => 3,
+            'strict' => true,
+            'referer' => false,
+            'protocols' => ['http', 'https'],
+            'on_redirect' => function ($request, $response, $uri): void {
+                if (! self::isSafe((string) $uri)) {
+                    throw new \RuntimeException('Redirect to a non-public address was blocked.');
+                }
+            },
+        ];
+    }
 }

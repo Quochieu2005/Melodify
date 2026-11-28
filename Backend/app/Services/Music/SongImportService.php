@@ -9,6 +9,7 @@ use App\Models\SongArtist;
 use App\Models\SongAudioFile;
 use App\Services\CloudinaryService;
 use App\Support\ArtistKey;
+use App\Support\PublicUrl;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -353,7 +354,8 @@ class SongImportService
                 );
             }
 
-            if (blank($imageUrl)) {
+            // The URL comes from provider data; never let the server fetch (or store) a private address.
+            if (blank($imageUrl) || ! PublicUrl::isSafe((string) $imageUrl)) {
                 return;
             }
 
@@ -362,6 +364,7 @@ class SongImportService
                 : config('services.itunes.timeout', 10);
             $response = Http::timeout((int) $timeout)
                 ->accept('*/*')
+                ->withOptions(['allow_redirects' => PublicUrl::redirectOptions()])
                 ->get($imageUrl);
             $response->throw();
 
