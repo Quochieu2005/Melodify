@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
+import { SongListLimitNotice } from '@/components/songs/SongListLimitNotice';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { AddSongsToPlaylistDialog } from '@/components/playlists/AddSongsToPlaylistDialog';
 import FollowButton from '@/components/follow/FollowButton';
@@ -397,6 +398,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
         ) : (
           <p className="mt-8 rounded-lg bg-[#30443f] px-4 py-5 text-sm text-white/70">Nghệ sĩ chưa có bài hát nào.</p>
         )}
+        <SongListLimitNotice truncated={artist.songs_truncated} shown={songs.length} />
         <span className="sr-only" aria-live="polite">{songActionStatus}</span>
         <AddSongsToPlaylistDialog songs={selectedSongs} open={isPlaylistDialogOpen} onClose={() => setIsPlaylistDialogOpen(false)} onAdded={setSongActionStatus} />
       </section>

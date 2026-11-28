@@ -114,9 +114,28 @@ export function LoginModalProvider({ children, variant = 'default' }: { children
     }
   }, []);
 
+  // Refresh the profile once per signed-in account. The state is set inside the promise callback, not in the
+  // effect body, and a result that arrives after the account changed or the page left is ignored.
+  const signedInUserId = user?.id;
   useEffect(() => {
-    if (authReady && user) void refreshUser();
-  }, [authReady, refreshUser, user?.id]);
+    if (!authReady || !signedInUserId) return;
+
+    let cancelled = false;
+    getCurrentUser()
+      .then((response) => {
+        if (cancelled) return;
+        setUser(response.user);
+        window.localStorage.setItem('melodify_auth_user', JSON.stringify(response.user));
+        window.dispatchEvent(new Event('melodify-auth-changed'));
+      })
+      .catch(() => {
+        // Keep the local session intact if refreshing profile data is temporarily unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, signedInUserId]);
 
   const value = useMemo(() => ({ openLogin, user, authReady, logout, refreshUser }), [authReady, logout, openLogin, refreshUser, user]);
 
