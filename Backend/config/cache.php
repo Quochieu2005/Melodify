@@ -18,6 +18,15 @@ return [
     'default' => env('CACHE_STORE', 'mongodb'),
 
     /*
+    | Where rate limit counters live. Every throttled request reads and writes its counter, so on the shared
+    | MongoDB store each request paid several Atlas round trips (about 50 ms each). The per-server file store is
+    | local and fast; with one server it behaves the same, with several the limit applies per server.
+    | Set CACHE_LIMITER_STORE=mongodb to count across servers.
+    */
+
+    'limiter' => env('CACHE_LIMITER_STORE', 'file'),
+
+    /*
     |--------------------------------------------------------------------------
     | Cache Stores
     |--------------------------------------------------------------------------
