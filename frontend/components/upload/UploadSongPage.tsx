@@ -69,7 +69,8 @@ export default function UploadSongPage() {
   const [genresLoaded, setGenresLoaded] = useState(false);
   const [genresError, setGenresError] = useState('');
   const [genresRetry, setGenresRetry] = useState(0);
-  const [termsAccepted, setTermsAccepted] = useState(true);
+  // Not pre-ticked: agreeing to the terms has to be an explicit choice.
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [moderationRequested, setModerationRequested] = useState(true);
   const [uploading, setUploading] = useState(false);
 
@@ -245,7 +246,7 @@ export default function UploadSongPage() {
     setArtistId(null);
     setArtistQuery('');
     setGenreId('');
-    setTermsAccepted(true);
+    setTermsAccepted(false);
     setModerationRequested(true);
     setCheckingCover(false);
     coverValidationRef.current += 1;
@@ -282,7 +283,7 @@ export default function UploadSongPage() {
       setArtistId(null);
       setArtistQuery('');
       setGenreId('');
-      setTermsAccepted(true);
+      setTermsAccepted(false);
       setModerationRequested(true);
       if (inputRef.current) inputRef.current.value = '';
     } catch (error) {
@@ -353,7 +354,7 @@ export default function UploadSongPage() {
         ) : !selectedFile ? (
           <div
             role="region"
-            aria-label="Upload song file"
+            aria-label="Khu vực tải tệp nhạc lên"
             onDragEnter={(event) => {
               event.preventDefault();
               setIsDragging(true);
@@ -368,11 +369,11 @@ export default function UploadSongPage() {
             ].join(' ')}
           >
             <UploadIcon />
-            <p className="mt-4 text-[22px] font-bold tracking-[-0.03em]">Upload a file or drag and drop here</p>
+            <p className="mt-4 text-[22px] font-bold tracking-[-0.03em]">Tải tệp lên hoặc kéo thả vào đây</p>
             <div className="mt-4 space-y-1 text-xs text-[#9fa8ad]">
-              <p>Format support: {acceptedAudioFormats}</p>
-              <p>Maximum file size: 100 MB</p>
-              <p>Uploaded songs are private until approved</p>
+              <p>Định dạng hỗ trợ: {acceptedAudioFormats}</p>
+              <p>Dung lượng tối đa: 100 MB</p>
+              <p>Bài hát tải lên ở chế độ riêng tư cho đến khi được duyệt</p>
             </div>
             <button
               type="button"
@@ -382,13 +383,13 @@ export default function UploadSongPage() {
               }}
               className="mt-6 h-12 w-full max-w-[380px] rounded-full bg-[#08c6d9] text-sm font-bold text-[#07363a] outline-none transition-colors hover:bg-[#22d7e7] focus-visible:ring-2 focus-visible:ring-white"
             >
-              Upload file
+              Chọn tệp nhạc
             </button>
             {fileError && <p role="alert" className="mt-5 text-sm font-semibold text-red-300">{fileError}</p>}
             <input ref={inputRef} type="file" accept={acceptedAudioExtensions.join(',')} onChange={handleInputChange} className="hidden" />
             <div className="mt-auto mb-5 flex max-w-[560px] items-start gap-2 pt-8 text-left text-[11px] leading-4 text-[#9fa8ad]">
               <span className="mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border border-[#9fa8ad] text-[9px]">i</span>
-              <p>Songs that violate the terms of <span className="text-cyan-300">User Agreement</span> will be removed.</p>
+              <p>Bài hát vi phạm <a href="/dieu-khoan-su-dung" target="_blank" rel="noopener noreferrer" className="text-cyan-300 hover:underline">Thỏa thuận sử dụng</a> sẽ bị gỡ khỏi hệ thống.</p>
             </div>
           </div>
         ) : (
@@ -494,7 +495,7 @@ export default function UploadSongPage() {
                   <div className="mt-6 space-y-4 text-xs leading-5 text-white/80">
                     <label className="flex cursor-pointer items-start gap-3">
                       <input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#08c6d9]" />
-                      <span>Tôi đồng ý với <span className="font-semibold text-cyan-300">Chính sách bảo mật</span> và <span className="font-semibold text-cyan-300">Thỏa thuận sử dụng</span> của Melodify.</span>
+                      <span>Tôi đồng ý với <a href="/chinh-sach-bao-mat" target="_blank" rel="noopener noreferrer" className="font-semibold text-cyan-300 hover:underline">Chính sách bảo mật</a> và <a href="/dieu-khoan-su-dung" target="_blank" rel="noopener noreferrer" className="font-semibold text-cyan-300 hover:underline">Thỏa thuận sử dụng</a> của Melodify, và xác nhận mình có quyền đối với bài hát này.</span>
                     </label>
                     <label className="flex cursor-pointer items-start gap-3">
                       <input type="checkbox" checked={moderationRequested} onChange={(event) => setModerationRequested(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#08c6d9]" />
