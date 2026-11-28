@@ -1,4 +1,19 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+
+let apiWarmUp: Promise<void> | null = null;
+
+/**
+ * Wakes a sleeping server. A hosting plan that stops idle servers needs 10 to 60 seconds to start one, so the
+ * first page load would wait that long. Calling this as soon as the app mounts starts the server earlier.
+ * Fire and forget: it never throws and only runs once per page load.
+ */
+export function warmUpApi(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (!apiWarmUp) {
+    apiWarmUp = fetch(API_URL.replace(/\/api\/?$/, "") + "/up", { mode: "no-cors", cache: "no-store" }).then(() => undefined, () => undefined);
+  }
+  return apiWarmUp;
+}
 let inMemoryVisitorId: string | null = null;
 
 export type Lyric = {
