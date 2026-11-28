@@ -48,18 +48,22 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
   const [playlists, setPlaylists] = useState<{ id: string; name: string; song_count: number }[]>([]);
   const [playlistBusy, setPlaylistBusy] = useState(false);
 
-  // Load recommended suggestions if queue is short
+  // Load recommended suggestions if queue is short. Keyed by the song and the search text, not the track object:
+  // that object is replaced when its lyrics arrive, which would search again for the same song.
+  const trackId = track?.id;
+  const suggestionQuery = track ? track.artist?.name || track.title : '';
   useEffect(() => {
-    if (visible && track) {
-      const query = track.artist?.name || track.title;
-      void listSongs({ query, perPage: 8 })
-        .then((res) => {
-          const filtered = (res.data || []).filter((s) => s.id !== track.id);
-          setSuggestions(filtered);
-        })
-        .catch(() => undefined);
-    }
-  }, [visible, track]);
+    if (!visible || !trackId || !suggestionQuery) return;
+    let active = true;
+    void listSongs({ query: suggestionQuery, perPage: 8 })
+      .then((res) => {
+        if (active) setSuggestions((res.data || []).filter((s) => s.id !== trackId));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [visible, trackId, suggestionQuery]);
 
   const handleToggleFavorite = async () => {
     if (favoriteBusy || !track) return;
@@ -125,7 +129,7 @@ export function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
 
   const handlePlaySong = useCallback(
     (song: Song) => {
-      void playSong(song, [song, ...suggestions]);
+      void playSong(song, suggestions);
       onClose();
     },
     [playSong, suggestions, onClose]

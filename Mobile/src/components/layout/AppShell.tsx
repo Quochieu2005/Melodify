@@ -62,7 +62,10 @@ export default function AppShell({
 
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   const [queueSheetOpen, setQueueSheetOpen] = useState(false);
-  const [favorite, setFavorite] = useState(Boolean(track?.is_favorite));
+  // The heart belongs to the song that is playing: remember whose it is, so the next song starts from its own state.
+  const [favoriteState, setFavoriteState] = useState<{ trackId?: string; value: boolean }>({ value: false });
+  const favorite = favoriteState.trackId === track?.id ? favoriteState.value : Boolean(track?.is_favorite);
+  const setFavorite = (value: boolean) => setFavoriteState({ trackId: track?.id, value });
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [qualityModalVisible, setQualityModalVisible] = useState(false);
   const selectedQuality = qualityOptions.find((quality) => quality.quality_id === selectedQualityId);

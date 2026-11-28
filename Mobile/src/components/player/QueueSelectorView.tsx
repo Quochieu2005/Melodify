@@ -470,7 +470,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
               return (
                 <View key={song.id} style={styles.songRowCard}>
                   <Pressable
-                    onPress={() => handlePlaySong(song, [song, ...relatedSongs])}
+                    onPress={() => handlePlaySong(song, relatedSongs)}
                     style={styles.songMainTap}
                   >
                     {song.cover_url ? (
@@ -517,7 +517,7 @@ export function QueueSelectorView({ containerHeight = 440 }: QueueSelectorViewPr
                     </Pressable>
 
                     <Pressable
-                      onPress={() => handlePlaySong(song, [song, ...relatedSongs])}
+                      onPress={() => handlePlaySong(song, relatedSongs)}
                       style={styles.playNowIconBtn}
                     >
                       <AppIcon name="play" color={theme.primaryOn} size={13} />
