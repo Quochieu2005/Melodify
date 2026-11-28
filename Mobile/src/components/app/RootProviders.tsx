@@ -7,6 +7,7 @@ import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { MusicProvider } from '@/components/music';
 import { Colors } from '@/constants/theme';
 import { ThemeModeContext, type ThemeMode } from '@/hooks/use-theme';
+import { warmUpApi } from '@/lib/api';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -23,6 +24,10 @@ function getTimeTheme(): ThemeMode {
 
 export default function RootProviders() {
   const [mode, setMode] = useState<ThemeMode>(getTimeTheme);
+  // Start a sleeping server now, while the splash screen is still showing.
+  useEffect(() => {
+    void warmUpApi();
+  }, []);
   useEffect(() => {
     const refresh = () => setMode(getTimeTheme());
     refresh();

@@ -36,6 +36,22 @@ export const API_URL = (
   defaultApiUrl
 ).replace(/\/+$/, '');
 
+let apiWarmUp: Promise<void> | null = null;
+
+/**
+ * Wakes a sleeping server. A hosting plan that stops idle servers needs 10 to 60 seconds to start one, and the
+ * first real request would wait that long (or time out). Calling this when the app opens starts the server while
+ * the splash screen is still showing. Fire and forget: it never throws and only runs once per launch.
+ */
+export function warmUpApi(): Promise<void> {
+  if (!apiWarmUp) {
+    apiWarmUp = fetch(API_URL.replace(/\/api$/, '') + '/up').then(() => undefined, () => undefined);
+  }
+  return apiWarmUp;
+}
+
+const GET_RETRY_DELAY_MS = 1_500;
+
 const AUTH_TOKEN_STORAGE_KEY = 'melodify_access_token';
 const AUTH_USER_STORAGE_KEY = 'melodify_auth_user';
 const VISITOR_ID_STORAGE_KEY = 'melodify_visitor_id';
@@ -515,7 +531,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return loadApiGet<T>(path, token, requestKey, memoryTtl);
 }
 
-async function fetchApiResponse<T>(path: string, init: RequestInit, method: string, token: string | null, baseUrl = API_URL): Promise<T> {
+async function fetchApiResponse<T>(path: string, init: RequestInit, method: string, token: string | null, baseUrl = API_URL, attempt = 0): Promise<T> {
   const headers = new Headers(init.headers);
   if (!headers.has('Accept')) headers.set('Accept', 'application/json');
   if (token && !headers.has('Authorization')) headers.set('Authorization', 'Bearer ' + token);
@@ -551,10 +567,16 @@ async function fetchApiResponse<T>(path: string, init: RequestInit, method: stri
     if (response.status === 204) return undefined as T;
     return await response.json() as T;
   } catch (reason) {
+    // A read is safe to repeat: a server that was asleep is usually awake by the second try.
     if (timedOut && !init.signal?.aborted) {
+      if (method === 'GET' && attempt === 0) return fetchApiResponse<T>(path, init, method, token, baseUrl, 1);
       throw new Error(`API phản hồi quá lâu tại ${baseUrl} (15 giây). Kiểm tra máy chủ và thử lại.`);
     }
     if (reason instanceof TypeError) {
+      if (method === 'GET' && attempt === 0 && !init.signal?.aborted) {
+        await new Promise((resolve) => setTimeout(resolve, GET_RETRY_DELAY_MS));
+        return fetchApiResponse<T>(path, init, method, token, baseUrl, 1);
+      }
       let hostname = baseUrl;
       try {
         hostname = new URL(baseUrl).hostname;

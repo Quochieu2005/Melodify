@@ -1,11 +1,12 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 
 import { LoginModalProvider } from '@/components/auth/LoginModalProvider';
 import { LibraryProvider } from '@/components/library/LibraryProvider';
 import { MusicPlayer, PlayerProvider } from '@/components/player';
+import { warmUpApi } from '@/lib/api';
 
 function PersistentPlayer() {
   const pathname = usePathname();
@@ -15,6 +16,11 @@ function PersistentPlayer() {
 }
 
 export default function AppProviders({ children }: { children: ReactNode }) {
+  // Start a sleeping server as soon as the page opens.
+  useEffect(() => {
+    void warmUpApi();
+  }, []);
+
   return (
     <LoginModalProvider>
       <LibraryProvider><PlayerProvider>

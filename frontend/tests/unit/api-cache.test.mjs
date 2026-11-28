@@ -34,7 +34,7 @@ function fixture(platform, env = {}, development = false) {
     require: (id) => { assert.ok(id in modules, `Unexpected dependency: ${id}`); return modules[id]; },
     window: { localStorage: storage, sessionStorage: storage, dispatchEvent() {} },
     Date: class extends Date { static now() { return now; } },
-    URLSearchParams, Headers, AbortController, Event, CustomEvent,
+    URLSearchParams, Headers, AbortController, Event, CustomEvent, TypeError,
     setTimeout, clearTimeout,
     fetch: async (url, init) => { calls.push({ url, init }); return respond(url, init); },
   };
@@ -123,6 +123,34 @@ for (const platform of ['web', 'mobile']) {
   });
 }
 
+for (const platform of ['web', 'mobile']) {
+  test(`${platform}: the warm-up ping wakes the server once, at /up outside the api prefix, and never throws`, async () => {
+    const f = fixture(platform);
+    f.respond(async () => { throw new TypeError('network down'); });
+    await f.api.warmUpApi();
+    await f.api.warmUpApi();
+    assert.equal(f.calls.length, 1);
+    assert.match(String(f.calls[0].url), /\/up$/);
+    assert.doesNotMatch(String(f.calls[0].url), /\/api\/up$/);
+  });
+}
+
+test('mobile: a read that fails while the server is waking is tried once more, a write is not', async () => {
+  const f = fixture('mobile');
+  let attempts = 0;
+  f.respond(async () => {
+    attempts += 1;
+    if (attempts === 1) throw new TypeError('connection reset');
+    return { ok: true, status: 200, json: async () => ({ data: 'ok' }) };
+  });
+  assert.equal((await f.api.apiFetch('/v1/albums')).data, 'ok');
+  assert.equal(f.calls.length, 2);
+
+  const g = fixture('mobile');
+  g.respond(async () => { throw new TypeError('connection reset'); });
+  await assert.rejects(g.api.apiFetch('/v1/playlists', { method: 'POST', body: '{}' }));
+  assert.equal(g.calls.length, 1);
+});
 test('mobile: localhost replacement preserves a configured non-default API port', () => {
   const f = fixture('mobile', { EXPO_PUBLIC_API_URL: 'http://localhost:9000/api' });
   assert.equal(f.api.API_URL, 'http://192.168.1.20:9000/api');
