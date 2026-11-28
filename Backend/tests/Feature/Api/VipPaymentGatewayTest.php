@@ -190,6 +190,37 @@ class VipPaymentGatewayTest extends TestCase
         $this->assertTrue($this->user->fresh()->hasPremiumAccess());
     }
 
+    public function test_a_double_click_creates_one_order_not_two(): void
+    {
+        $body = ['plan_id' => (string) $this->plan->getKey(), 'method' => 'sepay'];
+
+        $this->withHeaders($this->headers)->postJson('/api/v1/vip/checkout', $body)->assertCreated();
+        $this->withHeaders($this->headers)->postJson('/api/v1/vip/checkout', $body)
+            ->assertStatus(429)
+            ->assertJsonPath('code', 'payment_checkout_in_progress');
+
+        $this->assertSame(1, Payment::query()->where('user_id', (string) $this->user->getKey())->count());
+    }
+
+    public function test_a_checkout_the_gateway_could_not_create_is_marked_failed_and_can_be_retried(): void
+    {
+        $this->partialMock(VipPaymentGatewayService::class, function ($mock): void {
+            $mock->shouldReceive('isConfigured')->andReturn(true);
+            $mock->shouldReceive('createCheckout')->once()->andThrow(new \RuntimeException('gateway down'));
+        });
+        $body = ['plan_id' => (string) $this->plan->getKey(), 'method' => 'momo'];
+
+        $failed = $this->withHeaders($this->headers)->postJson('/api/v1/vip/checkout', $body)->assertStatus(503);
+
+        $this->assertSame('failed', Payment::query()->where('payment_code', $failed->json('payment_code'))->firstOrFail()->status);
+        // The guard is released, so an immediate retry is not refused as "already in progress".
+        $this->partialMock(VipPaymentGatewayService::class, function ($mock): void {
+            $mock->shouldReceive('isConfigured')->andReturn(true);
+            $mock->shouldReceive('createCheckout')->andThrow(new \RuntimeException('gateway down'));
+        });
+        $this->withHeaders($this->headers)->postJson('/api/v1/vip/checkout', $body)->assertStatus(503);
+    }
+
     public function test_sepay_status_check_reconciles_a_paid_order_when_ipn_is_delayed(): void
     {
         $payment = $this->pendingPayment('sepay');

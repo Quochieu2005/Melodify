@@ -150,9 +150,13 @@ export default function VipCheckoutPage() {
     setError("");
     setSubmitting(true);
     setOrder(null);
+    let leaving = false;
     try {
       const response = await createVipCheckout(selectedPlan.id, method);
       setOrder(response.data);
+      // The page is about to be replaced by the payment gateway: keep the button disabled so a second click
+      // cannot create a second order.
+      leaving = true;
       window.location.assign(response.data.checkout_url);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) {
@@ -166,9 +170,18 @@ export default function VipCheckoutPage() {
         );
       }
     } finally {
-      setSubmitting(false);
+      if (!leaving) setSubmitting(false);
     }
   }
+
+  // Coming back with the browser's back button restores this page as it was left: enable the button again.
+  useEffect(() => {
+    const restored = (event: PageTransitionEvent) => {
+      if (event.persisted) setSubmitting(false);
+    };
+    window.addEventListener("pageshow", restored);
+    return () => window.removeEventListener("pageshow", restored);
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#f7f9fb] text-[#17232b]">

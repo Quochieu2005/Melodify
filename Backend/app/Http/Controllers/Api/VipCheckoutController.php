@@ -226,6 +226,15 @@ class VipCheckoutController extends Controller
             return response()->json(['message' => 'Gói VIP này chưa có giá thanh toán hợp lệ.'], 422);
         }
 
+        // A double click sends the request twice and would create two orders for one purchase.
+        $guard = 'vip-checkout:'.$request->user()->getKey().':'.$plan->getKey().':'.$validated['method'];
+        if (! Cache::add($guard, true, 5)) {
+            return response()->json([
+                'message' => 'Đơn thanh toán đang được tạo. Vui lòng đợi vài giây rồi thử lại.',
+                'code' => 'payment_checkout_in_progress',
+            ], 429);
+        }
+
         do {
             $paymentCode = 'VIP'.Str::upper(Str::random(10));
         } while (Payment::query()->where('payment_code', $paymentCode)->exists());
@@ -260,6 +269,10 @@ class VipCheckoutController extends Controller
             ])->save();
         } catch (Throwable $exception) {
             report($exception);
+            // No checkout exists for this order, so it must not stay "pending" in the buyer's history, and a retry
+            // should not be refused.
+            $payment->forceFill(['status' => 'failed'])->save();
+            Cache::forget($guard);
 
             return response()->json([
                 'message' => 'Không tạo được phiên thanh toán. Vui lòng thử lại sau ít phút.',
