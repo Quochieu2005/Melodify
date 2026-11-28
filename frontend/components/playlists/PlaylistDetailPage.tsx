@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePlayerControls } from '@/components/player';
 import { PlayGlyph } from '@/components/icons/PlayGlyph';
 import { AUTH_TOKEN_STORAGE_KEY, ApiError, deleteUserPlaylist, getPlaylist, getSongDownloadUrl, getVisitorId, recordPlaylistShare, togglePlaylistFavorite, updateUserPlaylist, type Playlist, type Song, type SongArtistCredit, type SongAudioQuality } from '@/lib/api';
+import { attachMediaToken } from '@/lib/mediaToken';
 import { ArtistLink, ArtistNames } from '@/components/artists';
 import { SongRowActionMenu } from '@/components/songs/SongRowActionMenu';
 import { AddSongsToPlaylistDialog } from '@/components/playlists/AddSongsToPlaylistDialog';
@@ -412,9 +413,15 @@ export default function PlaylistDetailPage({ slug }: { slug: string }) {
 
       let url = getSongDownloadUrl(song, quality?.quality_id);
       if (quality?.premium_only && accessToken) {
-        const downloadUrl = new URL(url, window.location.origin);
-        downloadUrl.searchParams.set('access_token', accessToken);
-        url = downloadUrl.toString();
+        // A short-lived media ticket when we have one; the login token only as a fallback during the transition.
+        const ticketUrl = attachMediaToken(url);
+        if (ticketUrl) {
+          url = ticketUrl;
+        } else {
+          const downloadUrl = new URL(url, window.location.origin);
+          downloadUrl.searchParams.set('access_token', accessToken);
+          url = downloadUrl.toString();
+        }
       }
 
       const anchor = document.createElement('a');

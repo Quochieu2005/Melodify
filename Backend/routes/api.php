@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\BrowserSocialAuthController;
 use App\Http\Controllers\Api\CatalogController;
 use App\Http\Controllers\Api\FollowController;
+use App\Http\Controllers\Api\MediaTokenController;
 use App\Http\Controllers\Api\MobileSocialAuthController;
 use App\Http\Controllers\Api\PasswordAuthController;
 use App\Http\Controllers\Api\PhoneAuthController;
@@ -135,6 +136,9 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
         Route::post('/artists/{identifier}/follow', [FollowController::class, 'artist'])->middleware('throttle:60,1')->name('artists.follow');
         Route::post('/users/{identifier}/follow', [FollowController::class, 'user'])->middleware('throttle:60,1')->name('users.follow');
         Route::get('/auth/me', [SocialAuthController::class, 'me'])->name('auth.me');
+        Route::post('/auth/media-token', [MediaTokenController::class, 'store'])
+            ->middleware('throttle:60,1')
+            ->name('auth.media-token');
         Route::post('/auth/logout', [SocialAuthController::class, 'logout'])->name('auth.logout');
         Route::post('/auth/qr/scan', [QrAuthController::class, 'scan'])
             ->middleware('throttle:20,1')

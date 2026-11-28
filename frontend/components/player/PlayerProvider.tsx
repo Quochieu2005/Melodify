@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useRouter } from 'next/navigation';
 
 import { AUTH_TOKEN_STORAGE_KEY, getSong, getVisitorId, recordSongView, type Song, type SongArtistCredit, type SongAudioQuality } from '@/lib/api';
+import { attachMediaToken, fetchMediaToken, refreshMediaToken } from '@/lib/mediaToken';
 import { recordRecentItem, songPath } from '@/lib/recent-history';
 import { useLoginModal } from '@/components/auth/LoginModalProvider';
 import { VipAccessDialog } from '@/components/player/VipAccessDialog';
@@ -109,9 +110,17 @@ function persistPlayerState(
   return state;
 }
 
+// The media ticket lives an hour; renew it well before it expires.
+const MEDIA_TOKEN_REFRESH_MS = 25 * 60 * 1000;
+
 function audioUrlWithAccessToken(audioUrl: string | null, premiumOnly: boolean, isPremium: boolean): string | null {
   if (!audioUrl || !premiumOnly || !isPremium || typeof window === 'undefined') return audioUrl;
 
+  // A short-lived media ticket works on the media routes only; the 30-day login token must not sit in a URL.
+  const withTicket = attachMediaToken(audioUrl);
+  if (withTicket) return withTicket;
+
+  // No ticket yet (the first request is still in flight): fall back to the old token while the backend accepts it.
   const token = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
   if (!token) return audioUrl;
 
@@ -288,6 +297,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const noticeTimerRef = useRef<number | null>(null);
   const shuffleRef = useRef(false);
   const repeatRef = useRef<'off' | 'all' | 'one'>('off');
+
+  useEffect(() => {
+    if (!isPremium) return undefined;
+
+    void fetchMediaToken();
+    const timer = window.setInterval(() => void fetchMediaToken(true), MEDIA_TOKEN_REFRESH_MS);
+
+    return () => window.clearInterval(timer);
+  }, [isPremium, user?.id]);
   const viewRecordedRef = useRef(false);
   const viewSourceRef = useRef<'player' | 'for_you'>('player');
   const [track, setTrack] = useState<PlayerTrack | null>(null);
@@ -426,7 +444,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    audio.src = nextTrack.audioUrl;
+    audio.src = refreshMediaToken(nextTrack.audioUrl);
     setIsLoading(true);
     audio.load();
     void audio.play()
@@ -553,7 +571,32 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     };
     const handleWaiting = () => { if (!audio.paused) setIsLoading(true); };
     const handlePause = () => { setIsPlaying(false); setIsLoading(false); };
+    let retriedMediaUrl: string | null = null;
     const handleAudioError = () => {
+      // An expired media ticket looks like a load error: get a new one and resume once from the same position.
+      const failedSrc = audio.currentSrc || audio.src;
+      if (audio.error && failedSrc && /[?&]media_token=/.test(failedSrc) && retriedMediaUrl !== failedSrc) {
+        retriedMediaUrl = failedSrc;
+        const resumeAt = audio.currentTime;
+        void fetchMediaToken(true).then(() => {
+          const refreshed = refreshMediaToken(failedSrc);
+          if (audioRef.current !== audio || refreshed === failedSrc) {
+            setIsPlaying(false);
+            setIsLoading(false);
+            showNotice('Không tải được âm thanh. Hãy thử lại hoặc chọn bài khác.');
+            return;
+          }
+          restoredElapsedRef.current = resumeAt;
+          audio.src = refreshed;
+          audio.load();
+          setIsLoading(true);
+          void audio.play().catch(() => {
+            setIsPlaying(false);
+            setIsLoading(false);
+          });
+        });
+        return;
+      }
       setIsPlaying(false);
       setIsLoading(false);
       showNotice('Không tải được âm thanh. Hãy thử lại hoặc chọn bài khác.');
@@ -675,7 +718,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setIsPlaying(false);
 
       if (restoredTrack.audioUrl) {
-        audio.src = restoredTrack.audioUrl;
+        audio.src = refreshMediaToken(restoredTrack.audioUrl);
         audio.load();
       }
     };
@@ -754,7 +797,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           setDuration(restoredTrack.durationSeconds ?? 0);
 
           if (restoredTrack.audioUrl) {
-            audio.src = restoredTrack.audioUrl;
+            audio.src = refreshMediaToken(restoredTrack.audioUrl);
             audio.load();
           }
         }
@@ -955,7 +998,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const resumeAt = audio.currentTime;
       audio.pause();
       restoredElapsedRef.current = resumeAt;
-      audio.src = nextTrack.audioUrl;
+      audio.src = refreshMediaToken(nextTrack.audioUrl);
       audio.load();
       if (wasPlaying) {
         setIsLoading(true);
@@ -1036,7 +1079,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (sourceChanged && audio && nextTrack.audioUrl) {
         audio.pause();
         restoredElapsedRef.current = resumeAt;
-        audio.src = nextTrack.audioUrl;
+        audio.src = refreshMediaToken(nextTrack.audioUrl);
         audio.load();
         if (wasPlaying) {
           setIsLoading(true);
