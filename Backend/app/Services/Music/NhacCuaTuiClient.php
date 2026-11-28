@@ -233,10 +233,10 @@ class NhacCuaTuiClient
      * The returned response is streamed by the application so browsers do not
      * request the signed NCT URL directly with a localhost Referer.
      */
-    public function stream(string $url, ?string $range = null, string $accept = 'audio/mpeg,audio/*;q=0.9,*/*;q=0.8')
+    public function stream(string $url, ?string $range = null, string $accept = 'audio/mpeg,audio/*;q=0.9,*/*;q=0.8', bool $followRedirects = true)
     {
         $request = $this->request()
-            ->withOptions(['stream' => true])
+            ->withOptions(['stream' => true, 'allow_redirects' => $followRedirects])
             ->withHeaders(['Accept' => $accept]);
 
         if (filled($range)) {

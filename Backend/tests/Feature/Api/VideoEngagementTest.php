@@ -175,6 +175,38 @@ class VideoEngagementTest extends TestCase
         $this->getJson('/api/v1/videos/youtube-video/download')->assertUnprocessable();
     }
 
+    public function test_video_download_never_fetches_internal_addresses_for_admin_typed_urls(): void
+    {
+        Http::fake();
+        foreach (['http://127.0.0.1:8080/secret', 'http://10.0.0.5/internal.mp4', 'http://169.254.169.254/latest/meta-data', 'http://localhost/x.mp4'] as $index => $url) {
+            $this->createVideo(['slug' => "internal-{$index}", 'title' => "Internal {$index}", 'source' => 'admin_url', 'video_url' => $url]);
+
+            $this->getJson("/api/v1/videos/internal-{$index}/download")->assertUnprocessable();
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_video_download_does_not_follow_a_public_url_that_redirects_to_an_internal_one(): void
+    {
+        $this->createVideo(['slug' => 'redirecting', 'title' => 'Redirecting', 'source' => 'admin_url', 'video_url' => 'https://cdn.example.test/redirect.mp4']);
+        Http::fake(['https://cdn.example.test/*' => Http::response('', 302, ['Location' => 'http://169.254.169.254/latest/meta-data'])]);
+
+        $this->getJson('/api/v1/videos/redirecting/download')->assertUnprocessable();
+
+        Http::assertSentCount(1);
+        Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '169.254.169.254'));
+    }
+
+    public function test_video_download_hands_a_safe_redirect_to_the_browser_instead_of_following_it(): void
+    {
+        $this->createVideo(['slug' => 'moved', 'title' => 'Moved', 'source' => 'admin_url', 'video_url' => 'https://cdn.example.test/old.mp4']);
+        Http::fake(['https://cdn.example.test/old.mp4' => Http::response('', 302, ['Location' => 'https://cdn.example.test/new.mp4'])]);
+
+        $this->get('/api/v1/videos/moved/download')->assertRedirect('https://cdn.example.test/new.mp4');
+        Http::assertSentCount(1);
+    }
+
     /** @param array<string, mixed> $overrides */
     private function createVideo(array $overrides = []): SongVideo
     {
