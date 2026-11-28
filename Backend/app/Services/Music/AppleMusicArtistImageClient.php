@@ -2,6 +2,7 @@
 
 namespace App\Services\Music;
 
+use App\Support\PublicUrl;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -14,12 +15,13 @@ class AppleMusicArtistImageClient
     ): ?string {
         $url = $this->artistPageUrl($artistName, $artistUrl, $artistId);
 
-        if ($url === null) {
+        if ($url === null || ! PublicUrl::isSafe($url)) {
             return null;
         }
 
         $html = Http::accept('text/html')
             ->timeout((int) config('services.itunes.timeout', 10))
+            ->withOptions(['allow_redirects' => PublicUrl::redirectOptions()])
             ->get($url)
             ->throw()
             ->body();

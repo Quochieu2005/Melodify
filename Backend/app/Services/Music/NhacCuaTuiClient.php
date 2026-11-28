@@ -2,6 +2,7 @@
 
 namespace App\Services\Music;
 
+use App\Support\PublicUrl;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -665,7 +666,11 @@ class NhacCuaTuiClient
 
     private function downloadSyncedLyrics(string $url): ?string
     {
-        $response = $this->request()->get($url);
+        if (! PublicUrl::isSafe($url)) {
+            return null;
+        }
+
+        $response = $this->request()->withOptions(['allow_redirects' => PublicUrl::redirectOptions()])->get($url);
         if ($response->failed()) {
             return null;
         }

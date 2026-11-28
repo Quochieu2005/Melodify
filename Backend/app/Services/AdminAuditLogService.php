@@ -11,6 +11,8 @@ use Throwable;
 
 class AdminAuditLogService
 {
+    private const MAX_LOGGED_LENGTH = 500;
+
     public function recordRequest(
         Request $request,
         ?Admin $admin,
@@ -125,6 +127,20 @@ class AdminAuditLogService
 
         foreach (array_keys($request->allFiles()) as $fileKey) {
             $input[$fileKey] = '[uploaded file]';
+        }
+
+        return $this->capLongValues($input);
+    }
+
+    /** Lyrics can be 130,000 characters; the log needs to show what changed, not keep a copy of every save. */
+    private function capLongValues(array $input): array
+    {
+        foreach ($input as $key => $value) {
+            if (is_array($value)) {
+                $input[$key] = $this->capLongValues($value);
+            } elseif (is_string($value) && mb_strlen($value) > self::MAX_LOGGED_LENGTH) {
+                $input[$key] = mb_substr($value, 0, self::MAX_LOGGED_LENGTH).'… [cắt bớt, tổng '.mb_strlen($value).' ký tự]';
+            }
         }
 
         return $input;

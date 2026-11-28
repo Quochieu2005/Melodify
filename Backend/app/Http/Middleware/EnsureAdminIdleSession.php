@@ -15,6 +15,16 @@ class EnsureAdminIdleSession
     {
         $admin = $request->user('admin');
 
+        // Disabling an account must end its session now, not when the session happens to expire (a remember-me
+        // cookie would otherwise keep it alive indefinitely). Login only checks the status once.
+        if ($admin && ($admin->is_active === false || $admin->status === 'inactive')) {
+            Auth::guard('admin')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('admin.login')->with('warning', 'Tài khoản quản trị đã bị khóa.');
+        }
+
         if ($admin) {
             $lastActivity = (int) $request->session()->get('admin_last_activity', now()->timestamp);
 

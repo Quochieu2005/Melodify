@@ -88,7 +88,11 @@ class AdminScaleFixesTest extends TestCase
 
         $from = $today->copy()->subDays(10);
         $bySong = EventCounts::by(SongPlayEvent::class, 'song_id', 'started_at', $from);
-        $this->assertSame([(string) $song->getKey() => 2, (string) $other->getKey() => 1], $bySong);
+        // $group does not promise an order, so compare by key.
+        $expected = [(string) $song->getKey() => 2, (string) $other->getKey() => 1];
+        ksort($bySong);
+        ksort($expected);
+        $this->assertSame($expected, $bySong);
         $this->assertSame(3, array_sum(EventCounts::by(SongPlayEvent::class, 'song_id', 'started_at', $from)));
         $this->assertSame(4, array_sum(EventCounts::by(SongPlayEvent::class, 'song_id')), 'no date filter counts everything');
 
