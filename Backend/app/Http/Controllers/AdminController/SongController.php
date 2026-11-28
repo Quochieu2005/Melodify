@@ -19,11 +19,11 @@ use App\Services\CloudinaryService;
 use App\Services\Music\LyricsClient;
 use App\Services\Music\NhacCuaTuiClient;
 use App\Services\Music\SongImportService;
+use App\Support\CatalogRevision;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use RuntimeException;
@@ -109,7 +109,7 @@ class SongController extends CrudResourceController
 
         return view("{$this->viewDirectory}.edit", $this->viewData([
             'item' => $item,
-            'fields' => $this->resolvedFields(),
+            'fields' => $this->resolvedFields($item),
             'topics' => $this->availableTopics(),
             'artists' => $this->availableArtists(),
             'genres' => $this->availableGenres(),
@@ -588,8 +588,7 @@ class SongController extends CrudResourceController
 
     private function forgetHomeCache(): void
     {
-        // Every catalog cache key includes this revision, so changing it invalidates them all.
-        Cache::store('file')->put('api:catalog-content-revision:v1', (string) Str::uuid());
+        CatalogRevision::bump();
     }
 
     private function availableTopics()

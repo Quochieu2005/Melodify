@@ -13,6 +13,8 @@ use App\Models\User;
 use App\Rules\PlainText;
 use App\Services\CatalogGroupService;
 use App\Services\MediaAssetService;
+use App\Support\ExistingIds;
+use App\Support\OptionList;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -123,16 +125,20 @@ class PlaylistController extends MediaCatalogController
             ->map(fn ($songId): string => (string) $songId)
             ->all();
 
+        $selectedArtistIds = $this->artistIdsForSongs($selectedSongIds);
+        $selectedGenreIds = $this->selectedIds($item, 'genre_ids');
+        $selectedTopicIds = $this->selectedIds($item, 'topic_ids');
+
         return view("{$this->viewDirectory}.edit", $this->viewData([
             'item' => $item,
-            'fields' => $this->resolvedFields(),
+            'fields' => $this->resolvedFields($item),
             'mediaAssets' => app(MediaAssetService::class)->latest(),
-            'songs' => $this->availableSongs(),
+            'songs' => $this->availableSongs($selectedSongIds),
             'selectedSongIds' => $selectedSongIds,
-            ...$this->relationOptions(),
-            'selectedArtistIds' => $this->artistIdsForSongs($selectedSongIds),
-            'selectedGenreIds' => $this->selectedIds($item, 'genre_ids'),
-            'selectedTopicIds' => $this->selectedIds($item, 'topic_ids'),
+            ...$this->relationOptions($selectedArtistIds, $selectedGenreIds, $selectedTopicIds),
+            'selectedArtistIds' => $selectedArtistIds,
+            'selectedGenreIds' => $selectedGenreIds,
+            'selectedTopicIds' => $selectedTopicIds,
             'sortOrderByGroup' => $this->sortOrderSuggestions(),
             'playlistGroupOptions' => app(CatalogGroupService::class)->playlistFormGroups(),
         ]));
@@ -379,13 +385,18 @@ class PlaylistController extends MediaCatalogController
         ];
     }
 
-    private function availableSongs()
+    private function availableSongs(array $selectedSongIds = [])
     {
-        $songs = Song::query()
-            ->whereIn('status', ['draft', 'published'])
-            ->orderBy('title')
-            ->limit(500)
-            ->get();
+        $songs = OptionList::withSelected(
+            Song::query()
+                ->whereIn('status', ['draft', 'published'])
+                ->orderBy('title')
+                ->limit(OptionList::limit())
+                ->get(),
+            Song::class,
+            $selectedSongIds,
+            'title',
+        );
 
         $songIds = $songs->map(fn (Song $song): string => (string) $song->getKey())->all();
         $artistIdsBySong = $songIds === []
@@ -407,12 +418,10 @@ class PlaylistController extends MediaCatalogController
 
     private function validateSongIds(array $songIds): void
     {
-        foreach ($songIds as $songId) {
-            if (! Song::query()->find($songId)) {
-                throw ValidationException::withMessages([
-                    'song_ids' => 'Một bài hát đã chọn không tồn tại trong kho nhạc.',
-                ]);
-            }
+        if (ExistingIds::anyMissing(Song::class, $songIds)) {
+            throw ValidationException::withMessages([
+                'song_ids' => 'Một bài hát đã chọn không tồn tại trong kho nhạc.',
+            ]);
         }
     }
 
@@ -447,23 +456,23 @@ class PlaylistController extends MediaCatalogController
         ];
 
         foreach ($relations as $field => [$model, $label]) {
-            foreach ((array) ($data[$field] ?? []) as $id) {
-                if (! $model::query()->find($id)) {
-                    throw ValidationException::withMessages([
-                        $field => "Một {$label} đã chọn không còn tồn tại.",
-                    ]);
-                }
+            if (ExistingIds::anyMissing($model, (array) ($data[$field] ?? []))) {
+                throw ValidationException::withMessages([
+                    $field => "Một {$label} đã chọn không còn tồn tại.",
+                ]);
             }
         }
     }
 
     /** @return array{artists: mixed, genres: mixed, topics: mixed} */
-    private function relationOptions(): array
+    private function relationOptions(array $selectedArtistIds = [], array $selectedGenreIds = [], array $selectedTopicIds = []): array
     {
+        $limit = OptionList::limit();
+
         return [
-            'artists' => Artist::query()->orderBy('name')->limit(300)->get(),
-            'genres' => Genre::query()->orderBy('name')->limit(300)->get(),
-            'topics' => Topic::query()->orderBy('name')->limit(300)->get(),
+            'artists' => OptionList::withSelected(Artist::query()->orderBy('name')->limit($limit)->get(), Artist::class, $selectedArtistIds, 'name'),
+            'genres' => OptionList::withSelected(Genre::query()->orderBy('name')->limit($limit)->get(), Genre::class, $selectedGenreIds, 'name'),
+            'topics' => OptionList::withSelected(Topic::query()->orderBy('name')->limit($limit)->get(), Topic::class, $selectedTopicIds, 'name'),
         ];
     }
 
@@ -482,13 +491,23 @@ class PlaylistController extends MediaCatalogController
         $playlistId = (string) $playlist->getKey();
         PlaylistSong::query()->where('playlist_id', $playlistId)->delete();
 
+        // One bulk insert instead of one round trip per song (a playlist can hold 500).
+        $now = now();
+        $adminId = (string) auth('admin')->id();
+        $rows = [];
         foreach (array_values(array_unique(array_map('strval', $songIds))) as $position => $songId) {
-            PlaylistSong::query()->create([
+            $rows[] = [
                 'playlist_id' => $playlistId,
                 'song_id' => $songId,
                 'position' => $position,
-                'added_by_admin_id' => (string) auth('admin')->id(),
-            ]);
+                'added_by_admin_id' => $adminId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        if ($rows !== []) {
+            PlaylistSong::query()->insert($rows);
         }
     }
 }

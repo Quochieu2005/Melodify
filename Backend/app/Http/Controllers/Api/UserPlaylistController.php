@@ -9,9 +9,9 @@ use App\Models\PlaylistShare;
 use App\Models\PlaylistSong;
 use App\Models\Song;
 use App\Services\CloudinaryService;
+use App\Support\CatalogRevision;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -243,6 +243,6 @@ class UserPlaylistController extends Controller
 
     private function invalidateCatalogCache(): void
     {
-        Cache::store('file')->forever('api:catalog-content-revision:v1', (string) Str::uuid());
+        CatalogRevision::bump();
     }
 }

@@ -2,10 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\CatalogRevision;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 class InvalidateCatalogCache
@@ -20,7 +19,7 @@ class InvalidateCatalogCache
             && ! $request->session()->has('errors')) {
             // Includes single, bulk and delete-all mutations. All catalog
             // consumers use this revision, not just the song detail page.
-            Cache::store('file')->forever('api:catalog-content-revision:v1', (string) Str::uuid());
+            CatalogRevision::bump();
         }
 
         return $response;

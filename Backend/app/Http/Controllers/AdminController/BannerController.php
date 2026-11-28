@@ -10,6 +10,8 @@ use App\Models\Playlist;
 use App\Models\Topic;
 use App\Rules\PlainText;
 use App\Services\MediaAssetService;
+use App\Support\ExistingIds;
+use App\Support\OptionList;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -107,9 +109,11 @@ class BannerController extends Controller
 
     public function edit(string $slug): View
     {
+        $banner = $this->findBySlug($slug);
+
         return view('Admin.banners.edit', [
-            'item' => $this->findBySlug($slug),
-            ...$this->formOptions(),
+            'item' => $banner,
+            ...$this->formOptions($banner),
             'mediaAssets' => app(MediaAssetService::class)->latest(36, $this->bannerMediaFolder()),
         ]);
     }
@@ -313,13 +317,21 @@ class BannerController extends Controller
     }
 
     /** @return array{artists: mixed, genres: mixed, topics: mixed, playlists: mixed} */
-    private function formOptions(): array
+    private function formOptions(?Banner $banner = null): array
     {
+        $limit = OptionList::limit();
+        $options = fn (string $model, string $field) => OptionList::withSelected(
+            $model::query()->orderBy('name')->limit($limit)->get(),
+            $model,
+            (array) ($banner?->{$field} ?? []),
+            'name',
+        );
+
         return [
-            'artists' => Artist::query()->orderBy('name')->limit(300)->get(),
-            'genres' => Genre::query()->orderBy('name')->limit(300)->get(),
-            'topics' => Topic::query()->orderBy('name')->limit(300)->get(),
-            'playlists' => Playlist::query()->orderBy('name')->limit(300)->get(),
+            'artists' => $options(Artist::class, 'artist_ids'),
+            'genres' => $options(Genre::class, 'genre_ids'),
+            'topics' => $options(Topic::class, 'topic_ids'),
+            'playlists' => $options(Playlist::class, 'playlist_ids'),
         ];
     }
 
@@ -334,12 +346,10 @@ class BannerController extends Controller
         ];
 
         foreach ($relations as $field => [$model, $label]) {
-            foreach ((array) ($data[$field] ?? []) as $id) {
-                if (! $model::query()->find($id)) {
-                    throw ValidationException::withMessages([
-                        $field => "Một {$label} đã chọn không còn tồn tại.",
-                    ]);
-                }
+            if (ExistingIds::anyMissing($model, (array) ($data[$field] ?? []))) {
+                throw ValidationException::withMessages([
+                    $field => "Một {$label} đã chọn không còn tồn tại.",
+                ]);
             }
         }
     }

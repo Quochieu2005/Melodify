@@ -5,6 +5,7 @@ namespace App\Http\Controllers\AdminController;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminResourceRequest;
 use App\Rules\PlainText;
+use App\Support\OptionList;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -85,7 +86,7 @@ abstract class CrudResourceController extends Controller
 
         return view("{$this->viewDirectory}.edit", $this->viewData([
             'item' => $item,
-            'fields' => $this->resolvedFields(),
+            'fields' => $this->resolvedFields($item),
         ]));
     }
 
@@ -206,16 +207,23 @@ abstract class CrudResourceController extends Controller
         return $data;
     }
 
-    protected function resolvedFields(): array
+    protected function resolvedFields(?object $current = null): array
     {
-        return collect($this->fields)->map(function (array $field): array {
+        return collect($this->fields)->map(function (array $field, string $name) use ($current): array {
             if (! isset($field['option_model'])) {
                 return $field;
             }
 
             $model = $field['option_model'];
             $label = $field['option_label'] ?? 'name';
-            $field['options'] = $model::query()->orderBy($label)->get()->mapWithKeys(
+            // A select over every user would render one option per account; cap it but keep the chosen one.
+            $options = OptionList::withSelected(
+                $model::query()->orderBy($label)->limit(OptionList::limit())->get(),
+                $model,
+                [old($name), $current ? data_get($current, $name) : null],
+                $label,
+            );
+            $field['options'] = $options->mapWithKeys(
                 fn ($item): array => [(string) $item->getKey() => (string) data_get($item, $label)]
             )->all();
 

@@ -13,7 +13,7 @@ use App\Models\SongArtist;
 use App\Models\SongPlayEvent;
 use App\Models\SongShare;
 use App\Models\User;
-use Carbon\Carbon;
+use App\Services\Analytics\EventCounts;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
@@ -55,33 +55,18 @@ class DashboardController extends Controller
         $today = now()->startOfDay();
         $trendStart = $today->copy()->subDays(6);
         $recentPlayStart = $today->copy()->subDays(29);
-        // Read the time-series collections once instead of querying once per
-        // day and once per song.
-        $playEvents = SongPlayEvent::query()
-            ->where('started_at', '>=', $recentPlayStart)
-            ->get(['song_id', 'started_at']);
-        $playCountByDay = $playEvents
-            ->groupBy(fn (SongPlayEvent $event): string => $this->dayKey($event->started_at))
-            ->map(fn ($events): int => $events->count());
-        $playCountBySong = $playEvents
-            ->groupBy(fn (SongPlayEvent $event): string => (string) $event->song_id)
-            ->map(fn ($events): int => $events->count());
-
-        $successfulPaymentStatuses = ['success', 'paid', 'completed'];
-        $payments = Payment::query()
-            ->whereIn('status', $successfulPaymentStatuses)
-            ->where('paid_at', '>=', $trendStart)
-            ->get(['amount', 'paid_at']);
-        $paymentAmountByDay = $payments
-            ->groupBy(fn (Payment $payment): string => $this->dayKey($payment->paid_at))
-            ->map(fn ($items): float => (float) $items->sum(fn (Payment $payment): float => (float) ($payment->amount ?? 0)));
-
-        $newUsers = User::query()
-            ->where('created_at', '>=', $trendStart)
-            ->get(['created_at']);
-        $userCountByDay = $newUsers
-            ->groupBy(fn (User $user): string => $this->dayKey($user->created_at))
-            ->map(fn ($users): int => $users->count());
+        // MongoDB does the counting ($group). Loading every play event, payment and user row into PHP grows
+        // with traffic and ends in an out-of-memory error on the first page after login.
+        $playCountByDay = collect(EventCounts::perDay(SongPlayEvent::class, 'started_at', $recentPlayStart));
+        $playCountBySong = collect(EventCounts::by(SongPlayEvent::class, 'song_id', 'started_at', $recentPlayStart));
+        $paymentAmountByDay = collect(EventCounts::sumPerDay(
+            Payment::class,
+            'paid_at',
+            'amount',
+            $trendStart,
+            ['status' => ['$in' => ['success', 'paid', 'completed']]],
+        ));
+        $userCountByDay = collect(EventCounts::perDay(User::class, 'created_at', $trendStart));
 
         $playTrend = collect(range(6, 0))->map(function (int $daysAgo) use ($today, $playCountByDay): array {
             $day = $today->copy()->subDays($daysAgo);
@@ -186,14 +171,8 @@ class DashboardController extends Controller
     /** @return array{playlists: array<string, Collection>, artists: array<string, Collection>} */
     private function engagementRankings(Collection $playCounts): array
     {
-        $favoriteCounts = Favorite::query()
-            ->get(['song_id'])
-            ->groupBy(fn (Favorite $favorite): string => (string) $favorite->song_id)
-            ->map(fn (Collection $items): int => $items->count());
-        $shareCounts = SongShare::query()
-            ->get(['song_id'])
-            ->groupBy(fn (SongShare $share): string => (string) $share->song_id)
-            ->map(fn (Collection $items): int => $items->count());
+        $favoriteCounts = collect(EventCounts::by(Favorite::class, 'song_id'));
+        $shareCounts = collect(EventCounts::by(SongShare::class, 'song_id'));
 
         $playlistLinks = PlaylistSong::query()
             ->get(['playlist_id', 'song_id'])
@@ -289,16 +268,5 @@ class DashboardController extends Controller
             ->sortByDesc($metric)
             ->take(5)
             ->values();
-    }
-
-    private function dayKey(mixed $value): string
-    {
-        if (! $value instanceof \DateTimeInterface) {
-            return '';
-        }
-
-        return Carbon::instance($value)
-            ->setTimezone(config('app.timezone'))
-            ->format('Y-m-d');
     }
 }

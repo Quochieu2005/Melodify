@@ -11,6 +11,7 @@ use App\Models\Topic;
 use App\Models\User;
 use App\Rules\PlainText;
 use App\Support\AudioUploadRules;
+use App\Support\ExistingIds;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -170,18 +171,12 @@ class AdminResourceRequest extends FormRequest
             }
 
             if ($this->route()?->getName() && str_contains($this->route()->getName(), 'albums')) {
-                foreach ((array) $this->input('artist_ids', []) as $artistId) {
-                    if (! Artist::query()->find($artistId)) {
-                        $validator->errors()->add('artist_ids', 'Một nghệ sĩ đã chọn không tồn tại.');
-                        break;
-                    }
+                if (ExistingIds::anyMissing(Artist::class, (array) $this->input('artist_ids', []))) {
+                    $validator->errors()->add('artist_ids', 'Một nghệ sĩ đã chọn không tồn tại.');
                 }
 
-                foreach ((array) $this->input('song_ids', []) as $songId) {
-                    if (! Song::query()->find($songId)) {
-                        $validator->errors()->add('song_ids', 'Một bài hát đã chọn không tồn tại.');
-                        break;
-                    }
+                if (ExistingIds::anyMissing(Song::class, (array) $this->input('song_ids', []))) {
+                    $validator->errors()->add('song_ids', 'Một bài hát đã chọn không tồn tại.');
                 }
             }
 
@@ -190,11 +185,8 @@ class AdminResourceRequest extends FormRequest
             }
 
             if ($this->route()?->getName() && str_contains($this->route()->getName(), 'songs')) {
-                foreach ((array) $this->input('topic_ids', []) as $topicId) {
-                    if (! Topic::query()->find($topicId)) {
-                        $validator->errors()->add('topic_ids', 'Một chủ đề đã chọn không tồn tại.');
-                        break;
-                    }
+                if (ExistingIds::anyMissing(Topic::class, (array) $this->input('topic_ids', []))) {
+                    $validator->errors()->add('topic_ids', 'Một chủ đề đã chọn không tồn tại.');
                 }
 
                 if (filled($this->input('topic_id')) && ! Topic::query()->find($this->input('topic_id'))) {

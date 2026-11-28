@@ -65,9 +65,11 @@ class GenreController extends MediaCatalogController
 
     protected function supplementalFormData(?object $item): array
     {
+        $selected = $this->selectedPlaylistIds($item, 'genre_ids');
+
         return [
-            'playlists' => $this->availablePlaylists(),
-            'selectedPlaylistIds' => $this->selectedPlaylistIds($item, 'genre_ids'),
+            'playlists' => $this->availablePlaylists($selected),
+            'selectedPlaylistIds' => $selected,
         ];
     }
 

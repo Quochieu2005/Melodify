@@ -7,6 +7,7 @@ use App\Models\Album;
 use App\Models\Artist;
 use App\Models\Song;
 use App\Services\MediaAssetService;
+use App\Support\OptionList;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
@@ -40,17 +41,19 @@ class AlbumController extends CrudResourceController
     public function edit(string $id): View
     {
         $item = Album::query()->findOrFail($id);
+        $selectedArtistIds = $this->selectedArtists($item);
+        $selectedSongIds = Song::query()
+            ->where('album_id', (string) $item->getKey())
+            ->orderBy('title')
+            ->pluck((new Song)->getKeyName())
+            ->map(fn ($id): string => (string) $id)
+            ->all();
 
         return view('Admin.albums.edit', $this->viewData([
             'item' => $item,
-            ...$this->formOptions(),
-            'selectedArtistIds' => $this->selectedArtists($item),
-            'selectedSongIds' => Song::query()
-                ->where('album_id', (string) $item->getKey())
-                ->orderBy('title')
-                ->pluck((new Song)->getKeyName())
-                ->map(fn ($id): string => (string) $id)
-                ->all(),
+            ...$this->formOptions($selectedArtistIds, $selectedSongIds),
+            'selectedArtistIds' => $selectedArtistIds,
+            'selectedSongIds' => $selectedSongIds,
             'mediaAssets' => app(MediaAssetService::class)->latest(),
         ]));
     }
@@ -93,11 +96,18 @@ class AlbumController extends CrudResourceController
     }
 
     /** @return array{artists: mixed, songs: mixed} */
-    private function formOptions(): array
+    private function formOptions(array $selectedArtistIds = [], array $selectedSongIds = []): array
     {
+        $limit = OptionList::limit();
+
         return [
-            'artists' => Artist::query()->orderBy('name')->limit(500)->get(),
-            'songs' => Song::query()->whereIn('status', ['draft', 'published'])->orderBy('title')->limit(500)->get(),
+            'artists' => OptionList::withSelected(Artist::query()->orderBy('name')->limit($limit)->get(), Artist::class, $selectedArtistIds, 'name'),
+            'songs' => OptionList::withSelected(
+                Song::query()->whereIn('status', ['draft', 'published'])->orderBy('title')->limit($limit)->get(),
+                Song::class,
+                $selectedSongIds,
+                'title',
+            ),
         ];
     }
 
@@ -149,8 +159,8 @@ class AlbumController extends CrudResourceController
             Song::query()->whereIn($keyName, $removedIds)->update(['album_id' => null]);
         }
 
-        foreach ($songIds as $songId) {
-            Song::query()->whereKey($songId)->update(['album_id' => $albumId]);
+        if ($songIds !== []) {
+            Song::query()->whereIn($keyName, $songIds)->update(['album_id' => $albumId]);
         }
     }
 }
