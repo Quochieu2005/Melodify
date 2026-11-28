@@ -24,7 +24,7 @@ import { downloadSongFiles, setSongFavorites } from '@/lib/song-actions';
 
 import styles from '@/components/albums/AlbumDetailPage.module.css';
 import { ArtistNames, type ArtistReference } from './ArtistLink';
-import { recentAlbumItem, recentPlaylistItem, recentVideoItem, recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
+import { recentAlbumItem, recentArtistItem, recentPlaylistItem, recentVideoItem, recentSongItem, recordRecentItem, songPath } from '@/lib/recent-history';
 
 const fallbackCover = '/images/cover-placeholder.svg';
 
@@ -232,6 +232,7 @@ export default function ArtistDetailPage({ slug }: { slug: string }) {
 
         if (!cancelled) {
           setRequest({ slug, artist, isLoading: false, error: '' });
+          recordRecentItem(recentArtistItem(artist));
           setUpdatedFollowers(null);
           setIsBioOpen(false);
           setSelectedSongIds([]);

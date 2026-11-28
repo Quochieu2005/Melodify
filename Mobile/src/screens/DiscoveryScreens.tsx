@@ -401,7 +401,7 @@ export function RecentScreen() {
   const [entities, setEntities] = useState<RecentEntity[] | null>(null);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "song" | "playlist" | "album" | "artist" | "radio"
+    "song" | "playlist" | "album" | "artist"
   >("song");
   const reload = async () => {
     try {
@@ -482,7 +482,6 @@ export function RecentScreen() {
     { id: "playlist", label: "Playlist" },
     { id: "album", label: "Album" },
     { id: "artist", label: "Nghệ sĩ" },
-    { id: "radio", label: "Radio" },
   ] as const;
   return (
     <AppShell>
@@ -609,9 +608,6 @@ export function RecentScreen() {
         entities &&
         !entities.some((item) => item.kind === "playlist") ? (
           <StateMessage empty="Playlist đã xem sẽ xuất hiện tại đây." />
-        ) : null}
-        {activeTab === "radio" ? (
-          <StateMessage empty="Ứng dụng hiện chưa có API Radio/lịch sử Radio." />
         ) : null}
       </ScrollPage>
     </AppShell>

@@ -1,6 +1,6 @@
 import type { AlbumRecord, Playlist, Song, SongArtistCredit, SongVideo } from './api';
 
-export type RecentCategory = 'song' | 'playlist' | 'album' | 'artist' | 'radio' | 'video';
+export type RecentCategory = 'song' | 'playlist' | 'album' | 'artist' | 'video';
 
 export type RecentItem = {
   id: string;
@@ -56,11 +56,16 @@ export function recordRecentItem(item: Omit<RecentItem, 'updatedAt'>) {
 }
 
 export function removeRecentSongs(songIds: string[]) {
-  if (!canUseStorage() || songIds.length === 0) return 0;
+  return removeRecentItems('song', songIds);
+}
 
-  const idsToRemove = new Set(songIds);
+/** Removes the given items of one category (songs, playlists, albums, artists or videos) from the history. */
+export function removeRecentItems(category: RecentCategory, ids: string[]) {
+  if (!canUseStorage() || ids.length === 0) return 0;
+
+  const idsToRemove = new Set(ids);
   const currentItems = readRecentItems();
-  const nextItems = currentItems.filter((item) => item.category !== 'song' || !idsToRemove.has(item.id));
+  const nextItems = currentItems.filter((item) => item.category !== category || !idsToRemove.has(item.id));
   const removedCount = currentItems.length - nextItems.length;
   if (removedCount === 0) return 0;
 
@@ -162,7 +167,8 @@ export function recentVideoItem(video: SongVideo): Omit<RecentItem, 'updatedAt'>
     title: video.title,
     subtitle: video.artists?.map((artist) => artist.name).join(', ') || 'Video',
     imageUrl: video.thumbnail_url || fallbackCover,
-    href: video.watch_url || video.video_url || entityPath('video', video.slug, video.id),
+    // The history opens the video page on Melodify, not the external player address.
+    href: entityPath('video', video.slug, video.id),
     durationSeconds: video.duration_seconds,
   };
 }

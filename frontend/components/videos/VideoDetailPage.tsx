@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { getVideo, getVideoDownloadUrl, getVisitorId, listVideos, recordVideoShare, recordVideoView, reportVideo, toggleVideoFavorite, type SongVideo, type VideoReportReason } from '@/lib/api';
+import { recentVideoItem, recordRecentItem } from '@/lib/recent-history';
 import VideoCard from './VideoCard';
 
 const reportReasons: Array<{ value: VideoReportReason; label: string }> = [
@@ -68,6 +69,7 @@ export default function VideoDetailPage({ slug }: { slug: string }) {
         if (cancelled) return;
         setVideo(response.data);
         setFetchState({ slug, error: '' });
+        recordRecentItem(recentVideoItem(response.data));
         void recordVideoView(response.data.slug || response.data.id, getVisitorId())
           .then((result) => {
             if (!cancelled && result.recorded) {
