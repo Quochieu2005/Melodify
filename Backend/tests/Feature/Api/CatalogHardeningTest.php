@@ -6,6 +6,7 @@ use App\Models\Album;
 use App\Models\Favorite;
 use App\Models\Genre;
 use App\Models\Playlist;
+use App\Models\PlaylistSong;
 use App\Models\Song;
 use App\Models\SongGenre;
 use App\Models\SongPlayEvent;
@@ -37,7 +38,7 @@ class CatalogHardeningTest extends TestCase
         try {
             $connection = DB::connection('mongodb');
             if ($connection->getTablePrefix() === $this->prefix && preg_match('/^test_catalog_hard_[a-f0-9]{16}_$/', $this->prefix)) {
-                foreach (['songs', 'albums', 'genres', 'song_genres', 'playlists', 'favorites', 'song_play_events', 'song_shares', 'album_shares', 'playlist_shares', 'song_videos', 'users', 'user_api_tokens', 'artists'] as $collection) {
+                foreach (['songs', 'albums', 'genres', 'song_genres', 'playlists', 'favorites', 'song_play_events', 'song_shares', 'album_shares', 'playlist_shares', 'song_videos', 'users', 'user_api_tokens', 'artists', 'playlist_songs'] as $collection) {
                     $connection->getCollection($collection)->drop();
                 }
             }
@@ -215,5 +216,30 @@ class CatalogHardeningTest extends TestCase
             $this->assertNotNull($route, $name);
             $this->assertContains('throttle:240,1,catalog', $route->gatherMiddleware(), $name);
         }
+    }
+
+    public function test_a_blocked_song_is_not_public_and_an_unknown_slug_is_a_plain_404(): void
+    {
+        $blocked = Song::query()->create(['title' => 'Blocked', 'slug' => 'blocked-song', 'status' => 'blocked']);
+        $draft = Song::query()->create(['title' => 'Draft', 'slug' => 'draft-song', 'status' => 'draft']);
+
+        $this->getJson('/api/v1/songs/blocked-song')->assertNotFound();
+        $this->getJson('/api/v1/songs/blocked-song/lyrics')->assertNotFound();
+        $this->postJson('/api/v1/songs/blocked-song/view', [])->assertNotFound();
+        $this->getJson('/api/v1/songs/draft-song')->assertOk()->assertJsonPath('data.id', (string) $draft->getKey());
+        $this->getJson('/api/v1/songs/no-such-song-at-all')->assertNotFound();
+    }
+
+    public function test_the_song_page_lists_only_public_playlists_that_contain_the_song(): void
+    {
+        $song = $this->song('In playlists');
+        $make = fn (string $name, string $visibility, string $status = 'active'): string => (string) Playlist::query()->create(['name' => $name, 'slug' => Str::slug($name), 'status' => $status, 'visibility' => $visibility])->getKey();
+        foreach ([$make('Public One', 'public'), $make('Secret Mix', 'private'), $make('Gone', 'public', 'inactive')] as $id) {
+            PlaylistSong::query()->create(['playlist_id' => $id, 'song_id' => (string) $song->getKey(), 'position' => 1]);
+        }
+
+        $names = collect($this->getJson("/api/v1/songs/{$song->slug}")->assertOk()->json('data.playlists'))->pluck('name')->all();
+
+        $this->assertSame(['Public One'], $names);
     }
 }

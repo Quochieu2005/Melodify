@@ -1943,24 +1943,20 @@ class CatalogController extends Controller
 
     private function localSongById(string $slug): ?Song
     {
-        $song = Song::query()->where('slug', $slug)->first();
+        // Blocked songs are not public. The old last resort loaded the whole songs collection to compare slugs, so
+        // any unknown slug cost a full read; the slug column is already matched exactly below.
+        $visible = fn () => Song::query()->whereIn('status', ['published', 'draft']);
+        $song = $visible()->where('slug', $slug)->first();
 
         if (! $song) {
             try {
-                $song = Song::query()->find($slug);
+                $song = $visible()->find($slug);
             } catch (\Throwable) {
                 $song = null;
             }
         }
 
-        if (! $song) {
-            $normalizedSlug = Str::slug($slug);
-            $song = Song::query()->get()->first(
-                fn (Song $candidate): bool => Str::slug((string) $candidate->title) === $normalizedSlug,
-            );
-        }
-
-        return $song ?: Song::query()
+        return $song ?: $visible()
             ->whereIn('external_source', ['nhaccuatui', 'itunes'])
             ->where('external_id', $slug)
             ->first();
@@ -1994,7 +1990,10 @@ class CatalogController extends Controller
             ->whereIn((new Topic)->getKeyName(), $topicLinks->pluck('topic_id')->map('strval')->unique()->values()->all())
             ->get()
             ->keyBy(fn (Topic $topic): string => (string) $topic->getKey());
+        // Only playlists anyone can open: user-made private playlists must not show up on a public song page.
         $playlistsById = $playlistLinks->isEmpty() ? collect() : Playlist::query()
+            ->where('status', 'active')
+            ->whereIn('visibility', ['public', 'unlisted'])
             ->whereIn((new Playlist)->getKeyName(), $playlistLinks->pluck('playlist_id')->map('strval')->unique()->values()->all())
             ->get()
             ->keyBy(fn (Playlist $playlist): string => (string) $playlist->getKey());
