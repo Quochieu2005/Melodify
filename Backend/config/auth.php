@@ -133,6 +133,13 @@ return [
     'api_token_session_ttl_days' => env('API_TOKEN_SESSION_TTL_DAYS', 1),
     'api_token_remember_ttl_days' => env('API_TOKEN_REMEMBER_TTL_DAYS', 30),
 
+    // Signed ticket for <audio>/download URLs, which cannot send an Authorization header.
+    'media_token_ttl_minutes' => env('MEDIA_TOKEN_TTL_MINUTES', 60),
+
+    // Old clients put the 30-day login token in the media URL (?access_token=). Keep accepting it on the media
+    // routes only until every client uses media tokens, then set ALLOW_QUERY_ACCESS_TOKEN=false.
+    'allow_query_access_token' => (bool) env('ALLOW_QUERY_ACCESS_TOKEN', true),
+
     'phone_otp' => [
         'driver' => env('PHONE_OTP_DRIVER', 'log'),
         'ttl_minutes' => env('PHONE_OTP_TTL_MINUTES', 5),
