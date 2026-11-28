@@ -7,7 +7,7 @@ export const LEGAL_CONTACT_EMAIL = '';
 
 export default function LegalPage({ title, updatedAt, intro, sections }: { title: string; updatedAt: string; intro: string; sections: LegalSection[] }) {
   return (
-    <main className="w-full max-w-3xl px-8 pb-16 pt-8 text-white/85">
+    <main className="w-full px-8 pb-16 pt-8 text-white/85">
       <h1 className="text-[28px] font-bold leading-tight text-white">{title}</h1>
       <p className="mt-2 text-sm text-white/55">Cập nhật lần cuối: {updatedAt}</p>
       <p className="mt-6 leading-7">{intro}</p>
