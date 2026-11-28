@@ -223,8 +223,7 @@ export default function FavoriteSongsPage() {
   }, [reloadKey]);
 
   useEffect(() => {
-    const syncUser = () => {
-      setReloadKey((key) => key + 1);
+    const readUser = () => {
       try {
         const storedUser = window.localStorage.getItem(AUTH_USER_STORAGE_KEY);
         setAuthUser(storedUser ? JSON.parse(storedUser) as AuthUser : null);
@@ -232,8 +231,13 @@ export default function FavoriteSongsPage() {
         setAuthUser(null);
       }
     };
+    // The first list is already requested by the effect above; only a later account change reloads it.
+    const syncUser = () => {
+      setReloadKey((key) => key + 1);
+      readUser();
+    };
 
-    syncUser();
+    readUser();
     let timer: ReturnType<typeof setTimeout>;
     const syncFavorites = () => { clearTimeout(timer); timer = setTimeout(() => setReloadKey((key) => key + 1), 100); };
     window.addEventListener('melodify-library-changed', syncFavorites);
