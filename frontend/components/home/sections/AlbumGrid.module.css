@@ -55,3 +55,38 @@
     gap: 16px;
   }
 }
+
+/* One row only: show as many albums as there are columns, hide the rest instead of wrapping to a second row. */
+.homeGrid > :nth-child(n + 3) {
+  display: none;
+}
+
+@container (min-width: 560px) {
+  .homeGrid > :nth-child(3) {
+    display: block;
+  }
+}
+
+@container (min-width: 820px) {
+  .homeGrid > :nth-child(4) {
+    display: block;
+  }
+}
+
+@container (min-width: 1120px) {
+  .homeGrid > :nth-child(5) {
+    display: block;
+  }
+}
+
+@container (min-width: 1400px) {
+  .homeGrid > :nth-child(6) {
+    display: block;
+  }
+}
+
+@container (min-width: 1680px) {
+  .homeGrid > :nth-child(7) {
+    display: block;
+  }
+}
