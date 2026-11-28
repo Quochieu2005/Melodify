@@ -46,6 +46,9 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class CatalogController extends Controller
 {
+    /** Most songs one album, genre, topic or artist page returns; the page also reports the real total. */
+    private const DETAIL_SONG_LIMIT = 500;
+
     use BuildsHomeFeeds;
     use RecordsEngagement;
     use SearchesCatalog;
@@ -751,6 +754,7 @@ class CatalogController extends Controller
 
         if ($includeSongs) {
             $data['songs'] = $this->songsForTopic($topic);
+            $data['songs_truncated'] = $data['song_count'] > count($data['songs']);
         }
 
         return $data;
@@ -776,8 +780,10 @@ class CatalogController extends Controller
                 ->whereIn('status', ['published', 'draft'])
                 ->whereIn('_id', $genre->songs()->pluck('song_id')->all())
                 ->orderBy('title')
+                ->limit(self::DETAIL_SONG_LIMIT)
                 ->get()
                 ->pipe(fn (Collection $songs): array => $this->localSongsData($songs));
+            $data['songs_truncated'] = $data['song_count'] > count($data['songs']);
         }
 
         return $data;
@@ -821,8 +827,10 @@ class CatalogController extends Controller
                 ->where('album_id', (string) $album->getKey())
                 ->whereIn('status', ['published', 'draft'])
                 ->orderBy('title')
+                ->limit(self::DETAIL_SONG_LIMIT)
                 ->get()
                 ->pipe(fn (Collection $songs): array => $this->localSongsData($songs));
+            $data['songs_truncated'] = $data['song_count'] > count($data['songs']);
         }
 
         return $data;
@@ -892,7 +900,10 @@ class CatalogController extends Controller
                 }
             })
             ->orderBy('title')
+            ->limit(self::DETAIL_SONG_LIMIT + 1)
             ->get();
+        $data['songs_truncated'] = $candidateSongs->count() > self::DETAIL_SONG_LIMIT;
+        $candidateSongs = $candidateSongs->take(self::DETAIL_SONG_LIMIT)->values();
         $artistCreditsBySong = $this->songArtistsForCollection($candidateSongs);
         $artistSongs = $candidateSongs
             ->filter(function (Song $song) use ($artistId, $linkedSongIds, $artistCreditsBySong): bool {
@@ -1646,6 +1657,9 @@ class CatalogController extends Controller
 
     /**
      * Build chart lists from the published catalog, ordered by most recently added.
+     *
+     * Only the few columns the chart filters read are loaded for the whole catalog; audio files, artist credits and
+     * full documents are loaded afterwards for the songs that actually appear in a chart (at most 10 charts x 50).
      */
     private function chartPayloads(string $dateKey, int $songsPerChart = 50): array
     {
@@ -1653,17 +1667,10 @@ class CatalogController extends Controller
             ->where('status', 'published')
             ->orderByDesc('created_at')
             ->orderByDesc('release_date')
-            ->get();
-        $songIds = $songs->map(fn (Song $song): string => (string) $song->getKey())->filter()->values()->all();
-        $audioBySong = SongAudioFile::query()
-            ->whereIn('song_id', $songIds)
-            ->where('status', 'active')
-            ->where('file_type', 'full')
-            ->get()
-            ->keyBy(fn (SongAudioFile $audio): string => (string) $audio->song_id);
-        $artistCredits = $this->songArtistsForCollection($songs);
+            ->get(['title', 'artist_name', 'country_code', 'created_at', 'release_date']);
         $genreNamesBySong = $this->songGenresForCollection($songs);
-        $charts = [];
+
+        $selections = [];
         foreach ($this->chartDefinitions() as $definition) {
             $filtered = $songs->filter(function (Song $song) use ($definition, $genreNamesBySong): bool {
                 return $definition['filter']($song, $genreNamesBySong[(string) $song->getKey()] ?? []);
@@ -1682,15 +1689,40 @@ class CatalogController extends Controller
                     ->values();
             }
 
-            $chartSongCount = min($filtered->count(), 50);
-            $chartSongs = $filtered->take($songsPerChart)->map(function (Song $song, int $index) use ($audioBySong, $artistCredits): array {
-                $data = $this->compactSongData($song, $audioBySong->get((string) $song->getKey()), $artistCredits[(string) $song->getKey()] ?? []);
+            $selections[] = [$definition, min($filtered->count(), 50), $filtered->take($songsPerChart)];
+        }
 
-                return array_merge($data, [
-                    'rank' => $index + 1,
-                    'trend' => 'same',
-                ]);
-            })->values()->all();
+        $chartSongIds = collect($selections)
+            ->flatMap(fn (array $selection) => $selection[2]->map(fn (Song $song): string => (string) $song->getKey()))
+            ->unique()
+            ->values()
+            ->all();
+        $fullSongs = $chartSongIds === [] ? collect() : Song::query()
+            ->whereIn((new Song)->getKeyName(), $chartSongIds)
+            ->get()
+            ->keyBy(fn (Song $song): string => (string) $song->getKey());
+        $audioBySong = $chartSongIds === [] ? collect() : SongAudioFile::query()
+            ->whereIn('song_id', $chartSongIds)
+            ->where('status', 'active')
+            ->where('file_type', 'full')
+            ->get()
+            ->keyBy(fn (SongAudioFile $audio): string => (string) $audio->song_id);
+        $artistCredits = $this->songArtistsForCollection($fullSongs->values());
+
+        $charts = [];
+        foreach ($selections as [$definition, $chartSongCount, $selected]) {
+            $chartSongs = $selected
+                ->map(fn (Song $song): ?Song => $fullSongs->get((string) $song->getKey()))
+                ->filter()
+                ->values()
+                ->map(function (Song $song, int $index) use ($audioBySong, $artistCredits): array {
+                    $data = $this->compactSongData($song, $audioBySong->get((string) $song->getKey()), $artistCredits[(string) $song->getKey()] ?? []);
+
+                    return array_merge($data, [
+                        'rank' => $index + 1,
+                        'trend' => 'same',
+                    ]);
+                })->values()->all();
             $firstSong = $chartSongs[0] ?? null;
 
             $charts[] = [
@@ -2270,7 +2302,7 @@ class CatalogController extends Controller
         }
 
         $songs = Song::query()
-            ->whereIn((new Song)->getKeyName(), $songIds)
+            ->whereIn((new Song)->getKeyName(), array_slice($songIds, 0, self::DETAIL_SONG_LIMIT))
             ->whereIn('status', ['published', 'draft'])
             ->get();
         $songsById = collect($this->localSongsData($songs))->keyBy('id');

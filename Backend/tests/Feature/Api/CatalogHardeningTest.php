@@ -8,6 +8,7 @@ use App\Models\Genre;
 use App\Models\Playlist;
 use App\Models\PlaylistSong;
 use App\Models\Song;
+use App\Models\SongAudioFile;
 use App\Models\SongGenre;
 use App\Models\SongPlayEvent;
 use App\Models\SongShare;
@@ -40,7 +41,7 @@ class CatalogHardeningTest extends TestCase
         try {
             $connection = DB::connection('mongodb');
             if ($connection->getTablePrefix() === $this->prefix && preg_match('/^test_catalog_hard_[a-f0-9]{16}_$/', $this->prefix)) {
-                foreach (['songs', 'albums', 'genres', 'song_genres', 'playlists', 'favorites', 'song_play_events', 'song_shares', 'album_shares', 'playlist_shares', 'song_videos', 'users', 'user_api_tokens', 'artists', 'playlist_songs', 'video_favorites'] as $collection) {
+                foreach (['songs', 'albums', 'genres', 'song_genres', 'playlists', 'favorites', 'song_play_events', 'song_shares', 'album_shares', 'playlist_shares', 'song_videos', 'users', 'user_api_tokens', 'artists', 'playlist_songs', 'video_favorites', 'song_audio_files'] as $collection) {
                     $connection->getCollection($collection)->drop();
                 }
             }
@@ -275,5 +276,53 @@ class CatalogHardeningTest extends TestCase
         $guest = collect($this->getJson('/api/v1/videos')->assertOk()->json('data'))->keyBy('slug');
         $this->assertSame(2, $guest['counted-video']['favorite_count']);
         $this->assertFalse($guest['counted-video']['is_favorite']);
+    }
+
+    public function test_charts_pick_the_right_songs_and_still_carry_their_audio_and_artist(): void
+    {
+        $old = Song::query()->create(['title' => 'Bai cu', 'slug' => 'bai-cu', 'status' => 'published', 'country_code' => 'VN', 'artist_name' => 'Ca si A', 'created_at' => now()->subDays(3)]);
+        $new = Song::query()->create(['title' => 'Bai moi', 'slug' => 'bai-moi', 'status' => 'published', 'country_code' => 'VN', 'artist_name' => 'Ca si B', 'created_at' => now()]);
+        Song::query()->create(['title' => 'Korean', 'slug' => 'korean', 'status' => 'published', 'country_code' => 'KR', 'artist_name' => 'K Star']);
+        Song::query()->create(['title' => 'Nhap', 'slug' => 'nhap', 'status' => 'draft', 'country_code' => 'VN', 'artist_name' => 'Draft']);
+        SongAudioFile::query()->create(['song_id' => (string) $new->getKey(), 'file_url' => 'https://example.test/new.mp3', 'file_type' => 'full', 'status' => 'active', 'source' => 'upload']);
+
+        $viet = collect($this->getJson('/api/v1/charts/top-50-nhac-viet')->assertOk()->json('data.songs'));
+        $this->assertSame(['bai-moi', 'bai-cu'], $viet->pluck('slug')->all());
+        $this->assertSame([1, 2], $viet->pluck('rank')->all());
+        $this->assertTrue($viet[0]['has_full_audio']);
+        $this->assertSame('https://example.test/new.mp3', $viet[0]['audio_url']);
+        $this->assertFalse($viet[1]['has_full_audio']);
+        $this->assertSame('Ca si B', $viet[0]['artist']['name']);
+
+        $korean = collect($this->getJson('/api/v1/charts/top-50-nhac-han')->assertOk()->json('data.songs'));
+        $this->assertSame(['korean'], $korean->pluck('slug')->all());
+    }
+
+    public function test_an_album_page_returns_a_bounded_number_of_songs_and_says_when_it_was_cut(): void
+    {
+        $album = Album::query()->create(['title' => 'Huge', 'slug' => 'huge-album', 'status' => 'published']);
+        $rows = [];
+        foreach (range(1, 505) as $i) {
+            $rows[] = ['title' => sprintf('Track %04d', $i), 'slug' => 'huge-'.$i, 'status' => 'published', 'album_id' => (string) $album->getKey()];
+        }
+        Song::query()->insert($rows);
+
+        $page = $this->getJson('/api/v1/albums/huge-album')->assertOk()->json('data');
+
+        $this->assertSame(505, $page['song_count']);
+        $this->assertCount(500, $page['songs']);
+        $this->assertTrue($page['songs_truncated']);
+        $this->assertSame('Track 0001', $page['songs'][0]['title']);
+    }
+
+    public function test_a_small_album_is_not_marked_as_cut(): void
+    {
+        $album = Album::query()->create(['title' => 'Small', 'slug' => 'small-album', 'status' => 'published']);
+        Song::query()->create(['title' => 'Only', 'slug' => 'only-one', 'status' => 'published', 'album_id' => (string) $album->getKey()]);
+
+        $page = $this->getJson('/api/v1/albums/small-album')->assertOk()->json('data');
+
+        $this->assertCount(1, $page['songs']);
+        $this->assertFalse($page['songs_truncated']);
     }
 }
