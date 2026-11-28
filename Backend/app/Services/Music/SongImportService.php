@@ -8,6 +8,7 @@ use App\Models\Song;
 use App\Models\SongArtist;
 use App\Models\SongAudioFile;
 use App\Services\CloudinaryService;
+use App\Support\ArtistKey;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -189,18 +190,37 @@ class SongImportService
             ->all();
     }
 
-    public function repairArtistCatalog(?object $admin = null): array
+    /**
+     * Split combined artist names and merge duplicates. Everything that points at a removed artist (credits,
+     * followers, albums, playlists, banners, videos, the linked user account) is moved to the kept artist first.
+     * With $dryRun nothing is written and the counts show what would change.
+     *
+     * @return array{split: int, merged: int, credits: int, references: int}
+     */
+    public function repairArtistCatalog(?object $admin = null, bool $dryRun = false): array
     {
-        $stats = ['split' => 0, 'merged' => 0, 'credits' => 0];
+        $stats = ['split' => 0, 'merged' => 0, 'credits' => 0, 'references' => 0];
+        $mover = app(ArtistReferenceMover::class);
+        $this->stampNameKeys();
 
-        foreach (Artist::query()->get() as $combinedArtist) {
-            $names = $this->artistNames((string) $combinedArtist->name);
+        foreach (Artist::query()->get(['name']) as $nameOnly) {
+            $names = $this->artistNames((string) $nameOnly->name);
             if (count($names) < 2) {
                 continue;
             }
 
-            $artists = $this->syncArtists(['source' => (string) $combinedArtist->external_source], $names, $admin);
+            $combinedArtist = Artist::query()->find($nameOnly->getKey());
             $credits = SongArtist::query()->where('artist_id', (string) $combinedArtist->getKey())->get();
+            $stats['split']++;
+
+            if ($dryRun) {
+                $stats['credits'] += $credits->count() * count($names);
+                $stats['references'] += $mover->move((string) $combinedArtist->getKey(), ['dry-run'], true);
+
+                continue;
+            }
+
+            $artists = $this->syncArtists(['source' => (string) $combinedArtist->external_source], $names, $admin);
             foreach ($credits as $credit) {
                 foreach ($artists as $position => $artist) {
                     SongArtist::query()->updateOrCreate(
@@ -212,49 +232,109 @@ class SongImportService
                 $credit->delete();
             }
 
+            $stats['references'] += $mover->move(
+                (string) $combinedArtist->getKey(),
+                array_map(fn (Artist $artist): string => (string) $artist->getKey(), $artists),
+            );
             $combinedArtist->delete();
-            $stats['split']++;
         }
 
-        Artist::query()->get()
-            ->groupBy(fn (Artist $artist): string => $this->artistKey((string) $artist->name))
-            ->each(function ($artists) use (&$stats): void {
-                if ($artists->count() < 2) {
-                    return;
+        foreach ($this->duplicateNameKeys() as $key) {
+            $group = Artist::query()->where('name_key', $key)->get();
+            // Keep the artist that has a linked account first, then the richest profile, then the oldest.
+            $primary = $group
+                ->sortBy(fn (Artist $artist): int => (int) $artist->created_at?->getTimestamp())
+                ->sortByDesc(fn (Artist $artist): int => (filled($artist->user_id) ? 4 : 0) + (int) filled($artist->avatar_url) + (int) (bool) $artist->verified)
+                ->first();
+
+            foreach ($group->where($primary->getKeyName(), '!=', $primary->getKey()) as $duplicate) {
+                $stats['merged']++;
+                $credits = SongArtist::query()->where('artist_id', (string) $duplicate->getKey())->get();
+                $stats['credits'] += $credits->count();
+                $stats['references'] += $mover->move((string) $duplicate->getKey(), [(string) $primary->getKey()], $dryRun);
+
+                if ($dryRun) {
+                    continue;
                 }
 
-                $primary = $artists->sortByDesc(fn (Artist $artist): int => (int) filled($artist->avatar_url) + (int) (bool) $artist->verified)->first();
-                foreach ($artists->where($primary->getKeyName(), '!=', $primary->getKey()) as $duplicate) {
-                    foreach (SongArtist::query()->where('artist_id', (string) $duplicate->getKey())->get() as $credit) {
-                        $existing = SongArtist::query()->where('song_id', (string) $credit->song_id)->where('artist_id', (string) $primary->getKey())->first();
-                        if ($existing) {
-                            $credit->delete();
-                        } else {
-                            $credit->artist_id = (string) $primary->getKey();
-                            $credit->save();
-                        }
-                        $stats['credits']++;
+                foreach ($credits as $credit) {
+                    $existing = SongArtist::query()->where('song_id', (string) $credit->song_id)->where('artist_id', (string) $primary->getKey())->first();
+                    if ($existing) {
+                        $credit->delete();
+                    } else {
+                        $credit->artist_id = (string) $primary->getKey();
+                        $credit->save();
                     }
-                    $duplicate->delete();
-                    $stats['merged']++;
                 }
-            });
+
+                // The user link is unique, so free it by deleting the duplicate before moving it to the kept artist.
+                $linkedUserId = filled($duplicate->user_id) && blank($primary->user_id) ? (string) $duplicate->user_id : null;
+                foreach (['avatar_url', 'avatar_public_id', 'country_code', 'bio', 'real_name'] as $field) {
+                    if (blank($primary->{$field}) && filled($duplicate->{$field})) {
+                        $primary->{$field} = $duplicate->{$field};
+                    }
+                }
+                $duplicate->delete();
+                if ($linkedUserId !== null) {
+                    $primary->user_id = $linkedUserId;
+                }
+                $primary->save();
+            }
+        }
 
         return $stats;
+    }
+
+    /** Give every artist that predates name_key its key (the duplicate search relies on it). */
+    public function stampNameKeys(): void
+    {
+        foreach (Artist::query()->whereNull('name_key')->get(['name']) as $artist) {
+            Artist::query()->whereKey($artist->getKey())->update(['name_key' => $this->artistKey((string) $artist->name)]);
+        }
+    }
+
+    /** @return array<int, string> name keys shared by two or more artists, found by MongoDB */
+    private function duplicateNameKeys(): array
+    {
+        $rows = Artist::raw(fn ($collection) => $collection->aggregate([
+            ['$match' => ['name_key' => ['$nin' => [null, '']]]],
+            ['$group' => ['_id' => '$name_key', 'total' => ['$sum' => 1]]],
+            ['$match' => ['total' => ['$gt' => 1]]],
+        ], ['typeMap' => ['root' => 'array', 'document' => 'array']])->toArray());
+
+        return array_map(fn (array $row): string => (string) $row['_id'], $rows);
     }
 
     private function findArtistByName(string $name): ?Artist
     {
         $key = $this->artistKey($name);
+        if ($key === '') {
+            return null;
+        }
 
-        return Artist::query()->get()->first(
-            fn (Artist $artist): bool => $this->artistKey((string) $artist->name) === $key,
-        );
+        return Artist::query()->where('name_key', $key)->first() ?? $this->findLegacyArtist($key);
+    }
+
+    /** Artists saved before name_key existed: match them in PHP once and stamp them so this scan is not repeated. */
+    private function findLegacyArtist(string $key): ?Artist
+    {
+        $match = null;
+
+        foreach (Artist::query()->whereNull('name_key')->get() as $artist) {
+            $artistKey = $this->artistKey((string) $artist->name);
+            Artist::query()->whereKey($artist->getKey())->update(['name_key' => $artistKey]);
+
+            if ($match === null && $artistKey === $key) {
+                $match = $artist;
+            }
+        }
+
+        return $match;
     }
 
     private function artistKey(string $name): string
     {
-        return preg_replace('/[^a-z0-9]+/', '', Str::lower(Str::ascii($name))) ?? '';
+        return ArtistKey::make($name);
     }
 
     private function syncArtistAvatar(Artist $artist, array $track): void

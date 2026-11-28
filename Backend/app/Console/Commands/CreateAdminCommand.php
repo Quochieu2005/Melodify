@@ -6,6 +6,7 @@ use App\Models\Admin;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 
 class CreateAdminCommand extends Command
@@ -36,13 +37,29 @@ class CreateAdminCommand extends Command
             return self::FAILURE;
         }
 
-        Admin::query()->updateOrCreate(
-            ['email' => $email],
-            ['name' => $name, 'password' => Hash::driver('bcrypt')->make($password), 'role' => $role, 'status' => 'active', 'is_active' => true]
-        );
+        $email = Str::lower(trim($email));
+        $admin = Admin::query()->where('email', $email)->first() ?? new Admin(['email' => $email]);
+        $admin->fill(['name' => $name, 'password' => Hash::driver('bcrypt')->make($password), 'role' => $role, 'status' => 'active', 'is_active' => true]);
+        // The slug index is unique, so every admin needs its own slug (a missing one counts as null and collides).
+        if (blank($admin->slug)) {
+            $admin->slug = $this->uniqueSlug($name);
+        }
+        $admin->save();
 
         $this->info('Tài khoản quản trị đã sẵn sàng.');
 
         return self::SUCCESS;
+    }
+
+    private function uniqueSlug(string $name): string
+    {
+        $base = Str::slug($name) ?: 'admin';
+        $slug = $base;
+
+        for ($suffix = 2; Admin::query()->where('slug', $slug)->exists(); $suffix++) {
+            $slug = "{$base}-{$suffix}";
+        }
+
+        return $slug;
     }
 }

@@ -226,11 +226,14 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::post('/favorites/songs/reorder', [CatalogController::class, 'reorderFavoriteSongs'])
         ->middleware(['api.user', 'throttle:30,1'])
         ->name('favorites.songs.reorder');
+    // These proxy whole audio/video files through our server, so one visitor must not be able to pull them without limit.
+    // The limit is generous because players seek with many range requests.
     Route::get('/songs/external/{externalId}/audio', [AudioController::class, 'streamExternal'])
-        ->middleware('api.user.optional')
+        ->where('externalId', '[A-Za-z0-9]{4,80}')
+        ->middleware(['api.user.optional', 'throttle:300,1,media-stream'])
         ->name('songs.external-audio');
     Route::get('/songs/{slug}/audio', [AudioController::class, 'stream'])
-        ->middleware('api.user.optional')
+        ->middleware(['api.user.optional', 'throttle:300,1,media-stream'])
         ->name('songs.audio');
     Route::post('/songs/{slug}/view', [CatalogController::class, 'recordSongView'])
         ->middleware(['api.user.optional', 'throttle:120,1,song-view'])
@@ -259,7 +262,7 @@ Route::prefix('v1')->name('api.v1.')->middleware(['admin.timing', 'api.user.opti
     Route::post('/videos/{slug}/report', [VideoReportController::class, 'store'])
         ->middleware('throttle:10,1')
         ->name('videos.report');
-    Route::get('/videos/{slug}/download', [VideoController::class, 'download'])->name('videos.download');
-    Route::get('/videos/{slug}/stream', [VideoController::class, 'stream'])->name('videos.stream');
+    Route::get('/videos/{slug}/download', [VideoController::class, 'download'])->middleware('throttle:300,1,media-stream')->name('videos.download');
+    Route::get('/videos/{slug}/stream', [VideoController::class, 'stream'])->middleware('throttle:300,1,media-stream')->name('videos.stream');
     Route::get('/videos/{slug}', [CatalogController::class, 'video'])->name('videos.show');
 });

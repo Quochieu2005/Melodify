@@ -17,7 +17,8 @@ class NormalizeCatalogSortOrders extends Command
     public function handle(): int
     {
         $dryRun = (bool) $this->option('dry-run');
-        $playlistChanges = $this->normalize(Playlist::query()->get(), false, $dryRun);
+        // Personal playlists belong to users (all have sort_order 0); renumbering them is pointless and saves one row each.
+        $playlistChanges = $this->normalize(Playlist::query()->where('type', '!=', 'personal')->get(), false, $dryRun);
         $topicChanges = $this->normalize(Topic::query()->get(), true, $dryRun);
         $mode = $dryRun ? 'would be updated' : 'updated';
 
