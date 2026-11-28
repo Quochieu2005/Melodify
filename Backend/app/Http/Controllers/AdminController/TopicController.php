@@ -222,9 +222,11 @@ class TopicController extends MediaCatalogController
 
     protected function supplementalFormData(?object $item): array
     {
+        $selected = $this->selectedPlaylistIds($item, 'topic_ids');
+
         return [
-            'playlists' => $this->availablePlaylists(),
-            'selectedPlaylistIds' => $this->selectedPlaylistIds($item, 'topic_ids'),
+            'playlists' => $this->availablePlaylists($selected),
+            'selectedPlaylistIds' => $selected,
             'topicGroupOptions' => app(CatalogGroupService::class)->topicFormGroups(),
         ];
     }

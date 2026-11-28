@@ -11,4 +11,7 @@ return [
     |
     */
     'initial_password' => env('ADMIN_INITIAL_PASSWORD') ?: '1234567890',
+
+    // Admin forms list this many records as checkboxes/options (selected ones are always added on top).
+    'option_list_limit' => (int) env('ADMIN_OPTION_LIST_LIMIT', 500),
 ];

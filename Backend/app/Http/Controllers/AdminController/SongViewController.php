@@ -13,14 +13,14 @@ use App\Models\SongAudioFile;
 use App\Models\SongPlayEvent;
 use App\Models\SongShare;
 use App\Rules\PlainText;
+use App\Services\Analytics\EventCounts;
 use App\Services\CloudinaryService;
 use App\Services\Music\LyricsClient;
 use App\Services\Music\NhacCuaTuiClient;
+use App\Support\CatalogRevision;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Throwable;
 
@@ -367,7 +367,21 @@ class SongViewController extends Controller
             : null;
         $audio->status = 'active';
         $audio->source = $data['source'] ?? 'admin';
-        $audio->save();
+
+        try {
+            $audio->save();
+        } catch (Throwable $exception) {
+            // The new file was never attached to the song, so it would stay on Cloudinary forever.
+            if (($data['source'] ?? '') === 'cloudinary' && filled($data['public_id'] ?? null)) {
+                try {
+                    app(CloudinaryService::class)->deleteAudio((string) $data['public_id']);
+                } catch (Throwable $cleanup) {
+                    report($cleanup);
+                }
+            }
+
+            throw $exception;
+        }
 
         if (($data['duration_seconds'] ?? 0) > 0 && (int) $song->duration_seconds !== (int) $data['duration_seconds']) {
             $song->duration_seconds = (int) $data['duration_seconds'];
@@ -391,7 +405,7 @@ class SongViewController extends Controller
 
     private function bumpCatalogContentRevision(): void
     {
-        Cache::store('file')->put('api:catalog-content-revision:v1', (string) Str::uuid());
+        CatalogRevision::bump();
     }
 
     public function index(Request $request): View
@@ -449,23 +463,10 @@ class SongViewController extends Controller
                 ->get()
                 ->keyBy(fn (SongAudioFile $audio): string => (string) $audio->song_id);
 
-        $viewsQuery = $songIds === [] ? null : SongPlayEvent::query()->whereIn('song_id', $songIds);
-        $favoritesQuery = $songIds === [] ? null : Favorite::query()->whereIn('song_id', $songIds);
-        $sharesQuery = $songIds === [] ? null : SongShare::query()->whereIn('song_id', $songIds);
-        if ($from !== null) {
-            $viewsQuery?->where('started_at', '>=', $from);
-            $favoritesQuery?->where('created_at', '>=', $from);
-            $sharesQuery?->where('created_at', '>=', $from);
-        }
-        $viewsBySong = $viewsQuery === null
-            ? collect()
-            : $viewsQuery->get(['song_id'])->groupBy(fn ($event): string => (string) $event->song_id)->map(fn ($events): int => $events->count());
-        $favoritesBySong = $favoritesQuery === null
-            ? collect()
-            : $favoritesQuery->get(['song_id'])->groupBy(fn ($favorite): string => (string) $favorite->song_id)->map(fn ($favorites): int => $favorites->count());
-        $sharesBySong = $sharesQuery === null
-            ? collect()
-            : $sharesQuery->get(['song_id'])->groupBy(fn ($share): string => (string) $share->song_id)->map(fn ($shares): int => $shares->count());
+        // Counted inside MongoDB: a play event is stored per listen, so loading them all grows without limit.
+        $viewsBySong = $songIds === [] ? collect() : collect(EventCounts::by(SongPlayEvent::class, 'song_id', 'started_at', $from));
+        $favoritesBySong = $songIds === [] ? collect() : collect(EventCounts::by(Favorite::class, 'song_id', 'created_at', $from));
+        $sharesBySong = $songIds === [] ? collect() : collect(EventCounts::by(SongShare::class, 'song_id', 'created_at', $from));
 
         $allItems = $songs
             ->map(function (Song $song) use ($artists, $artistLinksBySong, $lyricsBySong, $fullAudioBySong, $viewsBySong, $favoritesBySong, $sharesBySong): array {

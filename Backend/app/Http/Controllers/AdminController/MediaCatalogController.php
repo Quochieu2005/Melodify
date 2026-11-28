@@ -6,12 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\Playlist;
 use App\Rules\PlainText;
 use App\Services\MediaAssetService;
+use App\Support\ExistingIds;
+use App\Support\OptionList;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use MongoDB\BSON\Regex;
 
 abstract class MediaCatalogController extends Controller
 {
@@ -49,12 +53,14 @@ abstract class MediaCatalogController extends Controller
     }
 
     /** @return mixed */
-    protected function availablePlaylists()
+    protected function availablePlaylists(array $selectedIds = [])
     {
-        return Playlist::query()
-            ->orderBy('name')
-            ->limit(500)
-            ->get();
+        return OptionList::withSelected(
+            Playlist::query()->orderBy('name')->limit(OptionList::limit())->get(),
+            Playlist::class,
+            $selectedIds,
+            'name',
+        );
     }
 
     /** @return array<int, string> */
@@ -64,9 +70,7 @@ abstract class MediaCatalogController extends Controller
             return [];
         }
 
-        return Playlist::query()
-            ->get()
-            ->filter(fn (Playlist $playlist): bool => $this->relationContainsId($playlist->{$relationField} ?? [], (string) $item->getKey()))
+        return $this->playlistsReferencing($relationField, (string) $item->getKey())
             ->pluck((new Playlist)->getKeyName())
             ->map(fn ($id): string => (string) $id)
             ->values()
@@ -75,9 +79,7 @@ abstract class MediaCatalogController extends Controller
 
     protected function playlistsForRelation(string $relationField, string $catalogId): LengthAwarePaginator
     {
-        $items = Playlist::query()
-            ->get()
-            ->filter(fn (Playlist $playlist): bool => $this->relationContainsId($playlist->{$relationField} ?? [], $catalogId))
+        $items = $this->playlistsReferencing($relationField, $catalogId)
             ->sortBy(fn (Playlist $playlist): string => sprintf('%010d|%s', (int) ($playlist->sort_order ?? 0), mb_strtolower((string) $playlist->name)))
             ->values();
         $perPage = 20;
@@ -95,12 +97,10 @@ abstract class MediaCatalogController extends Controller
     /** @param array<int, string> $playlistIds */
     protected function validatePlaylistIds(array $playlistIds): void
     {
-        foreach ($playlistIds as $playlistId) {
-            if (! Playlist::query()->find($playlistId)) {
-                throw ValidationException::withMessages([
-                    'playlist_ids' => 'Một playlist đã chọn không còn tồn tại.',
-                ]);
-            }
+        if (ExistingIds::anyMissing(Playlist::class, $playlistIds)) {
+            throw ValidationException::withMessages([
+                'playlist_ids' => 'Một playlist đã chọn không còn tồn tại.',
+            ]);
         }
     }
 
@@ -112,9 +112,7 @@ abstract class MediaCatalogController extends Controller
             ->filter()
             ->unique()
             ->flip();
-        Playlist::query()
-            ->get()
-            ->filter(fn (Playlist $playlist): bool => $this->relationContainsId($playlist->{$relationField} ?? [], $catalogId) || $selected->has((string) $playlist->getKey()))
+        $this->playlistsReferencing($relationField, $catalogId, $selected->keys()->all())
             ->unique(fn (Playlist $playlist): string => (string) $playlist->getKey())
             ->each(function (Playlist $playlist) use ($relationField, $catalogId, $selected): void {
                 $ids = collect($this->relationIds($playlist->{$relationField} ?? []))
@@ -137,6 +135,31 @@ abstract class MediaCatalogController extends Controller
                     $playlist->save();
                 }
             });
+    }
+
+    /**
+     * Playlists whose relation field contains this catalog id (or that are in $alsoIds). MongoDB narrows the
+     * rows first; the field is a JSON string for older documents, so match the quoted id as well as an array
+     * element, then confirm in PHP. Loading every playlist is not an option: users create playlists too.
+     *
+     * @param  array<int, string>  $alsoIds
+     * @return Collection<int, Playlist>
+     */
+    private function playlistsReferencing(string $relationField, string $catalogId, array $alsoIds = [])
+    {
+        $quoted = new Regex('"'.preg_quote($catalogId, '/').'"');
+
+        return Playlist::query()
+            ->where(function ($query) use ($relationField, $catalogId, $quoted, $alsoIds): void {
+                $query->where($relationField, $catalogId)->orWhere($relationField, 'regex', $quoted);
+                if ($alsoIds !== []) {
+                    $query->orWhereIn((new Playlist)->getKeyName(), $alsoIds);
+                }
+            })
+            ->get()
+            ->filter(fn (Playlist $playlist): bool => $this->relationContainsId($playlist->{$relationField} ?? [], $catalogId)
+                || in_array((string) $playlist->getKey(), $alsoIds, true))
+            ->values();
     }
 
     /** @return array<int, string> */
@@ -221,7 +244,7 @@ abstract class MediaCatalogController extends Controller
 
         return view("{$this->viewDirectory}.edit", $this->viewData([
             'item' => $item,
-            'fields' => $this->resolvedFields(),
+            'fields' => $this->resolvedFields($item),
             'mediaAssets' => app(MediaAssetService::class)->latest(),
             'sortOrderByGroup' => $this->sortOrderSuggestions(),
             ...$this->supplementalFormData($item),
@@ -492,16 +515,23 @@ abstract class MediaCatalogController extends Controller
         return $slug;
     }
 
-    protected function resolvedFields(): array
+    protected function resolvedFields(?object $current = null): array
     {
-        return collect($this->formFields)->map(function (array $field): array {
+        return collect($this->formFields)->map(function (array $field, string $name) use ($current): array {
             if (! isset($field['option_model'])) {
                 return $field;
             }
 
             $model = $field['option_model'];
             $label = $field['option_label'] ?? 'name';
-            $field['options'] = $model::query()->orderBy($label)->get()->mapWithKeys(
+            // A select over every user would render one option per account; cap it but keep the chosen one.
+            $options = OptionList::withSelected(
+                $model::query()->orderBy($label)->limit(OptionList::limit())->get(),
+                $model,
+                [old($name), $current ? data_get($current, $name) : null],
+                $label,
+            );
+            $field['options'] = $options->mapWithKeys(
                 fn ($item): array => [(string) $item->getKey() => (string) data_get($item, $label)]
             )->all();
 
