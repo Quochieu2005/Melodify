@@ -14,6 +14,8 @@ function fixture(platform, env = {}, development = false) {
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, value),
     removeItem: (key) => values.delete(key),
+    get length() { return values.size; },
+    key: (index) => [...values.keys()][index] ?? null,
   };
   const asyncStorage = {
     getItem: async (key) => storage.getItem(key),
@@ -32,7 +34,7 @@ function fixture(platform, env = {}, development = false) {
     require: (id) => { assert.ok(id in modules, `Unexpected dependency: ${id}`); return modules[id]; },
     window: { localStorage: storage, sessionStorage: storage, dispatchEvent() {} },
     Date: class extends Date { static now() { return now; } },
-    URLSearchParams, Headers, AbortController, Event,
+    URLSearchParams, Headers, AbortController, Event, CustomEvent,
     setTimeout, clearTimeout,
     fetch: async (url, init) => { calls.push({ url, init }); return respond(url, init); },
   };
@@ -105,6 +107,16 @@ for (const platform of ['web', 'mobile']) {
     f.respond(async () => ({ ok: true, status: 200, json: async () => ({ data: 'new' }) }));
     assert.equal((await f.api.apiFetch('/v1/charts')).data, 'new');
     await f.api.saveAuthSession({ token: 'test-token', user: { id: 'test-user' } });
+    if (platform === 'mobile') {
+      // Public catalog answers are the same for every account, so the app keeps them across a login on purpose:
+      // the charts need no new request. An account-specific request carries the new token.
+      await f.api.apiFetch('/v1/charts');
+      assert.equal(f.calls.filter((call) => String(call.url).endsWith('/v1/charts')).length, 2);
+      await f.api.apiFetch('/v1/me/profile');
+      const profileCall = f.calls.findLast((call) => String(call.url).endsWith('/v1/me/profile'));
+      assert.equal(new Headers(profileCall.init.headers).get('Authorization'), 'Bearer test-token');
+      return;
+    }
     await f.api.apiFetch('/v1/charts');
     assert.equal(new Headers(f.calls.at(-1).init.headers).get('Authorization'), 'Bearer test-token');
     assert.equal(f.calls.length, 3);
@@ -122,14 +134,29 @@ test('mobile: Expo LAN development uses local API but production and explicit ov
   assert.equal(fixture('mobile', { EXPO_PUBLIC_API_URL: 'https://example.test/api' }, true).api.API_URL, 'https://example.test/api');
 });
 
-test('mobile: expired home snapshot waits for fresh data rather than silently serving stale content', async () => {
+test('mobile: an aging home snapshot opens instantly and refreshes in the background; a week-old one waits', async () => {
   const f = fixture('mobile');
+  const settle = async () => { for (let i = 0; i < 8; i += 1) await new Promise(setImmediate); };
   const first = await f.api.getHomeBootstrap();
   assert.deepEqual(await f.api.getHomeBootstrap(), first);
+  assert.equal(f.calls.length, 1);
+
+  // Past the fresh minute: the saved home is shown at once and subscribers get the new one when it arrives.
+  const seen = [];
+  f.api.subscribeHomeBootstrap((value) => seen.push(value));
   f.advance(61_000);
-  const refreshed = await f.api.getHomeBootstrap();
-  assert.notDeepEqual(refreshed, first);
+  assert.deepEqual(await f.api.getHomeBootstrap(), first);
+  await settle();
   assert.equal(f.calls.length, 2);
+  assert.equal(seen.length, 1);
+  assert.notDeepEqual(seen[0], first);
+  assert.deepEqual(await f.api.getHomeBootstrap(), seen[0]);
+
+  // Older than a week: not shown, the caller waits for fresh data.
+  f.advance(8 * 24 * 60 * 60 * 1_000);
+  const waited = await f.api.getHomeBootstrap();
+  assert.equal(f.calls.length, 3);
+  assert.notDeepEqual(waited, seen[0]);
 });
 
 test('mobile: search avoids unused totals but callers can request them explicitly', async () => {
