@@ -202,6 +202,8 @@ export type Topic = {
   status: string;
   song_count: number;
   songs?: Song[];
+  /** True when the API cut the list (it returns at most 500 songs). */
+  songs_truncated?: boolean;
 };
 
 export type Genre = {
@@ -856,7 +858,7 @@ export function listGenres(options: { perPage?: number; page?: number } = {}) {
 }
 
 export function getGenre(slug: string) {
-  return apiFetch<{ data: Genre & { songs?: Song[] } }>('/v1/genres/' + encodeURIComponent(slug));
+  return apiFetch<{ data: Genre & { songs?: Song[]; songs_truncated?: boolean } }>('/v1/genres/' + encodeURIComponent(slug));
 }
 
 export function listPlaylists(options: { query?: string; topic?: string; genre?: string; page?: number; perPage?: number } = {}) {
@@ -893,7 +895,7 @@ export function listAlbums(options: { query?: string; page?: number; perPage?: n
 
 export function getAlbum(identifier: string, visitorId?: string) {
   const query = visitorId ? '?visitor_id=' + encodeURIComponent(visitorId) : '';
-  return apiFetch<{ data: Album & { songs: Song[] } }>('/v1/albums/' + encodeURIComponent(identifier) + query);
+  return apiFetch<{ data: Album & { songs: Song[]; songs_truncated?: boolean } }>('/v1/albums/' + encodeURIComponent(identifier) + query);
 }
 
 export function toggleAlbumFavorite(identifier: string, visitorId: string) {
@@ -912,7 +914,7 @@ export function listArtists(options: { query?: string; perPage?: number } = {}) 
 }
 
 export function getArtist(identifier: string) {
-  return apiFetch<{ data: Artist & { songs?: Song[]; featured_songs?: Song[]; albums?: Album[]; playlists?: Playlist[] } }>(
+  return apiFetch<{ data: Artist & { songs?: Song[]; songs_truncated?: boolean; featured_songs?: Song[]; albums?: Album[]; playlists?: Playlist[] } }>(
     '/v1/artists/' + encodeURIComponent(identifier),
   );
 }

@@ -47,9 +47,24 @@ function CatalogRows({ title, items, routeBase }: { title: string; items: { id: 
   );
 }
 
-function SongCollection({ title, songs }: { title: string; songs: Song[] }) {
+// A page can have hundreds of songs and the list is not virtualised, so only a page of rows is drawn at a time.
+const SONGS_PER_PAGE = 50;
+
+function SongCollection({ title, songs, truncated }: { title: string; songs: Song[]; truncated?: boolean }) {
   const styles = useAdaptiveStyles(baseStyles);
-  return <View style={styles.section}><SectionHeading title={title} />{songs.length ? songs.map((song) => <SongRow key={song.id} song={song} songs={songs} showFavorite />) : <StateMessage empty="Chưa có bài hát trong danh sách này." />}</View>;
+  const [visible, setVisible] = useState(SONGS_PER_PAGE);
+  return (
+    <View style={styles.section}>
+      <SectionHeading title={title} />
+      {songs.length ? songs.slice(0, visible).map((song) => <SongRow key={song.id} song={song} songs={songs} showFavorite />) : <StateMessage empty="Chưa có bài hát trong danh sách này." />}
+      {songs.length > visible ? (
+        <Pressable accessibilityRole="button" onPress={() => setVisible((current) => current + SONGS_PER_PAGE)} style={styles.entityAction}>
+          <Text style={styles.entityActionText}>Xem thêm ({songs.length - visible} bài)</Text>
+        </Pressable>
+      ) : null}
+      {truncated && songs.length <= visible ? <Text style={styles.muted}>Đang hiển thị {songs.length} bài đầu tiên.</Text> : null}
+    </View>
+  );
 }
 
 export function ChartsScreen() {
@@ -150,7 +165,7 @@ export function AlbumDetailScreen() {
   useEffect(() => {
     if (data) void recordRecentEntity({ kind: 'album', id: data.id, slug: data.slug, name: data.title, image: data.cover_url, subtitle: data.artist?.name }).catch(() => undefined);
   }, [data]);
-  return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{data ? <><EntityHero title={data.title} subtitle={data.artist?.name || 'Album'} image={data.cover_url} meta={data.song_count + ' bài hát'} action={<EntityFavoriteButton key={identifier} initial={Boolean(data.is_favorite)} toggle={(visitorId) => toggleAlbumFavorite(identifier, visitorId)} />} /><SongCollection title="Bài hát trong album" songs={data.songs ?? []} /></> : null}</ScrollPage></AppShell>;
+  return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{data ? <><EntityHero title={data.title} subtitle={data.artist?.name || 'Album'} image={data.cover_url} meta={data.song_count + ' bài hát'} action={<EntityFavoriteButton key={identifier} initial={Boolean(data.is_favorite)} toggle={(visitorId) => toggleAlbumFavorite(identifier, visitorId)} />} /><SongCollection title="Bài hát trong album" songs={data.songs ?? []} truncated={data.songs_truncated} /></> : null}</ScrollPage></AppShell>;
 }
 
 export function PlaylistListScreen() {
@@ -176,21 +191,21 @@ export function ArtistDetailScreen() {
   useEffect(() => {
     if (data) void recordRecentEntity({ kind: 'artist', id: data.id, slug: data.slug, name: data.name, image: data.avatar_url, subtitle: data.bio }).catch(() => undefined);
   }, [data]);
-  return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{data ? <><EntityHero title={data.name} subtitle={data.bio || 'Nghệ sĩ Melodify'} image={data.avatar_url} meta={(data.followers_count ?? 0).toLocaleString() + ' người theo dõi'} action={<ArtistFollowControl key={identifier} artist={data} />} /><SongCollection title="Bài hát" songs={data.featured_songs?.length ? data.featured_songs : data.songs ?? []} />{data.albums?.length ? <CatalogRows title="Album" items={data.albums.map((item) => ({ id: item.id, name: item.title, image: item.cover_url, slug: item.slug }))} routeBase="/album" /> : null}{data.playlists?.length ? <CatalogRows title="Playlist" items={data.playlists.map((item) => ({ id: item.id, name: item.name, image: item.cover_url, slug: item.slug }))} routeBase="/playlist" /> : null}</> : null}</ScrollPage></AppShell>;
+  return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{data ? <><EntityHero title={data.name} subtitle={data.bio || 'Nghệ sĩ Melodify'} image={data.avatar_url} meta={(data.followers_count ?? 0).toLocaleString() + ' người theo dõi'} action={<ArtistFollowControl key={identifier} artist={data} />} /><SongCollection title="Bài hát" songs={data.featured_songs?.length ? data.featured_songs : data.songs ?? []} truncated={data.featured_songs?.length ? false : data.songs_truncated} />{data.albums?.length ? <CatalogRows title="Album" items={data.albums.map((item) => ({ id: item.id, name: item.title, image: item.cover_url, slug: item.slug }))} routeBase="/album" /> : null}{data.playlists?.length ? <CatalogRows title="Playlist" items={data.playlists.map((item) => ({ id: item.id, name: item.name, image: item.cover_url, slug: item.slug }))} routeBase="/playlist" /> : null}</> : null}</ScrollPage></AppShell>;
 }
 
 export function TopicDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const identifier = identifierParam(slug);
   const { data, loading, error, reload } = useRemoteData(async () => (await getTopic(identifier)).data, identifier);
-  return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{data ? <><EntityHero title={data.name} subtitle={data.description || 'Chủ đề âm nhạc'} image={data.image_url} meta={data.song_count + ' bài hát'} /><SongCollection title="Bài hát trong chủ đề" songs={data.songs ?? []} /></> : null}</ScrollPage></AppShell>;
+  return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{data ? <><EntityHero title={data.name} subtitle={data.description || 'Chủ đề âm nhạc'} image={data.image_url} meta={data.song_count + ' bài hát'} /><SongCollection title="Bài hát trong chủ đề" songs={data.songs ?? []} truncated={data.songs_truncated} /></> : null}</ScrollPage></AppShell>;
 }
 
 export function GenreDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const identifier = identifierParam(slug);
   const { data, loading, error, reload } = useRemoteData(async () => (await getGenre(identifier)).data, identifier);
-  return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{data ? <><EntityHero title={data.name} subtitle={data.description || 'Thể loại âm nhạc'} image={data.image_url} meta={data.song_count + ' bài hát'} /><SongCollection title="Bài hát thể loại này" songs={data.songs ?? []} /></> : null}</ScrollPage></AppShell>;
+  return <AppShell><ScrollPage>{loading || error ? <StateMessage loading={loading} error={error} onRetry={() => void reload()} /> : null}{data ? <><EntityHero title={data.name} subtitle={data.description || 'Thể loại âm nhạc'} image={data.image_url} meta={data.song_count + ' bài hát'} /><SongCollection title="Bài hát thể loại này" songs={data.songs ?? []} truncated={data.songs_truncated} /></> : null}</ScrollPage></AppShell>;
 }
 
 export function SongDetailScreen() {

@@ -5,7 +5,7 @@ import { Image } from 'expo-image';
 
 import { AppShell } from '@/components/layout';
 import { Artwork, SongRow } from '@/components/music';
-import { ScrollPage, SectionHeading, useSurfaceStyles } from '@/components/shared';
+import { ScrollPage, SectionHeading, StateMessage, useSurfaceStyles } from '@/components/shared';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { useAdaptiveStyles } from '@/hooks/use-adaptive-styles';
 import { useTheme } from '@/hooks/use-theme';
@@ -44,6 +44,8 @@ export default function HomeScreen() {
   const albumCardWidth = getAlbumRailCardWidth(width);
   const chartWidth = Math.max(280, width - 32);
   const [home, setHome] = useState<HomeBootstrap | null>(null);
+  const [error, setError] = useState('');
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -51,14 +53,21 @@ export default function HomeScreen() {
       if (active) setHome(data);
     });
     void getHomeBootstrap()
-      .then(({ data }) => { if (active) setHome(data); })
-      .catch(() => undefined);
+      .then(({ data }) => {
+        if (!active) return;
+        setHome(data);
+        setError('');
+      })
+      .catch((reason: unknown) => {
+        // Without a saved home there is nothing to show: say so instead of leaving an empty screen.
+        if (active) setError(reason instanceof Error ? reason.message : 'Không tải được trang chủ.');
+      });
 
     return () => {
       active = false;
       unsubscribe();
     };
-  }, []);
+  }, [attempt]);
 
   const banners = home?.banners ?? [];
   const topics = home?.topics ?? [];
@@ -81,6 +90,17 @@ export default function HomeScreen() {
   return (
     <AppShell>
       <ScrollPage>
+            {!home ? (
+              <StateMessage
+                loading={!error}
+                error={error}
+                onRetry={() => {
+                  setError('');
+                  setAttempt((value) => value + 1);
+                }}
+              />
+            ) : null}
+
             {/* Top Banners Carousel (Ảnh 1) */}
             {banners.length ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
