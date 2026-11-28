@@ -2,10 +2,12 @@
 
 namespace App\Http\Middleware;
 
+use App\Http\Controllers\Api\CatalogController;
 use App\Support\CatalogRevision;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class InvalidateCatalogCache
 {
@@ -20,6 +22,18 @@ class InvalidateCatalogCache
             // Includes single, bulk and delete-all mutations. All catalog
             // consumers use this revision, not just the song detail page.
             CatalogRevision::bump();
+
+            // The home screens cost about 40 queries to build and are keyed by this revision, so the first visitor
+            // after every edit used to pay for it. Build them once the admin's response has been sent.
+            defer(function (): void {
+                try {
+                    $catalog = app(CatalogController::class);
+                    $catalog->homeBootstrap();
+                    $catalog->homeDiscovery();
+                } catch (Throwable $exception) {
+                    report($exception);
+                }
+            });
         }
 
         return $response;

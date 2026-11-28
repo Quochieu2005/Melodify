@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Http\Controllers\AdminController\DashboardController;
 use App\Models\Admin;
 use App\Models\Album;
 use App\Models\Artist;
@@ -35,7 +36,7 @@ class AdminScaleFixesTest extends TestCase
         // The form requests' unique rules use the default connection, which is MongoDB in production.
         config(['database.default' => 'mongodb', 'database.connections.mongodb.prefix' => $this->prefix]);
         DB::purge('mongodb');
-        Cache::store('file')->forget('admin:dashboard:metrics:v2:'.now()->format('Y-m-d-H-i'));
+        Cache::store('file')->forget(DashboardController::METRICS_CACHE_KEY);
         $this->actingAs(new Admin([
             'name' => 'Scale Admin', 'email' => 'scale-admin@example.test', 'role' => 'super_admin',
             'status' => 'active', 'is_active' => true,
@@ -44,7 +45,7 @@ class AdminScaleFixesTest extends TestCase
 
     protected function tearDown(): void
     {
-        Cache::store('file')->forget('admin:dashboard:metrics:v2:'.now()->format('Y-m-d-H-i'));
+        Cache::store('file')->forget(DashboardController::METRICS_CACHE_KEY);
         SongAudioFile::flushEventListeners();
 
         try {

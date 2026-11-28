@@ -86,7 +86,7 @@ class AudioController extends Controller
     public function streamExternal(string $externalId, Request $request, NhacCuaTuiClient $nhaccuatui)
     {
         $key = 'external-audio:'.hash('sha256', $externalId);
-        $track = Cache::remember($key, now()->addMinutes(5), fn () => $nhaccuatui->getSong($externalId, includeCountry: false));
+        $track = Cache::store('file')->remember($key, now()->addMinutes(5), fn () => $nhaccuatui->getSong($externalId, includeCountry: false));
         $qualityId = trim((string) $request->query('quality_id', ''));
         abort_if(strlen($qualityId) > 100, 404);
         $download = $request->boolean('download');
@@ -110,10 +110,10 @@ class AudioController extends Controller
             : null;
 
         return $this->proxy($url, $request, $nhaccuatui, function () use ($key, $externalId, $nhaccuatui, $qualityId, $download, $request): ?string {
-            Cache::forget($key);
+            Cache::store('file')->forget($key);
             $track = $nhaccuatui->getSong($externalId, includeCountry: false);
             if (filled($track['streamUrl'] ?? null) || ! empty($track['streamOptions'])) {
-                Cache::put($key, $track, now()->addMinutes(5));
+                Cache::store('file')->put($key, $track, now()->addMinutes(5));
             }
 
             return $qualityId !== ''
