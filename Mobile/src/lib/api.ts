@@ -53,9 +53,10 @@ export function warmUpApi(): Promise<void> {
 const GET_RETRY_DELAY_MS = 1_500;
 
 // Login, registration, OTP, social and password-reset calls answer 401 for wrong credentials, which says nothing
-// about the saved session. Only /auth/me and /auth/logout speak for the saved token.
+// about the saved session. /auth/me, /auth/logout and the QR scan/approve calls are made as the signed-in user,
+// so a 401 there does speak for the saved token.
 function isAuthAttemptPath(path: string): boolean {
-  return /^\/v1\/auth\/(?!me(?:[?/]|$)|logout(?:[?/]|$))/.test(path);
+  return /^\/v1\/auth\/(?!me(?:[?/]|$)|logout(?:[?/]|$)|qr\/(?:scan|approve)(?:[?/]|$))/.test(path);
 }
 
 const AUTH_TOKEN_STORAGE_KEY = 'melodify_access_token';

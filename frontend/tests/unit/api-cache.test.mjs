@@ -167,6 +167,15 @@ test('mobile: a rejected saved token signs the app out, wrong login credentials 
   assert.equal(f.values.has('melodify_access_token'), false);
   assert.equal(f.values.has('melodify_auth_user'), false);
 });
+test('mobile: a rejected token on the QR approve call ends the session too', async () => {
+  const f = fixture('mobile');
+  const settle = async () => { for (let i = 0; i < 8; i += 1) await new Promise(setImmediate); };
+  await f.api.saveAuthSession({ token: 'old-token', user: { id: 'u1' } });
+  await settle();
+  f.respond(async () => ({ ok: false, status: 401, json: async () => ({ message: 'Unauthenticated.' }) }));
+  await assert.rejects(f.api.approveQrLogin('session-1'));
+  assert.equal(f.values.has('melodify_access_token'), false);
+});
 test('mobile: localhost replacement preserves a configured non-default API port', () => {
   const f = fixture('mobile', { EXPO_PUBLIC_API_URL: 'http://localhost:9000/api' });
   assert.equal(f.api.API_URL, 'http://192.168.1.20:9000/api');
